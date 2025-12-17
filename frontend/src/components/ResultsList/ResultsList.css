@@ -1,0 +1,53 @@
+.results-container {
+  display: flex;
+  height: 100vh;
+  padding: 20px;
+  background-color: #f9f9f9;
+}
+
+.test-list {
+  width: 250px;
+  overflow-y: auto;
+  background: white;
+  padding: 10px;
+  border-right: 1px solid #ccc;
+}
+
+.test-list h2 {
+  text-align: center;
+}
+
+.test-item {
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+  cursor: pointer;
+  transition: background-color 0.3s ease-in-out;
+}
+
+.test-item:hover {
+  background-color: #ddd;
+}
+
+.test-details {
+  flex-grow: 1;
+  padding: 20px;
+  background: white;
+}
+
+.close-button {
+  float: right;
+  background: red;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.details-button {
+  margin-top: 20px;
+  padding: 10px;
+  background: #2196F3;
+  color: white;
+  border: none;
+  cursor: pointer;
+}

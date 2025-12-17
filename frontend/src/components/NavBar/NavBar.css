@@ -1,0 +1,17 @@
+.NavBar{
+    padding: 20px 0; /* Optional: set padding */
+    display: flex;
+    align-items: center; /* Center the contents vertically */
+    height: 80px; /* Optional: set the height */
+}
+
+.NavBarLogo{
+    justify-content: center;
+    max-width: 100px; /* Limit width */
+    height: auto;
+    margin-right: 20px;
+}
+
+.navbar-nav .nav-item {
+    margin-right: 15px; /* Space between items */
+}

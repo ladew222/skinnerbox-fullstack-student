@@ -1,0 +1,149 @@
+/* TestManager.css */
+
+
+/* TODO: Add CSS to new form */
+
+#testNameContainer {
+  padding-bottom: 20px;
+}
+
+#rewardTypeContainer {
+  margin: 10px;
+}
+.trial-settings {
+  font-family: Arial, sans-serif;
+  padding: 20px;
+  max-width: 600px;
+  margin: auto;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.input-group label {
+  font-weight: bold;
+  color: #555;
+}
+
+.input-group input[type="number"],
+.input-group input[type="text"],
+.input-group select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 1rem;
+  background-color: white;
+}
+
+.button-group {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.save-button {
+  background-color: #4CAF50;
+  color: white;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.upload-button {
+  background-color: #2196F3;
+  color: white;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.start-button {
+  background-color:#4CAF50;
+  color: white;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
+.stop-button {
+  background-color:red;
+  color: white;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.resume-button {
+  background-color:#4CAF50;
+  color: white;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.finish-button {
+  background-color:red;
+  color: white;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.return-button {
+  background-color:#2196F3;
+  color: white;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.download-button {
+  background-color:#2196F3;
+  color: white;
+  padding: 10px;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.button-group button:hover {
+  opacity: 0.9;
+}
+
+/* Styling for buttons */
+.button-group button {
+    padding: 10px 20px;
+    font-size: 1rem;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.bluelight-button {
+  background-color: #2196F3;
+}
+.redlight-button {
+  background-color: #d71313;
+}
+.greenlight-button {
+  background-color: #0eae26;
+}
+.rgblight-button {
+  background-color: #2ea380;
+}

@@ -1,0 +1,14 @@
+.center {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.VuLogo {
+    justify-content: center;
+    max-width: 200px; /* Limit width */
+    height: auto;
+    margin-right: 20px;
+}

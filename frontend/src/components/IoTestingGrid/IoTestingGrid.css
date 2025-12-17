@@ -1,0 +1,149 @@
+/* aly work here */
+
+/* General layout for the trial settings component */
+.iotesting-settings {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    max-width: 500px;
+    margin:auto;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Header */
+  .iotesting-settings h2 {
+    text-align: center;
+    color: #333;
+  }
+  
+  /* Grouping for each label-input pair */
+  .input-group {
+    margin-bottom: 15px;
+  }
+  
+  /* Styling for labels */
+  .input-group label {
+    text-align: center;
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #555;
+  }
+  
+  /* Styling for input fields */
+  .input-group input[type="number"],
+  .input-group select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-size: 1rem;
+  }
+  
+  /* Button container */
+  .button-group {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+  }
+  
+  /* Styling for buttons */
+  .button-group button {
+    padding: 10px 20px;
+    font-size: 1rem;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  /* Specific styling for each button */
+  .sound-button {
+    background-color: #4CAF50;
+  }
+  
+  .bluelight-button {
+    background-color: #2196F3;
+  }
+  .orangelight-button {
+    background-color: #e08309;
+  }
+  .redlight-button {
+    background-color: #d71313;
+  }
+  .greenlight-button {
+    background-color: #0eae26;
+  }
+  .rgblight-button {
+    background-color: #2ea380;
+  }
+
+  .leverPress-button {
+    background-color: #ffffff;
+  }
+  
+  .nosePoke-button {
+    background-color: #f4f4f4;
+  }
+
+  .feed-button {
+    background-color: #0aed12;
+  }
+  
+  .water-button {
+    background-color: #61afef;
+  }
+  
+  /* Button hover effect */
+  .button-group button:hover {
+    opacity: 0.9;
+  }
+
+    /* Button container */
+    .link-group {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 20px;
+    }
+    
+    /* Styling for buttons */
+    .link-group link {
+      padding: 10px 20px;
+      font-size: 1rem;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    /* Specific styling for each button */
+    .sound-link {
+      background-color: #4CAF50;
+    }
+    
+    .light-link {
+      background-color: #2196F3;
+    }
+  
+    .lever-link {
+      background-color: #4CAF50;
+    }
+    
+    .nose-link {
+      background-color: #2196F3;
+    }
+  
+    .feeder-link {
+      background-color: #4CAF50;
+    }
+    
+    .water-link {
+      background-color: #2196F3;
+    }
+    
+    /* Button hover effect */
+    .link-group link:hover {
+      opacity: 0.9;
+    }
