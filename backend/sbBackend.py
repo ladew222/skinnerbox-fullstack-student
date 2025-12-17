@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from gpiozero import Button, LED, RGBLED
+from gpio_adapter import Button, LED, RGBLED
 import time
 import threading
 import os
@@ -169,7 +169,7 @@ def stop_test():
 
 if __name__ == '__main__':
     # Run with sudo (if needed) to access GPIO and on a chosen port (e.g., 5001)
-    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5001)
+    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)
 
 """
 from flask import Flask, jsonify, request

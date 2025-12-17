@@ -1,0 +1,7 @@
+gpiozero==2.0.1
+rpi-ws281x==5.0.0
+spidev==3.5
+smbus2==0.4.2
+tables==3.7.0
+ssh-import-id==5.10
+

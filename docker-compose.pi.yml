@@ -1,0 +1,7 @@
+services:
+  backend:
+    privileged: true
+    devices:
+      - /dev/gpiomem:/dev/gpiomem
+    environment:
+      - GPIO_MODE=real

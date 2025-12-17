@@ -1,140 +1,260 @@
-# Getting Started with Create React App
+Perfect question to end on — this is exactly the moment to **lock in the mental model for students**.
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Below is a **clean, instructor-quality README section** you can drop in almost verbatim. It explains **edit → test → run → deploy** without assuming Docker, Python, GPIO, or React expertise, and it matches *exactly* the structure you now have.
 
-## Available Scripts
+You can paste this into your top-level `README.md` and adjust wording to taste.
 
-In the project directory, you can run:
+---
 
-### `npm start`
+# SkinnerBox Full-Stack System
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+**Edit · Test · Run · Deploy Guide**
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+This project is a **full-stack experimental control system** consisting of:
 
-### `npm test`
+* a **Flask backend** (Python)
+* a **React frontend** (JavaScript)
+* optional **GPIO hardware** (Raspberry Pi only)
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+The system is designed so that **students can develop and test on any laptop** using Docker, **without physical hardware**, while still allowing deployment to a real Raspberry Pi later.
 
-### `npm run build`
+---
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## 1. Project Structure (What Lives Where)
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```
+skinnerbox-fullstack-student/
+├── backend/          # Flask API + hardware abstraction
+│   ├── sbBackend.py
+│   ├── gpio_adapter.py
+│   ├── requirements.base.txt
+│   ├── Dockerfile
+│
+├── frontend/         # React UI
+│   ├── src/
+│   ├── package.json
+│   ├── Dockerfile
+│
+├── docker-compose.yml
+├── README.md
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### Key idea
 
-### `npm run eject`
+> **The backend never talks directly to hardware.**
+> All hardware access goes through `gpio_adapter.py`.
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+This allows the same code to run:
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+* on student laptops (mock hardware)
+* inside Docker
+* on a real Raspberry Pi (real hardware)
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+---
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## 2. Editing the Code (Development Workflow)
 
-## Learn More
+### Backend (Python / Flask)
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+Edit files in:
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+```
+backend/
+```
 
-### Code Splitting
+Most changes will be in:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+* `sbBackend.py` → API routes and logic
+* `gpio_adapter.py` → hardware abstraction (mock vs real GPIO)
 
-### Analyzing the Bundle Size
+You **do not need Python installed locally** when using Docker.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+---
 
-### Making a Progressive Web App
+### Frontend (React)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+Edit files in:
 
-### Advanced Configuration
+```
+frontend/src/
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+This includes:
 
-### Deployment
+* components
+* pages
+* UI logic
+* API calls to the backend
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+Changes automatically hot-reload while Docker is running.
 
-### `npm run build` fails to minify
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## 3. Running the System (Local Development)
 
+### Prerequisites
 
-________________________________________________________________________________________
-Front-End:
-    Developed to run on our computers
+* Docker Desktop installed
 
-Back-End:
-    Developed to run on the pi.
+That’s it. No Python. No Node. No GPIO.
 
-Start Back-End First(Install Code on pi/Run on the pi):
-    Open a terminal 
-    Navigate to the skinnerBox4Users
-    Navigate to the skinnerBox4Users(new)
-    Navigate to server folder
-    Run: python3 sbBackEnd.py
+---
 
-Start Front-End Second:
-   Replace API_URL to match the Back-End IP once it is started. Its the bottom URL
+### Start Everything
 
+From the project root:
 
-1. Install Libraries:
+```bash
+docker compose up
+```
 
-    Create a virtual Environment that holds all the necessary libraries.
+This starts:
 
-    openpyxl:
-        pip install openpyxl
-    
-    flask:
-        pip install flask
+* Flask backend on **port 5001**
+* React frontend on **port 3000**
 
-    gpiozero:
-        pip install gpiozero
+Open in your browser:
 
-    rpi-ws281x:
-        Required:
-            For the rpi_ws281x library you have to install "Microsoft C++ Build Tools": https://visualstudio.microsoft.com/visual-cpp-build-tools/.
-            These build tools are used for the backend, that can ran on the pi.
+```
+http://localhost:3000
+```
 
-        pip install rpi-ws281x
+---
 
-    Werkzeug:
-        pip install Werkzeug
-    
-    flask_sqlalchemy:
-        pip install flask_sqlalchemy
-    
-    flask_cors:
-        pip install flask-cors
+### What Happens Behind the Scenes
 
+* Docker builds two containers:
 
-2. Goals:
+  * `skinnerbox-backend`
+  * `skinnerbox-frontend`
+* The backend automatically runs in **GPIO mock mode**
+* Hardware calls are simulated with log messages
 
-    Overall:
-        Understand the code
+Example:
 
-    Front-End:
-        Develop a page that will allow users to change variables without asking us.
+```
+[GPIO MOCK] Button initialized
+[GPIO MOCK] LED initialized
+```
 
-    Unit Test:
-        Develop a unit testing plan
-        Test-Cases
+This is expected and correct for development.
 
-    Security:
-        Scrub Text Input for not allowed characters 
-        Hide SQL Command Calls
-        Sessions
-        Cookies 
-        Login 
-        Routes
-    
+---
+
+## 4. Testing the System
+
+### Backend API Testing
+
+You can test endpoints directly:
+
+```
+http://localhost:5001
+```
+
+or via frontend UI actions.
+
+The backend runs in **Flask debug mode** during development.
+
+---
+
+### Frontend Testing
+
+React runs in development mode with:
+
+* hot reload
+* console warnings (safe to ignore for now)
+
+ESLint warnings do **not** stop execution.
+
+---
+
+## 5. Hardware Abstraction (Why This Works Without a Pi)
+
+### `gpio_adapter.py`
+
+This file decides **how GPIO behaves**:
+
+* **Mock mode** (default): logs actions
+* **Real mode** (Pi only): talks to physical pins
+
+The backend imports **only** from `gpio_adapter.py`, never directly from GPIO libraries.
+
+This design:
+
+* prevents crashes on laptops
+* allows automated testing
+* keeps hardware optional
+
+---
+
+## 6. Deployment to Raspberry Pi (Real Hardware)
+
+On a Raspberry Pi:
+
+1. Install Docker
+2. Clone this repository
+3. Run:
+
+```bash
+GPIO_MODE=real docker compose up -d
+```
+
+This switches GPIO from mock to real.
+
+> ⚠️ Only do this on a Pi with actual hardware connected.
+
+---
+
+## 7. Common Commands
+
+| Task           | Command                           |
+| -------------- | --------------------------------- |
+| Start system   | `docker compose up`               |
+| Stop system    | `Ctrl+C`                          |
+| Rebuild images | `docker compose build --no-cache` |
+| Stop & clean   | `docker compose down`             |
+
+---
+
+## 8. Mental Model (Read This Once)
+
+Think of the system as **three layers**:
+
+```
+[ React UI ]
+      ↓
+[ Flask API ]
+      ↓
+[ GPIO Adapter ]
+      ↓
+[ Real Hardware OR Mock ]
+```
+
+Only the **bottom layer changes** between development and deployment.
+
+Everything else stays the same.
+
+---
+
+## 9. Why This Architecture Matters
+
+This project intentionally demonstrates:
+
+* separation of concerns
+* hardware abstraction
+* containerized development
+* real-world system design patterns
+
+It mirrors how **professional embedded + web systems** are built.
+
+---
+
+If you want, next I can:
+
+* shorten this for a **student-only README**
+* write a **TA troubleshooting guide**
+* add a **diagram section**
+* split into **DEV.md / DEPLOY.md**
+
+But as-is:
+✅ this README fully explains **edit → test → run → deploy** cleanly and correctly.
