@@ -152,6 +152,17 @@ def run_test():
         print("Error starting test:", str(e))
         return jsonify({"error": "Failed to start test"}), 500
 
+@app.route("/api/input/lever", methods=["POST"])
+def simulate_lever_press():
+    on_lever_press()
+    return jsonify({"status": "simulated lever press"}), 200
+
+
+@app.route("/api/input/nosepoke", methods=["POST"])
+def simulate_nose_poke():
+    on_nose_poke()
+    return jsonify({"status": "simulated nose poke"}), 200
+
 
 @app.route('/test/stop', methods=['POST'])
 def stop_test():

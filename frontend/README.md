@@ -1,60 +1,150 @@
-Perfect question to end on — this is exactly the moment to **lock in the mental model for students**.
-
-Below is a **clean, instructor-quality README section** you can drop in almost verbatim. It explains **edit → test → run → deploy** without assuming Docker, Python, GPIO, or React expertise, and it matches *exactly* the structure you now have.
-
-You can paste this into your top-level `README.md` and adjust wording to taste.
-
----
 
 # SkinnerBox Full-Stack System
 
-**Edit · Test · Run · Deploy Guide**
+**Development · Testing · Deployment · Update Guide**
 
-This project is a **full-stack experimental control system** consisting of:
+This repository contains the **official student-supported version** of the SkinnerBox experimental control system.
 
-* a **Flask backend** (Python)
-* a **React frontend** (JavaScript)
-* optional **GPIO hardware** (Raspberry Pi only)
+The system is a **full-stack application** composed of:
 
-The system is designed so that **students can develop and test on any laptop** using Docker, **without physical hardware**, while still allowing deployment to a real Raspberry Pi later.
+- **Flask backend** (Python) — experiment logic & hardware control  
+- **React frontend** (JavaScript) — user interface  
+- **GPIO hardware layer** (Raspberry Pi only)
+
+The project is designed so that:
+
+- ✅ Students can develop on **any laptop**
+- ✅ No physical hardware is required for development
+- ✅ The *same code* runs in development and production
+- ✅ Real hardware is enabled only on the Raspberry Pi
+- ✅ Code updates can be pulled safely in production
 
 ---
 
-## 1. Project Structure (What Lives Where)
+## 1. System Overview (Mental Model)
+
+Think of the system as **four layers**:
 
 ```
+
+[ React Frontend ]
+↓
+[ Flask Backend ]
+↓
+[ GPIO Adapter ]
+↓
+[ Mock GPIO ]  OR  [ Real Hardware ]
+
+```
+
+Only the **bottom layer changes** between development and production.
+
+Everything else stays the same.
+
+---
+
+## 2. Repository Structure
+
+```
+
 skinnerbox-fullstack-student/
-├── backend/          # Flask API + hardware abstraction
-│   ├── sbBackend.py
-│   ├── gpio_adapter.py
+├── backend/                  # Flask API + hardware abstraction
+│   ├── sbBackend.py          # Main backend entry point
+│   ├── gpio_adapter.py       # Mock vs real GPIO logic
 │   ├── requirements.base.txt
 │   ├── Dockerfile
 │
-├── frontend/         # React UI
+├── frontend/                 # React UI
 │   ├── src/
 │   ├── package.json
 │   ├── Dockerfile
 │
-├── docker-compose.yml
+├── docker-compose.yml        # Base system (DEV + PROD)
+├── docker-compose.pi.yml     # Raspberry Pi hardware override
 ├── README.md
-```
 
-### Key idea
-
-> **The backend never talks directly to hardware.**
-> All hardware access goes through `gpio_adapter.py`.
-
-This allows the same code to run:
-
-* on student laptops (mock hardware)
-* inside Docker
-* on a real Raspberry Pi (real hardware)
+````
 
 ---
 
-## 2. Editing the Code (Development Workflow)
+## 3. Development Mode (Laptop / Desktop)
 
-### Backend (Python / Flask)
+### Purpose
+
+- Write code
+- Test experiment logic
+- Learn system behavior
+- No hardware required
+
+---
+
+### Requirements
+
+- Docker Desktop
+
+That’s it.
+
+You **do not** need:
+
+- Python
+- Node.js
+- GPIO libraries
+- A Raspberry Pi
+
+---
+
+### Start the system (DEV)
+
+From the project root:
+
+```bash
+docker compose up
+````
+
+This uses:
+
+```
+docker-compose.yml
+```
+
+---
+
+### Access the system
+
+| Service  | URL                                            |
+| -------- | ---------------------------------------------- |
+| Frontend | [http://localhost:3000](http://localhost:3000) |
+| Backend  | [http://localhost:5000](http://localhost:5000) |
+
+---
+
+## 4. Live Editing (Very Important)
+
+This project uses **Docker volume mounts**.
+
+That means:
+
+> 🧠 You edit files on your computer
+> 🐳 Docker runs those same files live
+
+Example (backend):
+
+```yaml
+volumes:
+  - ./backend:/app
+```
+
+### What this means in practice
+
+* Edit code → changes apply immediately
+* No container rebuild required
+* Restart only if you change dependencies
+
+---
+
+## 5. Editing the Code
+
+### Backend (Flask / Python)
 
 Edit files in:
 
@@ -62,12 +152,10 @@ Edit files in:
 backend/
 ```
 
-Most changes will be in:
+Most work happens in:
 
-* `sbBackend.py` → API routes and logic
-* `gpio_adapter.py` → hardware abstraction (mock vs real GPIO)
-
-You **do not need Python installed locally** when using Docker.
+* `sbBackend.py` — API routes & experiment logic
+* `gpio_adapter.py` — hardware abstraction
 
 ---
 
@@ -79,182 +167,305 @@ Edit files in:
 frontend/src/
 ```
 
-This includes:
-
-* components
-* pages
-* UI logic
-* API calls to the backend
-
-Changes automatically hot-reload while Docker is running.
+React runs in development mode with **hot reload** enabled.
 
 ---
 
-## 3. Running the System (Local Development)
-
-### Prerequisites
-
-* Docker Desktop installed
-
-That’s it. No Python. No Node. No GPIO.
-
----
-
-### Start Everything
-
-From the project root:
-
-```bash
-docker compose up
-```
-
-This starts:
-
-* Flask backend on **port 5001**
-* React frontend on **port 3000**
-
-Open in your browser:
-
-```
-http://localhost:3000
-```
-
----
-
-### What Happens Behind the Scenes
-
-* Docker builds two containers:
-
-  * `skinnerbox-backend`
-  * `skinnerbox-frontend`
-* The backend automatically runs in **GPIO mock mode**
-* Hardware calls are simulated with log messages
-
-Example:
-
-```
-[GPIO MOCK] Button initialized
-[GPIO MOCK] LED initialized
-```
-
-This is expected and correct for development.
-
----
-
-## 4. Testing the System
-
-### Backend API Testing
-
-You can test endpoints directly:
-
-```
-http://localhost:5001
-```
-
-or via frontend UI actions.
-
-The backend runs in **Flask debug mode** during development.
-
----
-
-### Frontend Testing
-
-React runs in development mode with:
-
-* hot reload
-* console warnings (safe to ignore for now)
-
-ESLint warnings do **not** stop execution.
-
----
-
-## 5. Hardware Abstraction (Why This Works Without a Pi)
+## 6. GPIO Abstraction (Why Hardware Is Optional)
 
 ### `gpio_adapter.py`
 
-This file decides **how GPIO behaves**:
+This file controls how GPIO behaves.
 
-* **Mock mode** (default): logs actions
-* **Real mode** (Pi only): talks to physical pins
+* **Mock mode** (default)
 
-The backend imports **only** from `gpio_adapter.py`, never directly from GPIO libraries.
+  * Prints log messages
+  * Safe on laptops
+* **Real mode** (Pi only)
+
+  * Accesses physical GPIO pins
+
+The backend **never imports GPIO libraries directly**.
 
 This design:
 
 * prevents crashes on laptops
-* allows automated testing
-* keeps hardware optional
+* keeps development hardware-free
+* enables clean deployment
 
 ---
 
-## 6. Deployment to Raspberry Pi (Real Hardware)
+## 7. Simulated Inputs (Development Without Hardware)
 
-On a Raspberry Pi:
+When running on a laptop, **physical buttons do not exist**.
+To support full testing without hardware, the backend provides **simulation endpoints**.
 
-1. Install Docker
-2. Clone this repository
-3. Run:
+These endpoints trigger the **exact same logic** used by real GPIO interrupts.
+
+---
+### Simulating Button Inputs (Without Hardware)
+
+When running on a laptop, **physical buttons do not exist**.  
+To support full testing without hardware, the backend provides **simulation endpoints**.
+
+These endpoints trigger the **exact same callback functions** that real GPIO interrupts use on the Raspberry Pi.
+
+---
+
+#### Available Simulation Endpoints
+
+| Action | Method | Endpoint |
+|------|--------|----------|
+| Simulate lever press | POST | `/api/input/lever` |
+| Simulate nose poke | POST | `/api/input/nosepoke` |
+
+---
+
+#### Simulate a Lever Press (Terminal)
 
 ```bash
-GPIO_MODE=real docker compose up -d
+curl -X POST http://localhost:5000/api/input/lever
+
+```
+[ Frontend Button Click ]
+            ↓
+[ Simulation API Endpoint ]
+            ↓
+[ Same Callback Used by GPIO Interrupt ]
+            ↓
+[ Counters · Database · Experiment Logic ]
 ```
 
-This switches GPIO from mock to real.
-
-> ⚠️ Only do this on a Pi with actual hardware connected.
+The backend does **not know** whether an input came from hardware or simulation.
 
 ---
 
-## 7. Common Commands
+### Simulation Endpoints
 
-| Task           | Command                           |
-| -------------- | --------------------------------- |
-| Start system   | `docker compose up`               |
-| Stop system    | `Ctrl+C`                          |
-| Rebuild images | `docker compose build --no-cache` |
-| Stop & clean   | `docker compose down`             |
+| Action             | Method | Endpoint              |
+| ------------------ | ------ | --------------------- |
+| Simulate lever     | POST   | `/api/input/lever`    |
+| Simulate nose poke | POST   | `/api/input/nosepoke` |
 
 ---
 
-## 8. Mental Model (Read This Once)
+### Example: Simulate Inputs from Terminal
 
-Think of the system as **three layers**:
-
-```
-[ React UI ]
-      ↓
-[ Flask API ]
-      ↓
-[ GPIO Adapter ]
-      ↓
-[ Real Hardware OR Mock ]
+```bash
+curl -X POST http://localhost:5000/api/input/lever
+curl -X POST http://localhost:5000/api/input/nosepoke
 ```
 
-Only the **bottom layer changes** between development and deployment.
+Expected backend output:
 
-Everything else stays the same.
+```
+Lever pressed. Count: 1
+Nose poke. Count: 1
+```
 
 ---
 
-## 9. Why This Architecture Matters
+### Frontend Usage
+
+In development, the frontend can:
+
+* expose **Simulate Lever / Nose Poke** buttons
+* call these endpoints
+* test experiment logic without hardware
+
+This enables **full-system testing on any laptop**.
+
+---
+
+### Production Behavior
+
+On the Raspberry Pi:
+
+* Physical button presses trigger GPIO interrupts
+* GPIO interrupts call the **same callback functions**
+* Simulation endpoints typically go unused
+
+The backend code **does not change**.
+
+---
+
+## 8. Verifying the Backend Is Running
+
+### Check containers
+
+```bash
+docker ps
+```
+
+You should see:
+
+* `skinnerbox-backend`
+* `skinnerbox-frontend`
+
+---
+
+### Check backend directly
+
+```bash
+curl http://localhost:5000
+```
+
+Expected response:
+
+```
+Backend is running!
+```
+
+---
+
+### Expected backend logs (DEV)
+
+```
+[GPIO MOCK] Button initialized
+[GPIO MOCK] LED initialized
+ * Running on http://0.0.0.0:5000
+```
+
+---
+
+## 9. Git Workflow (How You Should Work)
+
+### Start working
+
+```bash
+git pull
+docker compose up
+```
+
+---
+
+### Save work
+
+```bash
+git status
+git add .
+git commit -m "Describe your change"
+git push
+```
+
+---
+
+### Important rule
+
+> ❗ Never edit files inside a running container
+> Always edit files in the repository folders
+
+---
+
+## 10. Production Deployment (Raspberry Pi)
+
+### Key idea
+
+The Raspberry Pi uses **two Docker Compose files**:
+
+1. Base system (shared everywhere)
+2. Pi-specific override (hardware access)
+
+---
+
+### Start system on the Pi (PROD)
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.pi.yml \
+  up -d
+```
+
+This enables:
+
+* real GPIO
+* privileged execution
+* background operation
+
+⚠️ Only run this on a Raspberry Pi with hardware connected.
+
+---
+
+## 11. Updating Code in Production
+
+To update a running Pi system safely:
+
+```bash
+git pull
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.pi.yml \
+  build
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.pi.yml \
+  up -d
+```
+
+---
+
+## 12. Common Docker Commands
+
+| Task                     | Command                                                               |
+| ------------------------ | --------------------------------------------------------------------- |
+| Start system (DEV)       | `docker compose up`                                                   |
+| Start system (PROD)      | `docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d` |
+| Stop system              | `Ctrl+C`                                                              |
+| Stop background services | `docker compose down`                                                 |
+| Rebuild images           | `docker compose build --no-cache`                                     |
+
+---
+
+## 13. Key Takeaway
+
+> This is **one system** with **two configurations**.
+
+* Development uses mock hardware
+* Production uses real hardware
+* The code is identical
+* Only configuration changes
+
+---
+
+## 14. Why This Architecture Matters
 
 This project intentionally demonstrates:
 
 * separation of concerns
 * hardware abstraction
 * containerized development
-* real-world system design patterns
+* safe deployment practices
 
-It mirrors how **professional embedded + web systems** are built.
+These are **real-world patterns** used in:
+
+* embedded systems
+* robotics
+* IoT platforms
+* experimental control software
 
 ---
 
-If you want, next I can:
+## 15. Support
 
-* shorten this for a **student-only README**
-* write a **TA troubleshooting guide**
-* add a **diagram section**
-* split into **DEV.md / DEPLOY.md**
+If something feels confusing:
 
-But as-is:
-✅ this README fully explains **edit → test → run → deploy** cleanly and correctly.
+* reread this README
+* check Docker logs
+* ask *which layer* you are working in
+
+Every design choice here is intentional.
+
+```
+
+---
+
+If you want next, I can:
+
+- generate an **architecture diagram**
+- add a **student quick-start**
+- write a **TA troubleshooting guide**
+- add a **hardware wiring appendix**
+
+But this README is now **complete, clear, and production-ready**.
+```
