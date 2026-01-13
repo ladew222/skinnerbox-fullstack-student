@@ -2,14 +2,11 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies only
 COPY package.json package-lock.json ./
 RUN npm install
 
-# Copy source
-COPY . .
-
+# Source code comes from volume mount
 EXPOSE 3000
 
 CMD ["npm", "start"]
-

@@ -1,7 +1,18 @@
 services:
   backend:
+    container_name: skinnerbox-backend
+    build: ./backend
+    ports:
+      - "5001:5000"
+
     privileged: true
+
     devices:
       - /dev/gpiomem:/dev/gpiomem
+      - /dev/spidev0.0:/dev/spidev0.0
+      - /dev/i2c-1:/dev/i2c-1
+
     environment:
       - GPIO_MODE=real
+
+    restart: unless-stopped

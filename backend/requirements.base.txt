@@ -1,8 +1,4 @@
 Flask==2.2.2
 Flask-Cors==3.0.10
-openpyxl==3.0.9
-psycopg2-binary==2.9.5
-six==1.16.0
-soupsieve==2.3.2
-sympy==1.11.1
 Werkzeug==2.2.3
+openpyxl==3.0.9
