@@ -30,5 +30,7 @@ services:
       - backend
     environment:
       - REACT_APP_BACKEND_URL=http://localhost:5001
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
     restart: unless-stopped
 
