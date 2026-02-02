@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./TestManager.css";
-import { runTest, stopTest, getCounts, setBlueLight, setOrangeLight, setRGBLight } from "../../utilities/api";
+import { runTest, stopTest, getCounts, setBlueLight, setOrangeLight, setRGBLight, getTestInformation } from "../../utilities/api";
 import { FormControl, InputLabel, Input} from '@mui/material';
 import { validationFunctions } from "../../validation/test_manager";
 import ButtonGroup from '@mui/material/ButtonGroup';
@@ -18,6 +18,7 @@ import { PresentToAll } from "@mui/icons-material";
 
 const TestManager = () => {
   const [presetValue, setPresetValue] = useState("");
+  const [subjectID, setSubjectID] = useState(""); 
   const [testName, setTestName] = useState("");
   const [trialDuration, setTrialDuration] = useState("");
   const [goalForTrial, setGoalForTrial] = useState("");
@@ -96,7 +97,9 @@ const TestManager = () => {
       return;
     }
 
-    const testSettings = `Test Name: ${testName}\nTrial Duration: ${trialDuration} seconds\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
+    // const testSettings = `Test Name: ${testName}\nTrial Duration: ${trialDuration} seconds\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
+    
+    const testSettings = `Preset: ${presetValue}\nTest Name: ${testName}\nSubject Identification: ${subjectID}\nTrial Duration: ${trialDuration} seconds\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
 
     const blob = new Blob([testSettings], { type: "text/plain" });
     const a = document.createElement("a");
@@ -133,7 +136,8 @@ const TestManager = () => {
       const lines = fileText.split("\n");
       const values = lines.map((line) => line.split(": ")[1]);
 
-      // setTestName(values[0] || "");
+      // TODO: Fix the handleFileUpload to reflect the changes to UI
+      setTestName(values[0] || "");
       setTrialDuration(values[1] ? values[1].replace(" seconds", "") : "");
       setGoalForTrial(values[2] || "");
       setCooldown(values[3] ? values[3].replace(" seconds", "") : "");
@@ -158,11 +162,13 @@ const TestManager = () => {
     document.querySelector(".upload-button").value = "";
   };
 
+  // TODO: Not Sending to backend
   useEffect(() => {
     let interval;
     if (testRunning) {
       interval = setInterval(async () => {
         try {
+          // GetCounts comes from the backend, but it never sends information from the frontend to backend.
           const data = await getCounts();
           setLeverPressCount(data.lever_press_count);
           setNosePokeCount(data.nose_poke_count);
@@ -220,10 +226,31 @@ const TestManager = () => {
     setLastRewardTime(0);
     setRewardCount(0);
 
+    const testSettings = { 
+      testName, 
+      subjectID,
+      trialDuration, 
+      goalForTrial,
+      cooldown,
+      rewardType, 
+      interactionType, 
+      stimulusType, 
+      lightColor 
+    };
+
+    // TODO: Changed runTest to reflect sending the updated information
     try {
-      await runTest({ testName, trialDuration, rewardType, interactionType, stimulusType, lightColor });
+      // Save test information to database FIRST to ensure record exists
+      console.log("Saving test configuration...");
+      await getTestInformation(testSettings);
+      
+      // Then start the hardware test
+      console.log("Starting hardware test...");
+      await runTest(testSettings);
     } catch (error) {
-      console.error("Error running test:", error);
+      console.error("Error running test sequence:", error);
+      setTestRunning(false);
+      alert("Failed to start test. Please check connections or backend logs.");
     }
   };
 
@@ -339,74 +366,30 @@ const handlePreset = (event) => {
         alert("Error loading preset");
     }
 };
-
+  // TODO: Add cookies and sessions for the refresh and login
   return (
-    /* Main Component Return - Conditional Rendering
-     * This component has two main UI states:
-     * 1. Test Setup Form (!testRunning && !testPaused && !testFinished)
-     * 2. Test Execution/Results Screen (testRunning || testPaused || testFinished)
-     * The ternary operator below switches between these states based on test status.
-     */
     <div className="trial-settings">
-      {/* Conditional rendering: Show form configuration when no test is active */}
       {!testRunning && !testPaused && !testFinished ? (
-
-        /* TEST SETUP FORM CONTAINER
-         * Contains all input controls for configuring a Skinner Box trial.
-         * Uses Material-UI FormControl components with validation.
-         */
         <div id = "formControlContainer">
-
-          {/* PRESET SELECTOR
-           * Allows quick loading of predefined test configurations.
-           * Calling handlePreset() populates all form fields with preset values.
-           * Select "None" to clear all fields and create a custom configuration.
-           * 
-           * CHANGE: IMPLEMENTED dynamic user preset rendering!
-           * Now displays user-created presets from PresetManager component.
-           * Hardcoded presets (Preset 1-4) have been removed except Preset 1.
-           * 
-           * HOW IT WORKS:
-           * 1. userPresets.map() iterates through all saved presets from localStorage
-           * 2. Each preset renders as a MenuItem with its custom name
-           * 3. When selected, handlePreset() applies that preset's configuration
-           * 4. "None" option clears all fields for manual configuration
-           * 
-           * PRESET FLOW:
-           * PresetManager (save to localStorage) → TestManager (load on mount) → Dropdown (render) → handlePreset (apply)
-           */}
           <div className="input-group">
             <FormControl fullWidth>
-              <InputLabel id="lightColorLabel">Preset:</InputLabel>
-                <Select
-                    value={presetValue}
-                    onChange={handlePreset}
-                >
-                    {/* CHANGE: Added dynamic rendering of user-created presets */}
-                    {/* Maps through userPresets array loaded from localStorage */}
-                    {/* Each preset appears as a selectable option with its custom name */}
-                    {userPresets.map((preset, index) => (
-                        <MenuItem key={index} value={preset.name}>
-                            {preset.name}
-                        </MenuItem>
-                    ))}
-                    {/* CHANGE: Moved "None" to end of list (after user presets) */}
-                    <MenuItem value={"None"}>None</MenuItem>
+              <InputLabel id="lblPresetManager">Preset:</InputLabel>
+                <Select value={presetValue} onChange={handlePreset}>
+                  {userPresets.map((preset, index) => (
+                      <MenuItem key={index} value={preset.name}>
+                          {preset.name}
+                      </MenuItem>
+                  ))}
+                  <MenuItem value={"None"}>None</MenuItem>
                 </Select>
             </FormControl>
           </div>  
 
-          {/* TEST NAME INPUT (Required, Validated)
-           * User-defined identifier for this trial configuration.
-           * Validation removes restricted characters: < > & " ' / - ; \ ^ % + : ( ) { } [ ] and whitespace.
-           * Error state shown in red with helper text if validation fails.
-           * Validation occurs on every keystroke via validationFunctions.testNameValidation().
-           */}
           <div className="input-group">
             <FormControl  fullWidth error={Boolean(testNameError)}>
-              <InputLabel htmlFor="testNameLabel">Test Name:</InputLabel>
+              <InputLabel htmlFor="testName">Test Name:</InputLabel>
               <Input
-                id="testName"
+                id="lblTestName"
                 placeholder="Enter test name"
                 required
                 value={testName}
@@ -421,18 +404,29 @@ const handlePreset = (event) => {
               </FormHelperText>
             </FormControl>
           </div>
-          
-          {/* TRIAL DURATION INPUT (Required, Numeric Only)
-           * Specifies how long the trial will run in minutes.
-           * Validation strips all non-digit characters.
-           * Shows "Only numbers are allowed" error if user enters non-numeric input.
-           * Used in useEffect polling loop to determine when trial should end.
-           */}
+
+
+          <div className="input-group">
+            <FormControl  fullWidth>
+              <InputLabel htmlFor="subjectIdentification">Subject Identification:</InputLabel>
+              <Input
+                id="txtSubjectID"
+                placeholder="Enter Subject ID"
+                required
+                value={subjectID}
+                onChange={(e) => setSubjectID(e.target.value)}
+              />
+              {/* <FormHelperText>
+                {testNameError}
+              </FormHelperText> */}
+            </FormControl>
+          </div>
+        
           <div className="input-group">
             <FormControl fullWidth error={Boolean(trialDurationError)}>
-              <InputLabel htmlFor="trialDurationLabel">Trial Duration(Minutes):</InputLabel>
+              <InputLabel htmlFor="trialDuration">Trial Duration(Minutes):</InputLabel>
               <Input
-                id="trialDuration"
+                id="txtTrialDuration"
                 placeholder="Enter Trial Duration"
                 required
                 min = "0"
@@ -457,17 +451,13 @@ const handlePreset = (event) => {
            */}
           <div className="input-group">
             <FormControl fullWidth error={Boolean(trialGoalError)}>
-              <InputLabel htmlFor="goalForTrialLabel">Goal for Trial:</InputLabel>
+              <InputLabel htmlFor="goalForTrial">Goal for Trial:</InputLabel>
               <Input
-                id="goalForTrial"
+                id="txtGoalForTrial"
                 placeholder="Enter Goal"
                 required
                 value={goalForTrial}
-                onChange={(e) => {
-                  const { value, error } = validationFunctions.testTrialGoal(e.target.value);
-                  setGoalForTrial(value);
-                  setTrialGoalError(error);
-                }}
+                onChange={(e) => setGoalForTrial(e.target.value)}
               />
               <FormHelperText>
                 {trialGoalError}
@@ -484,9 +474,9 @@ const handlePreset = (event) => {
            */}
           <div className="input-group">
              <FormControl fullWidth error={Boolean(coolDownError)}>
-              <InputLabel htmlFor="cooldownLabel">Cooldown:</InputLabel>
+              <InputLabel htmlFor="coolDown">Cooldown:</InputLabel>
               <Input
-                id="cooldown"
+                id="txtCooldown"
                 placeholder="Enter Cooldown"
                 required
                 min = "0"
@@ -503,18 +493,11 @@ const handlePreset = (event) => {
             </FormControl>
           </div>
          
-
-         {/* REWARD TYPE SELECTOR
-          * Determines which reward dispenser activates when goal is met.
-          * "Water" -> triggers blue light via setBlueLight()
-          * "Food" -> triggers orange light via setOrangeLight()
-          * No validation needed (dropdown ensures valid selection).
-          */}
          <div className="input-group">
           <FormControl fullWidth>
-            <InputLabel id="rewardTypeLabel">Reward Type:</InputLabel>
+            <InputLabel id="rewardType">Reward Type:</InputLabel>
               <Select
-                id="rewardType"
+                id="selectRewardType"
                 value={rewardType}
                 onChange = {(e) => setRewardType(e.target.value)}
               >
@@ -523,19 +506,12 @@ const handlePreset = (event) => {
               </Select>
           </FormControl>
          </div>
-          
-
-          {/* INTERACTION TYPE SELECTOR
-           * Defines which subject behavior is tracked/counted.
-           * "Lever" -> counts lever presses from getCounts().lever_press_count
-           * "Poke" -> counts nose pokes from getCounts().nose_poke_count
-           * Selected type determines which count is compared against goalForTrial.
-           */}
+        
           <div className="input-group">
             <FormControl fullWidth>
-              <InputLabel id="interactionTypeLabel">Interaction Type:</InputLabel>
+              <InputLabel id="interactionType">Interaction Type:</InputLabel>
                 <Select
-                  id="interactionType"
+                  id="selectInteractionType"
                   value={interactionType}
                   onChange = {(e) => setInteractionType(e.target.value)}
                   >
@@ -545,17 +521,11 @@ const handlePreset = (event) => {
             </FormControl>
           </div>
           
-          {/* STIMULUS TYPE SELECTOR
-           * Specifies what type of stimulus is presented during trials.
-           * "Light" -> visual stimulus
-           * "Tone" -> auditory stimulus
-           * Note: Actual stimulus delivery logic may be in backend (sbBackend.py).
-           */}
           <div className="input-group">
             <FormControl fullWidth>
-              <InputLabel id="stimulusTypeLabel">Stimulus Type:</InputLabel>
+              <InputLabel id="stimulusType">Stimulus Type:</InputLabel>
                 <Select
-                  id="stimulasType"
+                  id="selectStimulasType"
                   value={stimulusType}
                   onChange = {(e) => setStimulusType(e.target.value)}
                 >
@@ -564,18 +534,26 @@ const handlePreset = (event) => {
                 </Select>
             </FormControl>
           </div>
-          
 
-          {/* LIGHT COLOR SELECTOR
-           * Determines the color of the visual indicator light.
-           * Used to provide visual feedback during trials.
-           * RGB control buttons in test execution screen can override this during runtime.
-           */}
+          {/* <div className="input-group">
+            <FormControl fullWidth>
+              <InputLabel id="stimulusTypeTwo">Stimulus Type:</InputLabel>
+                <Select
+                  id="selectStimulasTypeTwo"
+                  value={stimulusType}
+                  onChange = {(e) => setStimulusType(e.target.value)}
+                >
+                  <MenuItem value={"Light"}>Light</MenuItem>
+                  <MenuItem value={"Tone"}>Tone</MenuItem>
+                </Select>
+            </FormControl>
+          </div> */}
+        
           <div className="input-group">
             <FormControl fullWidth>
-              <InputLabel id="lightColorLabel">Light Color:</InputLabel>
+              <InputLabel id="lightColor">Light Color:</InputLabel>
                 <Select
-                  id="lightColor"
+                  id="selectLightColor"
                   value={lightColor}
                   onChange = {(e) => setLightColor(e.target.value)}
                 >
@@ -587,125 +565,51 @@ const handlePreset = (event) => {
             </FormControl>
           </div>  
           
-
-          {/* ACTION BUTTON GROUP
-           * Primary controls for managing test configurations and execution.
-           */}
           <div className="input-group">
             <ButtonGroup variant="contained"  className="input-group" aria-label="Basic button group">
-
-              {/* Save Test Button
-               * Downloads current configuration as a .txt file.
-               * Disabled if form hasn't changed from originalSettings (prevents redundant saves).
-               * Calls handleSaveTest() which creates a blob and triggers browser download.
-               */}
               <Button className="save-button" onClick={handleSaveTest} disabled={!hasChanged()}>Save Test</Button>
-              
-              {/* Upload Test Configuration Button
-               * File input wrapped in Button for styling consistency.
-               * Accepts .txt files with expected format (validated by validateFileFormat()).
-               * Calls handleFileUpload() to parse and populate form fields.
-               */}
               <Button><input type="file" accept=".txt" onChange={handleFileUpload} className="upload-button" /></Button>
-              
-              {/* Delete Uploaded File Button (Conditional)
-               * Only renders if uploadedFile state is not null.
-               * Clears the uploaded file and resets all form fields to empty/default values.
-               * Red styling indicates destructive action.
-               */}
               {uploadedFile && <Button className="delete-button" onClick={handleDeleteUpload} style={{ backgroundColor: 'red', color: 'white' }}>Delete</Button>}
-              
-              {/* Run Test Button
-               * Initiates test execution.
-               * Validates that testName and trialDuration are filled before starting.
-               * Calls handleRunTest() which sets testRunning=true and triggers the useEffect polling loop.
-               * Sends configuration to backend via runTest() API call.
-               */}
-              <Button className="start-button" onClick={handleRunTest}>Run Test</Button>
+              <Button 
+                className="start-button" 
+                onClick={handleRunTest}
+              >
+                Run Test
+              </Button>
             </ButtonGroup>
           </div>          
         </div>
       ) : (
-          /* TEST EXECUTION/RESULTS SCREEN
-           * Rendered when test is running, paused, or finished.
-           * Displays real-time metrics and control buttons based on test state.
-           */
+   
           <div className="test-screen">
             {/* Dynamic title based on test completion state */}
             <h1>{testFinished ? "Test Completed" : "Test in Progress"}</h1>
-            
-            {/* REAL-TIME METRICS
-             * Updated every second by useEffect polling loop when testRunning=true.
-             * elapsedTime increments each second.
-             * leverPressCount and nosePokeCount come from getCounts() API.
-             * lightOn reflects current stimulus light state from backend.
-             */}
             <p>Elapsed Time: {elapsedTime}s</p>
             <p>Lever Presses: {leverPressCount}</p>
             <p>Nose Pokes: {nosePokeCount}</p>
             <p>Light Status: {lightOn ? "ON" : "OFF"}</p>
-            
-            {/* RGB LIGHT MANUAL CONTROLS
-             * Allow experimenter to manually control RGB LED during trial.
-             * Each button calls handleRGB() with different color combinations.
-             * handleRGB() calls setRGBLight() API and displays result in message state.
-             */}
+
             <div className="button-group">
               <button className='redlight-button' onClick={() => handleRGB('on', 'off', 'off')}>RGB Red On</button>
               <button className='greenlight-button' onClick={() => handleRGB('off', 'on', 'off')}>RGB Green On</button>
               <button className='bluelight-button' onClick={() => handleRGB('off', 'off', 'on')}>RGB Blue On</button>
               <button className='rgblight-button' onClick={() => handleRGB('off', 'off', 'off')}>RGB Off</button>
 
-              {/* Status message from RGB control attempts (success or error) */}
+  
               {message && <p>{message}</p>}
 
-              {/* STOP BUTTON (Conditional - Only when test is actively running)
-               * Pauses the test by calling handleStopTest(false).
-               * Sets testRunning=false and testPaused=true.
-               * Fetches final counts from backend and stores in testResults.
-               * Test can be resumed from paused state.
-               */}
-              {testRunning && <button className="stop-button" onClick={() => handleStopTest(false)}>Stop Test</button>}
 
-              {/* PAUSED STATE CONTROLS (Conditional - Only when testPaused=true)
-               * Provides three options after stopping a test:
-               */}
+              {testRunning && <button className="stop-button" onClick={() => handleStopTest(false)}>Stop Test</button>}
               {testPaused && (
                 <>
-                  {/* Resume: Continues the test from where it was paused.
-                   * Calls handleRunTest() which sets testPaused=false and testRunning=true.
-                   * Polling loop resumes updating metrics.
-                   */}
                   <button className="resume-button" onClick={handleRunTest}>Resume</button>
-                  
-                  {/* Finish Test: Ends the test permanently without resuming.
-                   * Sets testPaused=false and testFinished=true.
-                   * Transitions to finished state for result download.
-                   */}
                   <button className="finish-button" onClick={() => { setTestPaused(false); setTestFinished(true); }}>Finish Test</button>
-                  
-                  {/* Return to Test Setup: Abandons current test and returns to form.
-                   * Clears testPaused flag and testResults.
-                   * Form retains previous configuration for easy restart.
-                   */}
                   <button className="return-button" onClick={() => { setTestPaused(false); setTestResults(null); }}>Return to Test Setup</button>
                 </>
               )}
-
-              {/* FINISHED STATE CONTROLS (Conditional - Only when testFinished=true)
-               * Test has completed - provide result download and return options.
-               */}
               {testFinished && (
                 <>
-                  {/* Download Results: Exports test data as CSV file.
-                   * Calls handleDownloadResults() which formats data and triggers browser download.
-                   * CSV includes: timestamp, all configuration params, final counts, elapsed time, rewards given.
-                   */}
                   <button className="download-button" onClick={handleDownloadResults}>Download Results</button>
-                  
-                  {/* Return to Test Setup: Go back to configuration form.
-                   * Clears finished state and results to allow starting a new test.
-                   */}
                   <button className="return-button" onClick={() => { setTestFinished(false); setTestResults(null); }}>Return to Test Setup</button>
                 </>
               )}
