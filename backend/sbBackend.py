@@ -36,6 +36,7 @@ rgb_led = RGBLED(red=12, green=16, blue=20)
 # Global counters for interactions
 lever_press_count = 0
 nose_poke_count = 0
+current_test_goal = None
 counter_lock = threading.Lock()
 # Helper function to get a new SQLite connection
 #TODO: Added a a try catch to the get_db_connection
@@ -55,6 +56,7 @@ def get_db_connection():
 # Ending trial, resetting nose and lever count, and booting back to the menu.
 def end_trial():
     global lever_press_count
+    print(f"Ended Test")
     global nose_poke_count
     lever_press_count = 0
     nose_poke_count = 0
@@ -66,10 +68,11 @@ def on_lever_press():
     with counter_lock:
         lever_press_count += 1
         print("Lever pressed. Count:", lever_press_count)
-        if lever_press_count == TestManager.goalForTrial:
+        try:
+            if current_test_goal is not None and lever_press_count >= current_test_goal:
                 end_trial()
         except Exception as e:
-            print(f"Database error on lever press (end trial): {e}")
+            print(f"Error checking trial goal on lever press: {e}")
 
     # Use a new connection inside the callback
     try:
@@ -88,10 +91,12 @@ def on_nose_poke():
     with counter_lock:
         nose_poke_count += 1
         print("Nose poke. Count:", nose_poke_count)
-        if nose_poke_count == TestManager.goalForTrial:
+        
+        try:
+            if current_test_goal is not None and nose_poke_count >= current_test_goal:
                 end_trial()
         except Exception as e:
-            print(f"Database error on nose poke (end trial): {e}")
+            print(f"Error checking trial goal on nose poke: {e}")
 
 
     # Use a new connection inside the callback
@@ -242,35 +247,59 @@ def get_information():
         subject_id = data.get("subjectID")
         duration = data.get("trialDuration")
         goal = data.get("goalForTrial")
+
+        # Update global goal
+        global current_test_goal
+        try:
+             current_test_goal = int(goal) if goal is not None else None
+        except ValueError:
+             current_test_goal = None
+        
         cooldown = data.get("cooldown")
         reward_type = data.get("rewardType")
         interaction_type = data.get("interactionType")
         stimulus_type = data.get("stimulusType")
         light_color = data.get("lightColor")
         # TODO: Change this based on the actual test statues 
-        test_status = True; 
+        # test_status = True; 
         
         # Use parameterized queries to safely insert variables
         # This assumes your table has exactly 9 columns in this order
-        # Note: 'test_name' is currently not being inserted, replaced by 'test_identification'
-        sql_command = "INSERT INTO Active_Test VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        cursor.execute(sql_command, (test_identification, subject_id, duration, goal, cooldown, reward_type, interaction_type, stimulus_type, light_color, test_status))
+        # Use parameterized queries to safely insert variables
+        # Explicitly mapping variables to the correct columns in Active_Test
+        sql_command = """
+            INSERT INTO TEST (
+                testID, subjectID, Name, Goal, Reward, 
+                Light, Stimulus, Interaction, Cooldown, Duration
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        cursor.execute(sql_command, (
+            test_identification, 
+            subject_id, 
+            test_name, 
+            goal, 
+            reward_type, 
+            light_color, 
+            stimulus_type, 
+            interaction_type, 
+            cooldown, 
+            duration
+        ))
         conn.commit()
         
         return jsonify({
             "message": "Start Test Successfully!",
             "received_configuration": {
                 "testID": test_identification, 
-                "testName": test_name,
                 "subjectID": subject_id,
-                "trialDuration": duration,
-                "goalForTrial": goal,
-                "cooldown": cooldown,
+                "testName": test_name,
                 "rewardType": reward_type,
-                "interactionType": interaction_type,
-                "stimulusType": stimulus_type,
+                "goalForTrial": goal,
                 "lightColor": light_color,
-                "testStatus": True
+                "stimulusType": stimulus_type,
+                "interactionType": interaction_type,
+                "cooldown": cooldown,
+                "trialDuration": duration,
             }
         }), 200
     
