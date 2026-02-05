@@ -18,7 +18,7 @@ file = "testdatabase.db"  ## for database
 app = Flask(__name__)
 
 CORS(app)  # Allow all domains for development
-# CORS(app, resources={r"/*": {"origins": "*"}}) 
+
 
 # Define directories (if needed)
 log_directory = os.path.join(os.path.dirname(__file__), 'logs')
@@ -104,12 +104,12 @@ def add_header(response):
     response.headers['Expires'] = '0'
     return response
 
-@app.route('/')
+@app.route('/api/')
 def index():
     return "Backend is running!"
 
 # Endpoint to retrieve counts
-@app.route('/counts', methods=['GET'])
+@app.route('/api/counts', methods=['GET'])
 def get_counts():
     with counter_lock:
         counts = {
@@ -119,7 +119,7 @@ def get_counts():
     return jsonify(counts), 200
 
 # Endpoint to control the Blue LED
-@app.route('/light/blue', methods=['POST'])
+@app.route('/api/light/blue', methods=['POST'])
 def control_blue():
     data = request.get_json()
     action = data.get("action", "off")
@@ -130,7 +130,7 @@ def control_blue():
     return jsonify({"status": "success", "blue": action}), 200
 
 # Endpoint to control the Orange LED
-@app.route('/light/orange', methods=['POST'])
+@app.route('/api/light/orange', methods=['POST'])
 def control_orange():
     data = request.get_json()
     action = data.get("action", "off")
@@ -141,7 +141,7 @@ def control_orange():
     return jsonify({"status": "success", "orange": action}), 200
 
 # Endpoint to control the RGB LED
-@app.route('/light/rgb', methods=['POST'])
+@app.route('/api/light/rgb', methods=['POST'])
 def control_rgb():
     data = request.get_json()
     # Expect values for red, green, blue as "on" or "off"
@@ -155,7 +155,7 @@ def control_rgb():
     return jsonify({"status": "success", "rgb": {"red": data.get("red", "off"), "green": data.get("green", "off"), "blue": data.get("blue", "off")}}), 200
 
 # Routes to run tests
-@app.route('/test/run', methods=['POST'])
+@app.route('/api/test/run', methods=['POST'])
 def run_test():
     try:
         data = request.json  # Get test settings from the request
@@ -186,7 +186,7 @@ def simulate_nose_poke():
     return jsonify({"status": "simulated nose poke"}), 200
 
 
-@app.route('/test/stop', methods=['POST'])
+@app.route('/api/test/stop', methods=['POST'])
 def stop_test():
     try:
         print("Stopping test...")
@@ -201,7 +201,7 @@ def stop_test():
     
 
 # TODO: Added Endpoint to send the test manager information to the database.
-@app.route('/test/information', methods = ['POST'])
+@app.route('/api/test/information', methods = ['POST'])
 def get_information():
     
     # Creating a variable named conn that is used for the connection to the database.  
