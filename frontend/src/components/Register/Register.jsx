@@ -32,6 +32,13 @@ const Register = () => {
     };
 
    /*return (
+    const handleRegistration = (e) => {
+        e.preventDefault();
+        // TODO: Handle registration logic
+        console.log("Register clicked");
+    };
+
+    return (
         <div className="trial-settings">
             <div id = "loginFormContainer">
 
@@ -43,10 +50,11 @@ const Register = () => {
                     <InputLabel htmlFor="loginEmail">Email:</InputLabel>
                     <Input
                         id="txtEmail"
+                        name="email"
                         placeholder="Enter Email"
                         required
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        value={form.email}
+                        onChange={handleChange}
                     />
                     </FormControl>
                 </div>
@@ -56,10 +64,11 @@ const Register = () => {
                     <InputLabel htmlFor="loginPassword">Password:</InputLabel>
                     <Input
                         id="txtPassword"
+                        name="password"
                         placeholder="Enter Password"
                         required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        value={form.password}
+                        onChange={handleChange}
                     />
                     </FormControl>
                 </div>

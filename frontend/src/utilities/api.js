@@ -1,11 +1,11 @@
 import axios from 'axios';
 
-const API_URL = 'http://192.168.1.102:5001'; // Replace if backend's URL changes
+// const API_URL = 'http://192.168.1.102:5001'; // Replace if backend's URL changes
 
 // IO Testing
 export const getCounts = async () => {
   try {
-    const response = await axios.get(`${API_URL}/counts`);
+    const response = await axios.get(`/api/counts`);
     return response.data;
   } catch (error) {
     console.error("Error getting counts:", error);
@@ -15,7 +15,7 @@ export const getCounts = async () => {
 
 export const setBlueLight = async (action) => {
   try {
-    const response = await axios.post(`${API_URL}/light/blue`, { action });
+    const response = await axios.post(`/api/light/blue`, { action });
     return response.data;
   } catch (error) {
     console.error("Error controlling blue LED:", error);
@@ -25,7 +25,7 @@ export const setBlueLight = async (action) => {
 
 export const setOrangeLight = async (action) => {
   try {
-    const response = await axios.post(`${API_URL}/light/orange`, { action });
+    const response = await axios.post(`/api/light/orange`, { action });
     return response.data;
   } catch (error) {
     console.error("Error controlling orange LED:", error);
@@ -35,7 +35,7 @@ export const setOrangeLight = async (action) => {
 
 export const setRGBLight = async (red, green, blue) => {
   try {
-    const response = await axios.post(`${API_URL}/light/rgb`, { red, green, blue });
+    const response = await axios.post(`/api/light/rgb`, { red, green, blue });
     return response.data;
   } catch (error) {
     console.error("Error controlling RGB LED:", error);
@@ -46,7 +46,7 @@ export const setRGBLight = async (red, green, blue) => {
 // Test Management
 export const runTest = async (testSettings) => {
   try {
-    const response = await axios.post(`${API_URL}/test/run`, testSettings);
+    const response = await axios.post(`/api/test/run`, testSettings);
     return response.data;
   } catch (error) {
     console.error("Error starting test:", error);
@@ -56,7 +56,7 @@ export const runTest = async (testSettings) => {
 
 export const stopTest = async () => {
   try {
-    const response = await axios.post(`${API_URL}/test/stop`);
+    const response = await axios.post(`api/test/stop`);
     return response.data;
   } catch (error) {
     console.error("Error stopping test:", error);
@@ -68,7 +68,8 @@ export const stopTest = async () => {
 // TODO: Added function to pull the information from the test manager. 
 export const getTestInformation = async (testSettings) => {
   try{
-    const response = await axios.post(`${API_URL}/test/information`, testSettings);
+    // const response = await axios.post(`${API_URL}/api/test/information`, testSettings);
+    const response = await axios.post(`/api/test/information`, testSettings);
     return response.data;
   }catch (error){
     console.error("Error Getting Information:", error);
