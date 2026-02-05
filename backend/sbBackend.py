@@ -51,8 +51,14 @@ def get_db_connection():
         print(f"Error connecting to database: {e}")
         return None
     
-    
-        
+
+# Ending trial, resetting nose and lever count, and booting back to the menu.
+def end_trial():
+    global lever_press_count
+    global nose_poke_count
+    lever_press_count = 0
+    nose_poke_count = 0
+    stop_test()
 
 # Callback functions to count button presses
 def on_lever_press():
@@ -60,6 +66,10 @@ def on_lever_press():
     with counter_lock:
         lever_press_count += 1
         print("Lever pressed. Count:", lever_press_count)
+        if lever_press_count == TestManager.goalForTrial:
+                end_trial()
+        except Exception as e:
+            print(f"Database error on lever press (end trial): {e}")
 
     # Use a new connection inside the callback
     try:
@@ -78,6 +88,11 @@ def on_nose_poke():
     with counter_lock:
         nose_poke_count += 1
         print("Nose poke. Count:", nose_poke_count)
+        if nose_poke_count == TestManager.goalForTrial:
+                end_trial()
+        except Exception as e:
+            print(f"Database error on nose poke (end trial): {e}")
+
 
     # Use a new connection inside the callback
     try:

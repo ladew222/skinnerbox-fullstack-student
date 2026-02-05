@@ -31,6 +31,7 @@ const Register = () => {
         setMessage('Registration successful!');
     };
 
+   /*return (
     const handleRegistration = (e) => {
         e.preventDefault();
         // TODO: Handle registration logic
@@ -73,7 +74,7 @@ const Register = () => {
                 </div>
 
                 <div>
-                    {/* <button type="submit">{isRegister ? 'Register' : 'Login'}</button> */}
+                    { <button type="submit">{isRegister ? 'Register' : 'Login'}</button> }
                     <Button type = "submit" id = "btnLogin" variant="contained" size="large">Login</Button>
                     <link rel="stylesheet" href="../" />
                     <Button id = "btnRegister" onClick={handleRegistration} variant="contained" size="large">Register</Button>
@@ -81,7 +82,7 @@ const Register = () => {
                 </form>
             </div>
         </div>
-    );
+    ); */
 };
 
 export default Register;
