@@ -77,3 +77,14 @@ export const getTestInformation = async (testSettings) => {
   }
 }
 
+// TODO: Task, look into function to see if it will work.
+// Update an existing test record with current nose poke and lever press counts
+export const updateTestInformation = async (testSettings) => {
+  try {
+    const response = await axios.put(`/api/test/update/information`, testSettings);
+    return response.data;
+  } catch (error) {
+    console.error("Error Updating Information:", error);
+    throw error;
+  }
+}

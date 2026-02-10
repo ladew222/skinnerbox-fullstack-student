@@ -6,18 +6,14 @@ import threading
 import os
 import sqlite3
 import uuid
-# TODO LIST:
-    # 1. Secure/Build Parts:
-        #DB Connection 
-        #End Points 
 
-
-
+# File that is storing the database name
 file = "testdatabase.db"  ## for database
 
 app = Flask(__name__)
 
-CORS(app)  # Allow all domains for development
+# Allow all domains for development
+CORS(app) 
 
 
 # Define directories (if needed)
@@ -37,6 +33,7 @@ rgb_led = RGBLED(red=12, green=16, blue=20)
 lever_press_count = 0
 nose_poke_count = 0
 current_test_goal = None
+testStatus = False 
 counter_lock = threading.Lock()
 # Helper function to get a new SQLite connection
 #TODO: Added a a try catch to the get_db_connection
@@ -60,9 +57,12 @@ def end_trial():
     global nose_poke_count
     lever_press_count = 0
     nose_poke_count = 0
+    # TODO: Set up boolean to determine when test is done 
+    testStatus = True
     stop_test()
 
 # Callback functions to count button presses
+# TODO: Unit test to see if end_trial function is called when goal is reach.
 def on_lever_press():
     global lever_press_count
     with counter_lock:
@@ -70,7 +70,7 @@ def on_lever_press():
         print("Lever pressed. Count:", lever_press_count)
         try:
             if current_test_goal is not None and lever_press_count >= current_test_goal:
-                end_trial()
+                end_trial()                
         except Exception as e:
             print(f"Error checking trial goal on lever press: {e}")
 
@@ -85,7 +85,8 @@ def on_lever_press():
         print(f"Database error on lever press: {e}")
     finally:
         conn.close()
-
+        
+# TODO: Unit test to see if end_trial function is called when goal is reach.
 def on_nose_poke():
     global nose_poke_count
     with counter_lock:
@@ -228,7 +229,7 @@ def get_information():
     conn = None
     try:
         print("Received test information request") # Debug log
-        # Using a variable called data to get the information for the test manager.
+        # Using the variables called data to get the information from the test manager on the front end.
         data = request.json  # Get test settings from the request
         
         # Generate a unique ID for the test (convert to string for storage/JSON)
@@ -247,43 +248,49 @@ def get_information():
         subject_id = data.get("subjectID")
         duration = data.get("trialDuration")
         goal = data.get("goalForTrial")
-
-        # Update global goal
-        global current_test_goal
-        try:
-             current_test_goal = int(goal) if goal is not None else None
-        except ValueError:
-             current_test_goal = None
-        
         cooldown = data.get("cooldown")
         reward_type = data.get("rewardType")
         interaction_type = data.get("interactionType")
         stimulus_type = data.get("stimulusType")
         light_color = data.get("lightColor")
-        # TODO: Change this based on the actual test statues 
-        # test_status = True; 
+        nose_poke_val = data.get("nosePoke")
+        lever_press_val = data.get("leverPress")
         
-        # Use parameterized queries to safely insert variables
-        # This assumes your table has exactly 9 columns in this order
-        # Use parameterized queries to safely insert variables
-        # Explicitly mapping variables to the correct columns in Active_Test
+        # TODO: Used the int function to convert the string values to integers. 
+        subject_id_converted = int(subject_id)
+        goal_converted = int(goal)
+        nose_poke_val = int(nose_poke_val)
+        lever_press_val_converted = int(lever_press_val)
+        nose_poke_val_converted = int(nose_poke_val)
+        
+        
+         # Update global goal
+        global current_test_goal
+        try:
+             current_test_goal = int(goal_converted) if goal_converted is not None else None
+             print(current_test_goal)
+        except ValueError:
+             current_test_goal = None
+
         sql_command = """
             INSERT INTO TEST (
                 testID, subjectID, Name, Goal, Reward, 
-                Light, Stimulus, Interaction, Cooldown, Duration
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                Light, Stimulus, Interaction, Cooldown, Duration,nose_poke, lever_press
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         cursor.execute(sql_command, (
             test_identification, 
-            subject_id, 
+            subject_id_converted, 
             test_name, 
-            goal, 
+            goal_converted, 
             reward_type, 
             light_color, 
             stimulus_type, 
             interaction_type, 
             cooldown, 
-            duration
+            duration,
+            nose_poke_val_converted,
+            lever_press_val_converted,
         ))
         conn.commit()
         
@@ -291,15 +298,17 @@ def get_information():
             "message": "Start Test Successfully!",
             "received_configuration": {
                 "testID": test_identification, 
-                "subjectID": subject_id,
+                "subjectID": subject_id_converted,
                 "testName": test_name,
                 "rewardType": reward_type,
-                "goalForTrial": goal,
+                "goalForTrial": goal_converted,
                 "lightColor": light_color,
                 "stimulusType": stimulus_type,
                 "interactionType": interaction_type,
                 "cooldown": cooldown,
                 "trialDuration": duration,
+                "nose_poke": nose_poke_val_converted,
+                "lever_press": lever_press_val_converted
             }
         }), 200
     
@@ -309,17 +318,46 @@ def get_information():
     finally:
         if conn:
             conn.close()
-    
-    # except Exception as e:
-    #     print("Error Getting Information:", str(e))
-    #     return jsonify({"error": "Failed to Get Information"}), 500
-    # finally:
-    #     # Always close the connection
-    #     if conn:
-    #         conn.close()
-    
-        
-        
+
+
+# TODO: TASK, look into this logic to see if it would work.
+# Endpoint to update the latest test record with current counts
+@app.route('/api/test/update/information', methods=['PUT'])
+def update_information():
+    conn = None
+    try:
+        data = request.json
+        nose_poke_val = int(data.get("nosePoke", 0))
+        lever_press_val = int(data.get("leverPress", 0))
+
+        conn = get_db_connection()
+        if conn is None:
+            raise Exception("Failed to connect to database")
+
+        cursor = conn.cursor()
+
+        # Update the most recent test record with current counts
+        sql_command = """
+            UPDATE TEST
+            SET nose_poke = ?, lever_press = ?
+            WHERE testID = (SELECT MAX(testID) FROM TEST)
+        """
+        cursor.execute(sql_command, (nose_poke_val, lever_press_val))
+        conn.commit()
+
+        return jsonify({
+            "message": "Test information updated successfully!",
+            "nose_poke": nose_poke_val,
+            "lever_press": lever_press_val
+        }), 200
+
+    except Exception as e:
+        print(f"Error updating test information: {e}")
+        return jsonify({"error": "Failed to update test information"}), 500
+    finally:
+        if conn:
+            conn.close()
+
 
 if __name__ == '__main__':
     #TODO: Added the connection to the database to happen as soon as the application begins.

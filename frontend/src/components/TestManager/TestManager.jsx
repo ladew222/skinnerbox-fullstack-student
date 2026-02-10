@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "./TestManager.css";
-import { runTest, stopTest, getCounts, setBlueLight, setOrangeLight, setRGBLight, getTestInformation } from "../../utilities/api";
+import { runTest, stopTest, getCounts, setBlueLight, setOrangeLight, setRGBLight, getTestInformation, updateTestInformation, triggerBackendSelfTest } from "../../utilities/api";
 import { FormControl, InputLabel, Input} from '@mui/material';
 import { validationFunctions } from "../../validation/test_manager";
 import ButtonGroup from '@mui/material/ButtonGroup';
@@ -27,19 +27,13 @@ const TestManager = () => {
   const [interactionType, setInteractionType] = useState("Lever");
   const [stimulusType, setStimulusType] = useState("Light");
   const [lightColor, setLightColor] = useState("Red");
-  // CHANGE: Added userPresets state to store custom preset configurations
-  // Purpose: Enables dynamic loading and display of user-created presets from PresetManager
-  // Data Structure: Array of preset objects with format:
-  //   [{ name, trialDuration, goalForTrial, cooldown, rewardType, interactionType, stimulusType, lightColor }, ...]
-  // Loaded from: localStorage key 'userPresets' on component mount
-  // Used in: Preset dropdown (renders as MenuItems) and handlePreset (applies selected preset)
   const [userPresets, setUserPresets] = useState([]);
-
   const [testRunning, setTestRunning] = useState(false);
   const [testPaused, setTestPaused] = useState(false);
   const [testFinished, setTestFinished] = useState(false);
   const [testResults, setTestResults] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const elapsedTimeRef = useRef(0);
   const [leverPressCount, setLeverPressCount] = useState(0);
   const [nosePokeCount, setNosePokeCount] = useState(0);
   const [lightOn, setLightOn] = useState(false);
@@ -58,21 +52,10 @@ const TestManager = () => {
   const [trialGoalError, setTrialGoalError] = useState('');
   const [coolDownError, setCoolDownError] = useState('');
 
-  
-  // CHANGE: Enhanced initialization useEffect to include preset loading functionality
-  // IMPLEMENTATION: Using localStorage instead of backend API (backend endpoints not implemented yet)
-  // This effect now performs TWO initialization tasks on component mount:
+
   useEffect(() => {
-    // Task 1: Capture initial form state for change detection (existing functionality)
     setOriginalSettings({ testName, trialDuration, goalForTrial, cooldown, rewardType, interactionType, stimulusType, lightColor });
-    
-    // Task 2: Load user-created presets from localStorage (NEW functionality)
-    // CHANGE DETAILS:
-    // - Reads from localStorage key 'userPresets' (saved by PresetManager component)
-    // - Parses JSON string to array of preset objects
-    // - Updates userPresets state which populates the preset dropdown
-    // - Includes try/catch for error handling (malformed JSON, storage issues)
-    // - Console log for debugging preset loading issues
+  
     try {
         // Get presets from localStorage (defaults to empty array if not found)
         const savedPresets = JSON.parse(localStorage.getItem('userPresets') || '[]');
@@ -136,8 +119,9 @@ const TestManager = () => {
       const lines = fileText.split("\n");
       const values = lines.map((line) => line.split(": ")[1]);
 
-      // TODO: Fix the handleFileUpload to reflect the changes to UI
+      // TODO: TASK, the handleFileUpload to reflect the changes to UI
       setTestName(values[0] || "");
+      setSubjectID(values[1] || "")
       setTrialDuration(values[1] ? values[1].replace(" seconds", "") : "");
       setGoalForTrial(values[2] || "");
       setCooldown(values[3] ? values[3].replace(" seconds", "") : "");
@@ -162,7 +146,7 @@ const TestManager = () => {
     document.querySelector(".upload-button").value = "";
   };
 
-  // TODO: Not Sending to backend
+  // TODO: Task, change logic to send it to the back-end
   useEffect(() => {
     let interval;
     if (testRunning) {
@@ -188,14 +172,26 @@ const TestManager = () => {
             }
           }
 
-          setElapsedTime(prev => prev + 1);
+
+          // TODO: TASK, understand logic that is dealing with the timer
+          // Track elapsed time using ref to avoid stale closure issues
+          elapsedTimeRef.current += 1;
+          setElapsedTime(elapsedTimeRef.current);
 
           // Check if the trial duration has been met
           const durationInSeconds = parseInt(trialDuration);
-          if (setElapsedTime >= durationInSeconds) {
-            stopTest();
-            setTestRunning(false);
-            return () => clearInterval(interval);
+          if (elapsedTimeRef.current >= durationInSeconds) {
+            handleStopTest(true);
+            return;
+          }
+
+          // Update backend with current counts every 5 seconds
+          if (elapsedTimeRef.current > 0 && elapsedTimeRef.current % 5 === 0) {
+            const currentSettings = {
+              nosePoke: data.nose_poke_count,
+              leverPress: data.lever_press_count
+            };
+            updateTestInformation(currentSettings).catch(e => console.error("Error sending 5s update:", e));
           }
 
         } catch (error) {
@@ -223,6 +219,7 @@ const TestManager = () => {
     setTestPaused(false);
     setTestRunning(true);
     setElapsedTime(0);
+    elapsedTimeRef.current = 0;
     setLastRewardTime(0);
     setRewardCount(0);
 
@@ -235,7 +232,9 @@ const TestManager = () => {
       rewardType, 
       interactionType, 
       stimulusType, 
-      lightColor 
+      lightColor,
+      leverPressCount,
+      nosePokeCount
     };
 
     // TODO: Changed runTest to reflect sending the updated information
