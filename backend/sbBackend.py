@@ -85,6 +85,7 @@ def on_lever_press():
         print(f"Database error on lever press: {e}")
     finally:
         conn.close()
+    stimulus_LED()
 
 def on_nose_poke():
     global nose_poke_count
@@ -110,6 +111,17 @@ def on_nose_poke():
         print(f"Database error on nose poke: {e}")
     finally:
         conn.close()
+    stimulus_LED()
+
+def stimulus_LED():
+    if TestManager.stimulusType == "Light": #"stimulusType" may be wrong.
+        blue_led.on()
+        time.sleep(2)
+        blue_led.off()
+    if TestManager.stimulusType == "Tone": #"stimulusType" may be wrong.
+        orange_led.on()
+        time.sleep(2)
+        orange_led.off()
 
 # Re-register callbacks to ensure they remain active
 lever_press_button.when_pressed = on_lever_press
