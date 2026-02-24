@@ -68,8 +68,9 @@ def get_db_connection():
 # called from both end_trial() and the stop_test() route without returning a Flask response.
 def _stop_hardware():
     blue_led.off()
+    water_pump.off()
     rgb_led.color = (0, 0, 0)
-    print("Hardware stopped (LEDs off)")
+    print("Hardware stopped (LEDs and pump off)")
 
 # Ending trial when goal is reached, and stopping hardware.
 # ADDED: Removed counter reset from here — counters are now reset when the NEXT test starts
@@ -78,6 +79,15 @@ def end_trial():
     # ADDED: global testStatus so the flag is actually updated (was a local variable bug before)
     global testStatus
     print(f"Ended Test")
+
+    # Turn off blue_led and water_pump after a delay
+    import threading
+    def turn_off_reward_devices():
+        blue_led.off()
+        water_pump.off()
+    reward_duration = 2  # seconds (change as needed)
+    threading.Timer(reward_duration, turn_off_reward_devices).start()
+
     testStatus = True
     # ADDED: Call _stop_hardware() instead of stop_test() route handler directly
     _stop_hardware()
@@ -93,6 +103,7 @@ def on_lever_press():
             # ADDED: Only check goal if the selected interaction type is "Lever"
             if current_interaction_type == "Lever" and current_test_goal is not None and lever_press_count >= current_test_goal:
                 blue_led.on()
+                water_pump.on()
                 end_trial()
         except Exception as e:
             print(f"Error checking trial goal on lever press: {e}")
@@ -120,6 +131,7 @@ def on_nose_poke():
             # ADDED: Only check goal if the selected interaction type is "Poke"
             if current_interaction_type == "Poke" and current_test_goal is not None and nose_poke_count >= current_test_goal:
                 blue_led.on()
+                water_pump.on()
                 end_trial()
         except Exception as e:
             print(f"Error checking trial goal on nose poke: {e}")

@@ -285,24 +285,24 @@ const TestManager = () => {
     // ADDED: Included Preset and Subject Identification fields in CSV to match handleSaveTest output
     const csvLines = [
       "Test Results",
-      `Timestamp:,${timestamp}`,
-      `Preset:,${presetValue}`,
-      `Test Name:,${testName}`,
-      `Subject Identification:,${subjectID}`,
-      `Trial Duration (minutes):,${trialDuration}`,
-      `Goal for Trial:,${goalForTrial}`,
-      `Cooldown (seconds):,${cooldown}`,
-      `Reward Type:,${rewardType}`,
-      `Interaction Type:,${interactionType}`,
-      `Stimulus Type:,${stimulusType}`,
-      `Light Color:,${lightColor}`,
+      `Timestamp:${timestamp}`,
+      `Preset:${presetValue}`,
+      `Test Name:${testName}`,
+      `Subject Identification:${subjectID}`,
+      `Trial Duration (minutes):${trialDuration}`,
+      `Goal for Trial:${goalForTrial}`,
+      `Cooldown (seconds):${cooldown}`,
+      `Reward Type:${rewardType}`,
+      `Interaction Type:${interactionType}`,
+      `Stimulus Type:${stimulusType}`,
+      `Light Color:${lightColor}`,
       "",
       "Final Trial Data",
-      `Elapsed Time (s):,${elapsedTime}`,
-      `Lever Press Count:,${testResults.lever_press_count}`,
-      `Nose Poke Count:,${testResults.nose_poke_count}`,
-      `Light Status:,${testResults.light_on ? "ON" : "OFF"}`,
-      `Rewards Given:,${rewardCount}`
+      `Elapsed Time (s):${elapsedTime}`,
+      `Lever Press Count:${testResults.lever_press_count}`,
+      `Nose Poke Count:${testResults.nose_poke_count}`,
+      `Light Status:${testResults.light_on ? "ON" : "OFF"}`,
+      `Rewards Given:${rewardCount}`
     ];
     const csvData = csvLines.join("\n");
     const blob = new Blob([csvData], { type: "text/csv" });
