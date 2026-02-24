@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-// const API_URL = 'http://192.168.1.102:5001'; // Replace if backend's URL changes
+ const API_URL = 'http://192.168.1.102:5001'; // Replace if backend's URL changes
 
 // IO Testing
 export const getCounts = async () => {
