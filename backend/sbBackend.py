@@ -20,14 +20,14 @@ CORS(app)
 log_directory = os.path.join(os.path.dirname(__file__), 'logs')
 temp_directory = os.path.join(os.path.dirname(__file__), 'temp')
 
+
 # Initialize buttons (with pull-down resistors)
-lever_press_button = Button(4, pull_up=False)
+lever = Button(23)
 nose_poke_button = Button(18, pull_up=False)
 
 # Initialize LEDs
 blue_led = LED(5) #Blue light in the box
 water_pump = OutputDevice(17)
-lever = Button(23)
 rgb_led = RGBLED(red=6, green=5, blue=26)
 
 # Global counters for interactions
@@ -138,7 +138,7 @@ def on_nose_poke():
         conn.close()
 
 # Re-register callbacks to ensure they remain active
-lever_press_button.when_pressed = on_lever_press
+lever.when_pressed = on_lever_press
 nose_poke_button.when_pressed = on_nose_poke
 
 
