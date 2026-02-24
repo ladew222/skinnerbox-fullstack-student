@@ -14,6 +14,17 @@ else:
 
         def when_pressed(self, fn):
             print("[GPIO MOCK] Button press handler set")
+            
+    class OutputDevice:
+        def __init__(self, *args, **kwargs ):
+            print("[GPIO MOCK] Pump initialized")
+
+        def on(self):
+            print("[GPIO MOCK] Pump ON")
+
+        def off(self):
+            print("[GPIO MOCK] Pump OFF")
+        
 
     class LED:
         def __init__(self, *args, **kwargs):

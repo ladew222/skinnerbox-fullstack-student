@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from gpio_adapter import Button, LED, RGBLED
+from gpio_adapter import Button, LED, RGBLED, OutputDevice
 import time
 import threading
 import os
@@ -25,9 +25,10 @@ lever_press_button = Button(4, pull_up=False)
 nose_poke_button = Button(18, pull_up=False)
 
 # Initialize LEDs
-blue_led = LED(5)
-orange_led = LED(24)
-rgb_led = RGBLED(red=12, green=16, blue=20)
+blue_led = LED(5) #Blue light in the box
+water_pump = OutputDevice(17)
+lever = Button(23)
+rgb_led = RGBLED(red=6, green=5, blue=26)
 
 # Global counters for interactions
 lever_press_count = 0
@@ -53,21 +54,20 @@ def get_db_connection():
     
 
 # Ending trial, resetting nose and lever count, and booting back to the menu.
-def end_trial():
-    global lever_press_count
-    print(f"Ended Test")
-    global nose_poke_count
-    lever_press_count = 0
-    nose_poke_count = 0
-    # TODO: Set up boolean to determine when test is done 
-    testStatus = True
-    stop_test()
+# def end_trial():
+#     global lever_press_count
+#     print(f"Ended Test")
+#     global nose_poke_count
+#     lever_press_count = 0
+#     nose_poke_count = 0
+#     # TODO: Set up boolean to determine when test is done 
+#     testStatus = True
+#     stop_test()
 
 # ADDED: Extracted hardware stop logic into its own function so it can be
 # called from both end_trial() and the stop_test() route without returning a Flask response.
 def _stop_hardware():
     blue_led.off()
-    orange_led.off()
     rgb_led.color = (0, 0, 0)
     print("Hardware stopped (LEDs off)")
 
@@ -92,7 +92,8 @@ def on_lever_press():
         try:
             # ADDED: Only check goal if the selected interaction type is "Lever"
             if current_interaction_type == "Lever" and current_test_goal is not None and lever_press_count >= current_test_goal:
-                end_trial()                
+                blue_led.on()
+                end_trial()
         except Exception as e:
             print(f"Error checking trial goal on lever press: {e}")
 
@@ -118,6 +119,7 @@ def on_nose_poke():
         try:
             # ADDED: Only check goal if the selected interaction type is "Poke"
             if current_interaction_type == "Poke" and current_test_goal is not None and nose_poke_count >= current_test_goal:
+                blue_led.on()
                 end_trial()
         except Exception as e:
             print(f"Error checking trial goal on nose poke: {e}")
@@ -174,15 +176,6 @@ def control_blue():
     return jsonify({"status": "success", "blue": action}), 200
 
 # Endpoint to control the Orange LED
-@app.route('/api/light/orange', methods=['POST'])
-def control_orange():
-    data = request.get_json()
-    action = data.get("action", "off")
-    if action == "on":
-        orange_led.on()
-    else:
-        orange_led.off()
-    return jsonify({"status": "success", "orange": action}), 200
 
 # Endpoint to control the RGB LED
 @app.route('/api/light/rgb', methods=['POST'])
@@ -206,10 +199,7 @@ def run_test():
         print("Starting test with settings:", data)
         
         # Perform any test logic here
-        # Example: Activate LED as a placeholder for actual test execution
-        blue_led.on()
-        time.sleep(2)  # Simulate test running
-        blue_led.off()
+        # Example: Test logic placeholder (blue LED now only comes on when goal is reached)
 
         return jsonify({
             "message": "Test started successfully!"
