@@ -4,7 +4,7 @@ GPIO_MODE = os.getenv("GPIO_MODE", "mock")
 
 if GPIO_MODE == "real":
     # Real Raspberry Pi hardware
-    from gpiozero import Button, LED, RGBLED
+    from gpiozero import Button, LED, RGBLED, OutputDevice
 
 else:
     # Mock classes for Docker / laptops
