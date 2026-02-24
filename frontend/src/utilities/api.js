@@ -1,6 +1,6 @@
 import axios from 'axios';
 
- const API_URL = 'http://192.168.1.102:5001'; // Replace if backend's URL changes
+// const API_URL = 'http://192.168.1.102:5001'; // Replace if backend's URL changes
 
 // IO Testing
 export const getCounts = async () => {
@@ -79,12 +79,23 @@ export const getTestInformation = async (testSettings) => {
 
 // TODO: Task, look into function to see if it will work.
 // Update an existing test record with current nose poke and lever press counts
-export const updateTestInformation = async (testSettings) => {
+// export const updateTestInformation = async (testSettings) => {
+//   try {
+//     const response = await axios.put(`/api/test/update/information`, testSettings);
+//     return response.data;
+//   } catch (error) {
+//     console.error("Error Updating Information:", error);
+//     throw error;
+//   }
+// };
+
+// ADDED: Fetch test status from backend to check if the test was stopped due to goal being reached
+export const getTestStatus = async () => {
   try {
-    const response = await axios.put(`/api/test/update/information`, testSettings);
+    const response = await axios.get(`/api/test/status`);
     return response.data;
   } catch (error) {
-    console.error("Error Updating Information:", error);
+    console.error("Error getting test status:", error);
     throw error;
   }
-}
+};

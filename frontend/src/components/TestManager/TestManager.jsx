@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./TestManager.css";
-import { runTest, stopTest, getCounts, setBlueLight, setOrangeLight, setRGBLight, getTestInformation, updateTestInformation, triggerBackendSelfTest } from "../../utilities/api";
+import { runTest, stopTest, getCounts, setBlueLight, setOrangeLight, setRGBLight, getTestInformation, getTestStatus } from "../../utilities/api";
 import { FormControl, InputLabel, Input} from '@mui/material';
 import { validationFunctions } from "../../validation/test_manager";
 import ButtonGroup from '@mui/material/ButtonGroup';
@@ -51,6 +51,7 @@ const TestManager = () => {
   const [trialDurationError, setTrialDurationError] = useState('');
   const [trialGoalError, setTrialGoalError] = useState('');
   const [coolDownError, setCoolDownError] = useState('');
+  const [subjectIDError, setSubjectIDError] = useState('');
 
 
   useEffect(() => {
@@ -82,7 +83,7 @@ const TestManager = () => {
 
     // const testSettings = `Test Name: ${testName}\nTrial Duration: ${trialDuration} seconds\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
     
-    const testSettings = `Preset: ${presetValue}\nTest Name: ${testName}\nSubject Identification: ${subjectID}\nTrial Duration: ${trialDuration} seconds\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
+    const testSettings = `Preset: ${presetValue}\nTest Name: ${testName}\nSubject Identification: ${subjectID}\nTrial Duration: ${trialDuration} minutes\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
 
     const blob = new Blob([testSettings], { type: "text/plain" });
     const a = document.createElement("a");
@@ -122,7 +123,7 @@ const TestManager = () => {
       // TODO: TASK, the handleFileUpload to reflect the changes to UI
       setTestName(values[0] || "");
       setSubjectID(values[1] || "")
-      setTrialDuration(values[1] ? values[1].replace(" seconds", "") : "");
+      setTrialDuration(values[1] ? values[1].replace(" minutes", "") : "");
       setGoalForTrial(values[2] || "");
       setCooldown(values[3] ? values[3].replace(" seconds", "") : "");
       setRewardType(values[4] || "Water");
@@ -157,6 +158,13 @@ const TestManager = () => {
           setLeverPressCount(data.lever_press_count);
           setNosePokeCount(data.nose_poke_count);
 
+          // ADDED: Poll the backend to check if the test was stopped because the goal was reached
+          const status = await getTestStatus();
+          if (status.testFinished) {
+            handleStopTest(true); // Auto-stop the frontend UI
+            return;
+          }
+
           const count = interactionType === "Lever" ? data.lever_press_count : data.nose_poke_count;
           const goal = parseInt(goalForTrial);
 
@@ -178,8 +186,8 @@ const TestManager = () => {
           elapsedTimeRef.current += 1;
           setElapsedTime(elapsedTimeRef.current);
 
-          // Check if the trial duration has been met
-          const durationInSeconds = parseInt(trialDuration);
+          // Check if the trial duration has been met (trialDuration is in minutes)
+          const durationInSeconds = parseInt(trialDuration) * 60;
           if (elapsedTimeRef.current >= durationInSeconds) {
             handleStopTest(true);
             return;
@@ -191,7 +199,7 @@ const TestManager = () => {
               nosePoke: data.nose_poke_count,
               leverPress: data.lever_press_count
             };
-            updateTestInformation(currentSettings).catch(e => console.error("Error sending 5s update:", e));
+            // updateTestInformation(currentSettings).catch(e => console.error("Error sending 5s update:", e));
           }
 
         } catch (error) {
@@ -223,6 +231,8 @@ const TestManager = () => {
     setLastRewardTime(0);
     setRewardCount(0);
 
+    // FIX: Changed leverPressCount -> leverPress and nosePokeCount -> nosePoke
+    // to match the key names the backend expects in data.get("leverPress") and data.get("nosePoke")
     const testSettings = { 
       testName, 
       subjectID,
@@ -233,8 +243,8 @@ const TestManager = () => {
       interactionType, 
       stimulusType, 
       lightColor,
-      leverPressCount,
-      nosePokeCount
+      leverPress: leverPressCount,
+      nosePoke: nosePokeCount
     };
 
     // TODO: Changed runTest to reflect sending the updated information
@@ -272,11 +282,14 @@ const TestManager = () => {
   const handleDownloadResults = () => {
     if (!testResults) return;
     const timestamp = new Date().toLocaleString();
+    // ADDED: Included Preset and Subject Identification fields in CSV to match handleSaveTest output
     const csvLines = [
       "Test Results",
       `Timestamp:,${timestamp}`,
+      `Preset:,${presetValue}`,
       `Test Name:,${testName}`,
-      `Trial Duration (seconds):,${trialDuration}`,
+      `Subject Identification:,${subjectID}`,
+      `Trial Duration (minutes):,${trialDuration}`,
       `Goal for Trial:,${goalForTrial}`,
       `Cooldown (seconds):,${cooldown}`,
       `Reward Type:,${rewardType}`,
@@ -408,18 +421,22 @@ const handlePreset = (event) => {
 
 
           <div className="input-group">
-            <FormControl  fullWidth>
+            <FormControl  fullWidth error={Boolean(subjectIDError)}>
               <InputLabel htmlFor="subjectIdentification">Subject Identification:</InputLabel>
               <Input
                 id="txtSubjectID"
-                placeholder="Enter Subject ID"
+                placeholder="Enter Subject ID (numeric)"
                 required
                 value={subjectID}
-                onChange={(e) => setSubjectID(e.target.value)}
+                onChange={(e) => {
+                  const { value, error } = validationFunctions.testSubjectID(e.target.value);
+                  setSubjectID(value);
+                  setSubjectIDError(error);
+                }}
               />
-              {/* <FormHelperText>
-                {testNameError}
-              </FormHelperText> */}
+              <FormHelperText>
+                {subjectIDError}
+              </FormHelperText>
             </FormControl>
           </div>
         

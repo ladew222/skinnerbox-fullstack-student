@@ -33,7 +33,9 @@ rgb_led = RGBLED(red=12, green=16, blue=20)
 lever_press_count = 0
 nose_poke_count = 0
 current_test_goal = None
-testStatus = False 
+testStatus = False
+# ADDED: Track which interaction type ("Lever" or "Poke") should be checked against the goal
+current_interaction_type = None
 counter_lock = threading.Lock()
 # Helper function to get a new SQLite connection
 #TODO: Added a a try catch to the get_db_connection
@@ -61,6 +63,25 @@ def end_trial():
     testStatus = True
     stop_test()
 
+# ADDED: Extracted hardware stop logic into its own function so it can be
+# called from both end_trial() and the stop_test() route without returning a Flask response.
+def _stop_hardware():
+    blue_led.off()
+    orange_led.off()
+    rgb_led.color = (0, 0, 0)
+    print("Hardware stopped (LEDs off)")
+
+# Ending trial when goal is reached, and stopping hardware.
+# ADDED: Removed counter reset from here — counters are now reset when the NEXT test starts
+# in get_information(). This preserves final counts so the frontend can read them after stopping.
+def end_trial():
+    # ADDED: global testStatus so the flag is actually updated (was a local variable bug before)
+    global testStatus
+    print(f"Ended Test")
+    testStatus = True
+    # ADDED: Call _stop_hardware() instead of stop_test() route handler directly
+    _stop_hardware()
+
 # Callback functions to count button presses
 # TODO: Unit test to see if end_trial function is called when goal is reach.
 def on_lever_press():
@@ -69,7 +90,8 @@ def on_lever_press():
         lever_press_count += 1
         print("Lever pressed. Count:", lever_press_count)
         try:
-            if current_test_goal is not None and lever_press_count >= current_test_goal:
+            # ADDED: Only check goal if the selected interaction type is "Lever"
+            if current_interaction_type == "Lever" and current_test_goal is not None and lever_press_count >= current_test_goal:
                 end_trial()                
         except Exception as e:
             print(f"Error checking trial goal on lever press: {e}")
@@ -94,7 +116,8 @@ def on_nose_poke():
         print("Nose poke. Count:", nose_poke_count)
         
         try:
-            if current_test_goal is not None and nose_poke_count >= current_test_goal:
+            # ADDED: Only check goal if the selected interaction type is "Poke"
+            if current_interaction_type == "Poke" and current_test_goal is not None and nose_poke_count >= current_test_goal:
                 end_trial()
         except Exception as e:
             print(f"Error checking trial goal on nose poke: {e}")
@@ -212,13 +235,19 @@ def stop_test():
     try:
         print("Stopping test...")
 
-        # Logic to stop test (if applicable)
-        blue_led.off()  # Example: turn off LED to indicate stop
+        # ADDED: Use _stop_hardware() to centralize hardware shutdown logic
+        _stop_hardware()
 
         return jsonify({"message": "Test stopped successfully!"}), 200
     except Exception as e:
         print("Error stopping test:", str(e))
         return jsonify({"error": "Failed to stop test"}), 500
+
+
+# ADDED: Endpoint so the frontend can poll whether the backend has ended the test (e.g., goal reached)
+@app.route('/api/test/status', methods=['GET'])
+def get_test_status():
+    return jsonify({"testFinished": testStatus}), 200
     
 
 # TODO: Added Endpoint to send the test manager information to the database.
@@ -264,8 +293,16 @@ def get_information():
         nose_poke_val_converted = int(nose_poke_val)
         
         
+        # ADDED: Reset testStatus to False when a new test starts so stale "finished" state is cleared
+        global current_test_goal, testStatus, current_interaction_type, lever_press_count, nose_poke_count
+        testStatus = False
+        # ADDED: Reset counters here (at the start of a new test) instead of in end_trial(),
+        # so the previous test's final counts are still available for the frontend to read.
+        lever_press_count = 0
+        nose_poke_count = 0
+        # ADDED: Store the interaction type globally so callbacks know which input to check against the goal
+        current_interaction_type = interaction_type
          # Update global goal
-        global current_test_goal
         try:
              current_test_goal = int(goal_converted) if goal_converted is not None else None
              print(current_test_goal)
@@ -273,7 +310,7 @@ def get_information():
              current_test_goal = None
 
         sql_command = """
-            INSERT INTO TEST (
+            INSERT INTO Active_Test (
                 testID, subjectID, Name, Goal, Reward, 
                 Light, Stimulus, Interaction, Cooldown, Duration,nose_poke, lever_press
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -338,7 +375,7 @@ def update_information():
 
         # Update the most recent test record with current counts
         sql_command = """
-            UPDATE TEST
+            UPDATE Active_Test
             SET nose_poke = ?, lever_press = ?
             WHERE testID = (SELECT MAX(testID) FROM TEST)
         """
@@ -361,7 +398,7 @@ def update_information():
 
 if __name__ == '__main__':
     #TODO: Added the connection to the database to happen as soon as the application begins.
-    conn = get_db_connection();
+    conn = get_db_connection()
 
     
     # Run with sudo (if needed) to access GPIO and on a chosen port (e.g., 5001)
