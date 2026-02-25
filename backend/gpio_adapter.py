@@ -17,13 +17,13 @@ else:
             
     class OutputDevice:
         def __init__(self, *args, **kwargs ):
-            print("[GPIO MOCK] Pump initialized")
+            print("[GPIO MOCK] Device initialized")
 
         def on(self):
-            print("[GPIO MOCK] Pump ON")
+            print("[GPIO MOCK] Device ON")
 
         def off(self):
-            print("[GPIO MOCK] Pump OFF")
+            print("[GPIO MOCK] Device OFF")
         
 
     class LED:

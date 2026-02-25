@@ -336,14 +336,17 @@ def get_information():
         
         # Start light sequence at test start
         def start_light_sequence():
-            if stimulus_type == "Buzzer":
+            if stimulus_type == "Tone":
                 buzzer.on()
-                time.sleep(2)  # 2 seconds
+                time.sleep(2)  # 2 seconds / replace '2' with an input from the frontend
                 buzzer.off()
+            elif stimulus_type == "Light":
+                LED.on()
+                time.sleep(2)
+                LED.off()
             else:
-                blue_led.on()
-                time.sleep(2)  # 2 seconds
-                blue_led.off()
+                print("Error with stimulus type.")
+                exit
         
         threading.Thread(target=start_light_sequence).start()
         
