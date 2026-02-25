@@ -333,6 +333,14 @@ def get_information():
         ))
         conn.commit()
         
+        # Start light sequence at test start
+        def start_light_sequence():
+            blue_led.on()
+            time.sleep(2)  # 2 seconds
+            blue_led.off()
+        
+        threading.Thread(target=start_light_sequence).start()
+        
         return jsonify({
             "message": "Start Test Successfully!",
             "received_configuration": {

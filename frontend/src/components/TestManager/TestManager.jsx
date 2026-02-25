@@ -350,6 +350,7 @@ const handlePreset = (event) => {
         else if (value === "None") {
             setTestName("")             // CHANGE: Now clears test name
             setTrialDuration("")
+            setSubjectID("")
             setGoalForTrial("")
             setCooldown("")
             setRewardType("")            // CHANGE: Now clears to empty instead of default "Water"
