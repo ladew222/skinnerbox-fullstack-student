@@ -99,12 +99,16 @@ def on_lever_press():
     global lever_press_count
     with counter_lock:
         lever_press_count += 1
+        global TimeB
+        TimeB = time.process_time()
         print("Lever pressed. Count:", lever_press_count)
         try:
             # ADDED: Only check goal if the selected interaction type is "Lever"
             if current_interaction_type == "Lever" and current_test_goal is not None and lever_press_count >= current_test_goal:
                 blue_led.on()
                 water_pump.on()
+                global TimeD
+                TimeD = time.perf_counter() #Export TimeD (Time of test if completed)
                 end_trial()
         except Exception as e:
             print(f"Error checking trial goal on lever press: {e}")
@@ -124,6 +128,8 @@ def on_lever_press():
 # TODO: Unit test to see if end_trial function is called when goal is reach.
 def on_nose_poke():
     global nose_poke_count
+    global TimeB
+    TimeB = time.process_time()
     with counter_lock:
         nose_poke_count += 1
         print("Nose poke. Count:", nose_poke_count)
@@ -133,6 +139,8 @@ def on_nose_poke():
             if current_interaction_type == "Poke" and current_test_goal is not None and nose_poke_count >= current_test_goal:
                 blue_led.on()
                 water_pump.on()
+                global TimeD
+                TimeD = time.perf_counter() #Export TimeD (Time of test if completed)
                 end_trial()
         except Exception as e:
             print(f"Error checking trial goal on nose poke: {e}")
@@ -336,15 +344,51 @@ def get_information():
         
         # Start light sequence at test start
         def start_light_sequence():
-            if stimulus_type == "Buzzer":
+            if stimulus_type == "Tone":
                 buzzer.on()
-                time.sleep(2)  # 2 seconds
+                time.sleep(2)  # 2 seconds / replace '2' with an input from the frontend
                 buzzer.off()
+            elif stimulus_type == "Light":
+                LED.on()
+                time.sleep(2)
+                LED.off()
             else:
-                blue_led.on()
-                time.sleep(2)  # 2 seconds
-                blue_led.off()
+                print("Error with stimulus type.")
+                exit
         
+        collectedTimes = []   
+
+        def running_test():
+            TimeC = time.perf_counter
+            for i in range(1, goal_converted):
+                if TimeC == int(duration):
+                    end_trial()
+                    i = goal_converted
+                    break
+                else:
+                    if stimulus_type == "Tone":
+                        buzzer.on()
+                        TimeA = time.process_time()
+                        time.sleep(2)  # 2 seconds / replace '2' with an input from the frontend
+                        buzzer.off()
+                    elif stimulus_type == "Light":
+                        LED.on()
+                        TimeA = time.process_time()
+                        time.sleep(2)
+                        LED.off()
+                    if interaction_type == "Lever":
+                        on_lever_press()
+                    elif interaction_type == "Poke":
+                        on_nose_poke()
+                    TimeBetween = TimeB - TimeA
+                    collectedTimes.append(TimeBetween) #Export collectedTimes (collection of each trial's latency between stimulus and response)
+                    if i >= goal_converted:
+                        global TimeD
+                        TimeD = time.perf_counter() #Export TimeD (Time of test if completed)
+                        end_trial()
+                    i = i + 1
+
+
         threading.Thread(target=start_light_sequence).start()
         
         return jsonify({
