@@ -23,6 +23,7 @@ temp_directory = os.path.join(os.path.dirname(__file__), 'temp')
 
 # Initialize buttons (with pull-down resistors)
 lever = Button(23, pull_up = False)
+buzzer = OutputDevice(13)
 nose_poke_button = Button(18, pull_up=False)
 
 # Initialize LEDs
@@ -335,9 +336,14 @@ def get_information():
         
         # Start light sequence at test start
         def start_light_sequence():
-            blue_led.on()
-            time.sleep(2)  # 2 seconds
-            blue_led.off()
+            if stimulus_type == "Buzzer":
+                buzzer.on()
+                time.sleep(2)  # 2 seconds
+                buzzer.off()
+            else:
+                blue_led.on()
+                time.sleep(2)  # 2 seconds
+                blue_led.off()
         
         threading.Thread(target=start_light_sequence).start()
         
