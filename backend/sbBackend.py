@@ -22,7 +22,7 @@ temp_directory = os.path.join(os.path.dirname(__file__), 'temp')
 
 
 # Initialize buttons (with pull-down resistors)
-lever = Button(23)
+lever = Button(23, pull_up = False)
 nose_poke_button = Button(18, pull_up=False)
 
 # Initialize LEDs
