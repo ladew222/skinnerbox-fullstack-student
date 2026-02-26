@@ -93,10 +93,28 @@ def end_trial():
     # ADDED: Call stop_hardware() instead of pause_test() route handler directly
     stop_hardware()
 
+def reset_counts():
+    testStatus = False
+    testStopped = False
+    testPaused = False
+    lever_press_count = 0
+    lever_press_total = 0
+    nose_poke_count = 0
+    nose_poke_total = 0
+    TimeA = 0
+    TimeB = 0
+    TimeC = 0
+    TimeD = 0
+    i = 0
+    interaction_number = 0
+
 def ending_test(): #Getting functions primed to port all logic to backend
     if testStopped == True:
         testStatus = False
         #Return to start page or whatever.
+
+        reset_counts()
+
 
 
 def stop_test(): #Getting functions primed to port all logic to backend
@@ -145,11 +163,13 @@ def pause_test():
 def on_lever_press():
     global lever_press_count
     global lever_press_total
+    global interaction_number
     with counter_lock:
         global TimeB
         TimeB = time.process_time()
         if ResponseFlag == False:
             lever_press_count += 1
+            interaction_number += 1
             print("Lever pressed. Count:", lever_press_count)
         lever_press_total += 1
 
@@ -168,13 +188,15 @@ def on_lever_press():
 def on_nose_poke():
     global nose_poke_count
     global nose_poke_total
+    global interaction_number
     with counter_lock:
         global TimeB
         TimeB = time.process_time()
         if ResponseFlag == False:
             nose_poke_count += 1
+            interaction_number += 1
             print("Nose poke. Count:", nose_poke_count)
-        nose_poke_total += 1
+        nose_poke_total += 1 
 
         
     # Use a new connection inside the callback
@@ -400,14 +422,14 @@ def get_information():
 
         def running_test_one_stimulus():
             TimeC = time.perf_counter
-            for i in range(1, goal_converted): #Keynote i is the number of the current trial, have to do something with this in results page.
+            for i in range(1, test_goal): #Keynote i is the number of the current trial. Must import from front-end and export to back-end.
                 time.sleep(2) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
                 global ResponseFlag
                 if TimeC >= int(duration):
                     ending_test()
                     global goalUndone
                     goalUndone = i #Keynote Export goalUndone (number of trials completed if goal was not reached before duration ends.)
-                    i = goal_converted
+                    i = test_goal
                     break
                 else:
                     if stimulus_type == "Tone":
@@ -420,7 +442,7 @@ def get_information():
                         TimeA = time.process_time()
                         time.sleep(2)
                         blue_led.off()
-                    ResponseFlag = False
+                        ResponseFlag = False
                     if interaction_type == "Lever" and ResponseFlag == False:
                         on_lever_press()
                     elif interaction_type == "Poke" and ResponseFlag == False:
@@ -428,14 +450,16 @@ def get_information():
                     ResponseFlag = True
                     TimeBetween = TimeB - TimeA
                     collectedTimes.append(TimeBetween) #Keynote Export collectedTimes (collection of each trial's latency between stimulus and response.)
-                    if reward_type == "Water":
+                    if reward_type == "Water" and goal_converted >= interaction_number:
                         water_pump.on()
                         time.sleep(.15) #Keynote .15 seconds / replace '.15' with an imported input from the frontend (Seconds reward is on.)
-                        water_pump.off() 
+                        water_pump.off()
+                        interaction_number = 0
                     #'''elif reward_type == "Food":   If food availability is added.
                         #food.on()
                         #time.sleep(.15)
-                        #food.off()'''
+                        #food.off()
+                        #interaction_number = 0'''
                     if i >= goal_converted:
                         global TimeD
                         TimeD = time.perf_counter() #Keynote Export TimeD (Time of test if completed.)
