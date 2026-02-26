@@ -27,7 +27,7 @@ buzzer = OutputDevice(13)
 nose_poke_button = Button(18, pull_up=False)
 
 # Initialize LEDs
-blue_led = LED(5) #Blue light in the box
+blue_led = LED(25) #Blue light in the box
 water_pump = OutputDevice(17)
 rgb_led = RGBLED(red=6, green=5, blue=26)
 
@@ -103,7 +103,6 @@ def on_lever_press():
         try:
             # ADDED: Only check goal if the selected interaction type is "Lever"
             if current_interaction_type == "Lever" and current_test_goal is not None and lever_press_count >= current_test_goal:
-                blue_led.on()
                 water_pump.on()
                 end_trial()
         except Exception as e:
@@ -341,9 +340,9 @@ def get_information():
                 time.sleep(2)  # 2 seconds / replace '2' with an input from the frontend
                 buzzer.off()
             elif stimulus_type == "Light":
-                LED.on()
+                blue_led.on()
                 time.sleep(2)
-                LED.off()
+                blue_led.off()
             else:
                 print("Error with stimulus type.")
                 exit

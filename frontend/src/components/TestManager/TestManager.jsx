@@ -336,9 +336,9 @@ const handlePreset = (event) => {
         // CHANGE: Simplified Preset 1 (removed Preset 2-4 for now)
         // NOTE: These values look like test data - you may want to restore proper preset values
         if (value === "Preset 1") {
-            setTestName(5)              // CHANGE: Setting to number instead of string
+            setTestName("Preset 1 Test")        // CHANGE: Set to descriptive string
             setTrialDuration(1)         // CHANGE: 1 minute duration
-            setGoalForTrial("Test")     // CHANGE: Non-numeric goal value
+            setGoalForTrial(5)          // CHANGE: Fixed to numeric value (was "Test")
             setCooldown(2)              // CHANGE: 2 second cooldown
             setRewardType("Food")
             setInteractionType("Lever")
