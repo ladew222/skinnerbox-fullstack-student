@@ -22,7 +22,7 @@ temp_directory = os.path.join(os.path.dirname(__file__), 'temp')
 
 
 # Initialize buttons (with pull-down resistors)
-lever = Button(23, pull_up = False)
+lever = Button(23, pull_up = False, bounce_time=0.15)
 buzzer = OutputDevice(13)
 nose_poke_button = Button(18, pull_up=False)
 
@@ -101,8 +101,11 @@ def on_lever_press():
         lever_press_count += 1
         print("Lever pressed. Count:", lever_press_count)
         try:
-            # ADDED: Only check goal if the selected interaction type is "Lever"
-            if current_interaction_type == "Lever" and current_test_goal is not None and lever_press_count >= current_test_goal:
+            # ADDED: Only check goal if the selected interaction type is "Lever".
+            # only activate the pump when the count exactly matches the goal
+            if (current_interaction_type == "Lever" and
+                    current_test_goal is not None and
+                    lever_press_count == current_test_goal):
                 water_pump.on()
                 end_trial()
         except Exception as e:
@@ -302,6 +305,9 @@ def get_information():
         # so the previous test's final counts are still available for the frontend to read.
         lever_press_count = 0
         nose_poke_count = 0
+        # make sure reward devices are off at the beginning of a run
+        water_pump.off()
+        blue_led.off()
         # ADDED: Store the interaction type globally so callbacks know which input to check against the goal
         current_interaction_type = interaction_type
          # Update global goal
