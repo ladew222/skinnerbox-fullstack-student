@@ -81,17 +81,23 @@ def end_trial():
     global testStatus
     print(f"Ended Test")
 
-    # Turn off blue_led and water_pump after a delay
+    # leave the reward devices on briefly then turn them off; do NOT immediately kill them
     import threading
     def turn_off_reward_devices():
+        # only turn off the pump/leds after the animal has had time to receive the reward
         blue_led.off()
         water_pump.off()
+        # we optionally turn off the rgb as well if you want it reset here
+        rgb_led.color = (0, 0, 0)
+        print("Reward devices turned off after delay")
     reward_duration = 2  # seconds (change as needed)
     threading.Timer(reward_duration, turn_off_reward_devices).start()
 
     testStatus = True
-    # ADDED: Call _stop_hardware() instead of stop_test() route handler directly
-    _stop_hardware()
+    # NOTE: _stop_hardware() would immediately shut everything off, which
+    # defeats the purpose of the delay above.  Remove the call so the pump
+    # actually stays on for `reward_duration` seconds.
+    # _stop_hardware()
 
 # Callback functions to count button presses
 # TODO: Unit test to see if end_trial function is called when goal is reach.
