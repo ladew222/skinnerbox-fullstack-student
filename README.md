@@ -369,3 +369,181 @@ If something breaks, ask:
 Frontend? Backend? GPIO? Docker?
 
 That question solves most problems.
+
+
+
+
+# SSH into the Raspberry Pi
+
+SSH allows you to open a terminal on the Raspberry Pi from another computer.
+
+## 1. Find the Pi IP address (run on the Pi)
+
+```bash
+hostname -I
+```
+
+Example output:
+
+```
+192.168.1.62
+```
+
+Use this address in the next step.
+
+---
+
+## 2. Connect from a laptop or desktop
+
+Open a terminal and run:
+
+```bash
+ssh ladew222@192.168.1.62
+```
+
+Replace:
+
+* `ladew222` with the Pi username
+* `192.168.1.62` with the Pi IP address
+
+---
+
+## 3. First connection
+
+If prompted:
+
+```
+Are you sure you want to continue connecting (yes/no)?
+```
+
+Type:
+
+```
+yes
+```
+
+Enter the Pi password when asked.
+
+---
+
+## 4. Verify connection
+
+After login, the prompt should look like:
+
+```
+ladew222@skbox:~ $
+```
+
+You are now running commands on the Pi.
+
+---
+
+## 5. Navigate to the project
+
+```bash
+cd skinnerbox-fullstack-student
+```
+
+---
+
+## 6. Disconnect
+
+```bash
+exit
+```
+
+---
+
+# Starting and Stopping Services
+
+The backend and frontend run as system services.
+
+## Start services
+
+```bash
+sudo systemctl start skinnerbox-backend
+sudo systemctl start skinnerbox-frontend
+```
+
+---
+
+## Stop services
+
+```bash
+sudo systemctl stop skinnerbox-backend
+sudo systemctl stop skinnerbox-frontend
+```
+
+---
+
+## Restart services
+
+Use this after updating code:
+
+```bash
+sudo systemctl restart skinnerbox-backend
+sudo systemctl restart skinnerbox-frontend
+```
+
+---
+
+## Check service status
+
+```bash
+sudo systemctl status skinnerbox-backend
+sudo systemctl status skinnerbox-frontend
+```
+
+---
+
+# Updating Code (Git Workflow)
+
+Before pulling new code, save local changes.
+
+## 1. Save local work (stash)
+
+```bash
+git stash
+```
+
+---
+
+## 2. Pull latest code
+
+```bash
+git pull
+```
+
+---
+
+## 3. Restore your changes
+
+```bash
+git stash pop
+```
+
+---
+
+## 4. Restart services after update
+
+```bash
+sudo systemctl restart skinnerbox-backend
+sudo systemctl restart skinnerbox-frontend
+```
+
+---
+
+# Typical Update Workflow
+
+```bash
+ssh ladew222@PI_IP_ADDRESS
+cd skinnerbox-fullstack-student
+
+git stash
+git pull
+git stash pop
+
+sudo systemctl restart skinnerbox-backend
+sudo systemctl restart skinnerbox-frontend
+```
+
