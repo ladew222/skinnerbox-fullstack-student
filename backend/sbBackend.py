@@ -63,11 +63,11 @@ def get_db_connection():
 #     nose_poke_count = 0
 #     # TODO: Set up boolean to determine when test is done 
 #     testStatus = True
-#     stop_test()
+#     pause_test()
 
 # ADDED: Extracted hardware stop logic into its own function so it can be
-# called from both end_trial() and the stop_test() route without returning a Flask response.
-def _stop_hardware():
+# called from both end_trial() and the pause_test() route without returning a Flask response.
+def stop_hardware():
     blue_led.off()
     water_pump.off()
     rgb_led.color = (0, 0, 0)
@@ -90,28 +90,68 @@ def end_trial():
     threading.Timer(reward_duration, turn_off_reward_devices).start()
 
     testStatus = True
-    # ADDED: Call _stop_hardware() instead of stop_test() route handler directly
-    _stop_hardware()
+    # ADDED: Call stop_hardware() instead of pause_test() route handler directly
+    stop_hardware()
+
+def ending_test(): #Getting functions primed to port all logic to backend
+    if testStopped == True:
+        testStatus = False
+        #Return to start page or whatever.
+
+
+def stop_test(): #Getting functions primed to port all logic to backend
+    try:
+        if testPaused == True:
+            print("Stopping test...")
+            testPaused = False
+            global testStopped
+            testStopped = True
+            return jsonify({"message": "Test stopped successfully!"}), 200
+        else:
+            print("Test is not paused!")
+    except Exception as e:
+        print("Error stopping test:", str(e))
+        return jsonify({"error": "Failed to stop test"}), 500
+
+
+def resume_test(): #Getting functions primed to port all logic to backend
+    try:
+        if testPaused == True:
+            print("Resuming test...")
+            testPaused = False
+            return jsonify({"message": "Test resumed successfully!"}), 200
+        else:
+            print("Test is not paused!")
+    except Exception as e:
+        print("Error resuming test:", str(e))
+        return jsonify({"error": "Failed to resume test"}), 500
+    
+
+@app.route('/api/test/stop', methods=['POST'])
+def pause_test():
+    try:
+        global testPaused
+        testPaused = True
+        print("Pausing test...")
+        # ADDED: Use stop_hardware() to centralize hardware shutdown logic
+        stop_hardware()
+
+        return jsonify({"message": "Test paused successfully!"}), 200
+    except Exception as e:
+        print("Error pausing test:", str(e))
+        return jsonify({"error": "Pause to stop test"}), 500
 
 # Callback functions to count button presses
-# TODO: Unit test to see if end_trial function is called when goal is reach.
 def on_lever_press():
     global lever_press_count
+    global lever_press_total
     with counter_lock:
-        lever_press_count += 1
         global TimeB
         TimeB = time.process_time()
-        print("Lever pressed. Count:", lever_press_count)
-        try:
-            # ADDED: Only check goal if the selected interaction type is "Lever"
-            if current_interaction_type == "Lever" and current_test_goal is not None and lever_press_count >= current_test_goal:
-                blue_led.on()
-                water_pump.on()
-                global TimeD
-                TimeD = time.perf_counter() #Export TimeD (Time of test if completed)
-                end_trial()
-        except Exception as e:
-            print(f"Error checking trial goal on lever press: {e}")
+        if ResponseFlag == False:
+            lever_press_count += 1
+            print("Lever pressed. Count:", lever_press_count)
+        lever_press_total += 1
 
     # Use a new connection inside the callback
     try:
@@ -125,27 +165,18 @@ def on_lever_press():
     finally:
         conn.close()
         
-# TODO: Unit test to see if end_trial function is called when goal is reach.
 def on_nose_poke():
     global nose_poke_count
-    global TimeB
-    TimeB = time.process_time()
+    global nose_poke_total
     with counter_lock:
-        nose_poke_count += 1
-        print("Nose poke. Count:", nose_poke_count)
+        global TimeB
+        TimeB = time.process_time()
+        if ResponseFlag == False:
+            nose_poke_count += 1
+            print("Nose poke. Count:", nose_poke_count)
+        nose_poke_total += 1
+
         
-        try:
-            # ADDED: Only check goal if the selected interaction type is "Poke"
-            if current_interaction_type == "Poke" and current_test_goal is not None and nose_poke_count >= current_test_goal:
-                blue_led.on()
-                water_pump.on()
-                global TimeD
-                TimeD = time.perf_counter() #Export TimeD (Time of test if completed)
-                end_trial()
-        except Exception as e:
-            print(f"Error checking trial goal on nose poke: {e}")
-
-
     # Use a new connection inside the callback
     try:
         conn = get_db_connection()
@@ -239,21 +270,6 @@ def simulate_lever_press():
 def simulate_nose_poke():
     on_nose_poke()
     return jsonify({"status": "simulated nose poke"}), 200
-
-
-@app.route('/api/test/stop', methods=['POST'])
-def stop_test():
-    try:
-        print("Stopping test...")
-
-        # ADDED: Use _stop_hardware() to centralize hardware shutdown logic
-        _stop_hardware()
-
-        return jsonify({"message": "Test stopped successfully!"}), 200
-    except Exception as e:
-        print("Error stopping test:", str(e))
-        return jsonify({"error": "Failed to stop test"}), 500
-
 
 # ADDED: Endpoint so the frontend can poll whether the backend has ended the test (e.g., goal reached)
 @app.route('/api/test/status', methods=['GET'])
@@ -388,7 +404,7 @@ def get_information():
                 time.sleep(2) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
                 global ResponseFlag
                 if TimeC >= int(duration):
-                    end_trial()
+                    ending_test()
                     global goalUndone
                     goalUndone = i #Keynote Export goalUndone (number of trials completed if goal was not reached before duration ends.)
                     i = goal_converted
@@ -406,9 +422,9 @@ def get_information():
                         blue_led.off()
                     ResponseFlag = False
                     if interaction_type == "Lever" and ResponseFlag == False:
-                        simulate_lever_press()
+                        on_lever_press()
                     elif interaction_type == "Poke" and ResponseFlag == False:
-                        simulate_nose_poke()
+                        on_nose_poke()
                     ResponseFlag = True
                     TimeBetween = TimeB - TimeA
                     collectedTimes.append(TimeBetween) #Keynote Export collectedTimes (collection of each trial's latency between stimulus and response.)
@@ -423,7 +439,7 @@ def get_information():
                     if i >= goal_converted:
                         global TimeD
                         TimeD = time.perf_counter() #Keynote Export TimeD (Time of test if completed.)
-                        end_trial()
+                        ending_test()
                     i = i + 1
 
 
