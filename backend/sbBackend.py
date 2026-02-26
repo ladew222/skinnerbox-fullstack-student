@@ -336,7 +336,7 @@ def get_information():
         
         # TODO: Used the int function to convert the string values to integers. 
         subject_id_converted = int(subject_id)
-        goal_converted = int(goal)
+        trial_goal_converted = int(goal)
         nose_poke_val = int(nose_poke_val)
         lever_press_val_converted = int(lever_press_val)
         nose_poke_val_converted = int(nose_poke_val)
@@ -353,7 +353,7 @@ def get_information():
         current_interaction_type = interaction_type
          # Update global goal
         try:
-             current_test_goal = int(goal_converted) if goal_converted is not None else None
+             current_test_goal = int(trial_goal_converted) if trial_goal_converted is not None else None
              print(current_test_goal)
         except ValueError:
              current_test_goal = None
@@ -368,7 +368,7 @@ def get_information():
             test_identification, 
             subject_id_converted, 
             test_name, 
-            goal_converted, 
+            trial_goal_converted, 
             reward_type, 
             light_color, 
             stimulus_type, 
@@ -450,7 +450,7 @@ def get_information():
                     ResponseFlag = True
                     TimeBetween = TimeB - TimeA
                     collectedTimes.append(TimeBetween) #Keynote Export collectedTimes (collection of each trial's latency between stimulus and response.)
-                    if reward_type == "Water" and goal_converted >= interaction_number:
+                    if reward_type == "Water" and trial_goal_converted >= interaction_number:
                         water_pump.on()
                         time.sleep(.15) #Keynote .15 seconds / replace '.15' with an imported input from the frontend (Seconds reward is on.)
                         water_pump.off()
@@ -460,7 +460,7 @@ def get_information():
                         #time.sleep(.15)
                         #food.off()
                         #interaction_number = 0'''
-                    if i >= goal_converted:
+                    if i >= trial_goal_converted:
                         global TimeD
                         TimeD = time.perf_counter() #Keynote Export TimeD (Time of test if completed.)
                         ending_test()
@@ -476,7 +476,7 @@ def get_information():
                 "subjectID": subject_id_converted,
                 "testName": test_name,
                 "rewardType": reward_type,
-                "goalForTrial": goal_converted,
+                "goalForTrial": trial_goal_converted,
                 "lightColor": light_color,
                 "stimulusType": stimulus_type,
                 "interactionType": interaction_type,
