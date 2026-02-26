@@ -27,7 +27,7 @@ buzzer = OutputDevice(13)
 nose_poke_button = Button(18, pull_up=False)
 
 # Initialize LEDs
-blue_led = LED(25) #Blue light in the box
+blue_led = LED(25, active_high = False) #Blue light in the box
 water_pump = OutputDevice(17)
 rgb_led = RGBLED(red=6, green=5, blue=26)
 
