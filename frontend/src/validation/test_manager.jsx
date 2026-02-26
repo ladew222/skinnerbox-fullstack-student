@@ -46,7 +46,7 @@ export const validationFunctions = {
             return { value: "", error: "Validation error occurred" };
         }
     },
-
+    
     testCoolDown: (value) => {
         const nonDigits = /[^\d]/g; // numeric cooldown only
         try {

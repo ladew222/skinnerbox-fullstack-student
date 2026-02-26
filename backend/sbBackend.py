@@ -342,54 +342,92 @@ def get_information():
         ))
         conn.commit()
         
-        # Start light sequence at test start
-        def start_light_sequence():
+        # Test stimuli
+        def test_stimuli():
             if stimulus_type == "Tone":
                 buzzer.on()
                 time.sleep(2)  # 2 seconds / replace '2' with an input from the frontend
                 buzzer.off()
             elif stimulus_type == "Light":
-                LED.on()
+                blue_led.on()
                 time.sleep(2)
-                LED.off()
+                blue_led.off()
             else:
                 print("Error with stimulus type.")
                 exit
         
+        # Test response/interaction
+        def test_interaction():
+            if interaction_type == "Lever":
+                simulate_lever_press()
+            elif interaction_type == "Poke":
+                simulate_nose_poke()
+            else:
+                print("Error with interaction type.")
+                exit
+        
+        #Test reward
+        def test_reward():
+            if reward_type == "Food":
+                blue_led.on()
+                time.sleep(2)
+                blue_led.off()
+            elif reward_type == "Water":
+                water_pump.on()
+                time.sleep(2)
+                water_pump.off()
+            else:
+                print("Error with reward type.")
+                exit
+
         collectedTimes = []   
 
-        def running_test():
+        def running_test_one_stimulus():
             TimeC = time.perf_counter
-            for i in range(1, goal_converted):
-                if TimeC == int(duration):
+            for i in range(1, goal_converted): #Keynote i is the number of the current trial, have to do something with this in results page.
+                time.sleep(2) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
+                global ResponseFlag
+                if TimeC >= int(duration):
                     end_trial()
+                    global goalUndone
+                    goalUndone = i #Keynote Export goalUndone (number of trials completed if goal was not reached before duration ends.)
                     i = goal_converted
                     break
                 else:
                     if stimulus_type == "Tone":
                         buzzer.on()
                         TimeA = time.process_time()
-                        time.sleep(2)  # 2 seconds / replace '2' with an input from the frontend
+                        time.sleep(2)  #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time stimulus is on).
                         buzzer.off()
                     elif stimulus_type == "Light":
-                        LED.on()
+                        blue_led.on()
                         TimeA = time.process_time()
                         time.sleep(2)
-                        LED.off()
-                    if interaction_type == "Lever":
-                        on_lever_press()
-                    elif interaction_type == "Poke":
-                        on_nose_poke()
+                        blue_led.off()
+                    ResponseFlag = False
+                    if interaction_type == "Lever" and ResponseFlag == False:
+                        simulate_lever_press()
+                    elif interaction_type == "Poke" and ResponseFlag == False:
+                        simulate_nose_poke()
+                    ResponseFlag = True
                     TimeBetween = TimeB - TimeA
-                    collectedTimes.append(TimeBetween) #Export collectedTimes (collection of each trial's latency between stimulus and response)
+                    collectedTimes.append(TimeBetween) #Keynote Export collectedTimes (collection of each trial's latency between stimulus and response.)
+                    if reward_type == "Water":
+                        water_pump.on()
+                        time.sleep(.15) #Keynote .15 seconds / replace '.15' with an imported input from the frontend (Seconds reward is on.)
+                        water_pump.off() 
+                    #'''elif reward_type == "Food":   If food availability is added.
+                        #food.on()
+                        #time.sleep(.15)
+                        #food.off()'''
                     if i >= goal_converted:
                         global TimeD
-                        TimeD = time.perf_counter() #Export TimeD (Time of test if completed)
+                        TimeD = time.perf_counter() #Keynote Export TimeD (Time of test if completed.)
                         end_trial()
                     i = i + 1
 
 
-        threading.Thread(target=start_light_sequence).start()
+        #threading.Thread(target=start_light_sequence).start() something Jared added. Gonna be honest, don't know what this does
         
         return jsonify({
             "message": "Start Test Successfully!",
