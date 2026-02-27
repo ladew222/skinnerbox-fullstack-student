@@ -544,7 +544,7 @@ const handlePreset = (event) => {
             <FormControl fullWidth>
               <InputLabel id="stimulusType">Stimulus Type:</InputLabel>
                 <Select
-                  id="selectStimulasType"
+                  id="selectStimulusType"
                   value={stimulusType}
                   onChange = {(e) => setStimulusType(e.target.value)}
                 >
@@ -558,7 +558,7 @@ const handlePreset = (event) => {
             <FormControl fullWidth>
               <InputLabel id="stimulusTypeTwo">Stimulus Type:</InputLabel>
                 <Select
-                  id="selectStimulasTypeTwo"
+                  id="selectStimulusTypeTwo"
                   value={stimulusType}
                   onChange = {(e) => setStimulusType(e.target.value)}
                 >
