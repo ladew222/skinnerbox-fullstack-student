@@ -506,7 +506,7 @@ def running_test_one_stimulus():
             elif stimulus_type == "Light":
                 blue_led.on()
                 TimeA = time.process_time()
-                time.sleep(2)
+                time.sleep(stimulus_time)
                 blue_led.off()
                 ResponseFlag = False
             if interaction_type == "Lever" and ResponseFlag == False:
