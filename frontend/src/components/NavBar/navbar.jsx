@@ -2,7 +2,7 @@ import React, { useContext } from 'react'; // Import the React library to use JS
 import { Link } from 'react-router-dom';
 
 import './NavBar.css'; // Import custom CSS for styling the NavBar component
-import logo from './RGB_Horizontal_A_Logo.png'; // Import the logo image to be used in the navbar
+import logo from '../../assets/RGB_Horizontal_A_Logo.png'; // Import the logo image to be used in the navbar
 
 function NavBar() { {/* Defining the NavBar component */}
     

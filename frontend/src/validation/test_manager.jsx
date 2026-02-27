@@ -60,4 +60,19 @@ export const validationFunctions = {
             return { value: "", error: "Validation error occurred" };
         }
     },
+
+
+    testSubjectID: (value) => {
+        const nonDigits = /[^\d]/g; // numeric goal only
+        try {
+            const input = value ?? "";
+            const converted = input.replace(nonDigits, "");
+            if (input !== "" && converted === "") {
+                return { value: converted, error: "Only numbers are allowed" };
+            }
+            return { value: converted, error: "" };
+        } catch (e) {
+            return { value: "", error: "Validation error occurred" };
+        }
+    },
 };
