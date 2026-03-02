@@ -61,7 +61,7 @@ const TestManager = () => {
 
 
   useEffect(() => {
-    setOriginalSettings({ testName, trialDuration, goalForTrial, cooldown, rewardType, interactionType, stimulusType, lightColor });
+    setOriginalSettings({ testName, trialDuration, goalForTrial, goalForTest, RewaStimTime, StimTimeOn, cooldown, rewardType, interactionType, stimulusType, lightColor });
   
     try {
         // Get presets from localStorage (defaults to empty array if not found)
@@ -77,19 +77,31 @@ const TestManager = () => {
   }, []); // Empty dependency array = run once on component mount
 
   const hasChanged = () => {
-    return JSON.stringify(originalSettings) !== JSON.stringify({ testName, trialDuration, goalForTrial, cooldown, rewardType, interactionType, stimulusType, lightColor });
+    return JSON.stringify(originalSettings) !== JSON.stringify({ testName, trialDuration, goalForTrial, goalForTest, RewaStimTime, StimTimeOn, cooldown, rewardType, interactionType, stimulusType, lightColor });
   };
 
 
   const handleSaveTest = () => {
-    if (!testName || !trialDuration || !goalForTrial || !cooldown) {
+    if (!testName || !trialDuration || !goalForTrial || !cooldown || !goalForTest || !RewaStimTime || !StimTimeOn) {
       alert("Please fill in all required fields.");
       return;
     }
 
     // const testSettings = `Test Name: ${testName}\nTrial Duration: ${trialDuration} seconds\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
     
-    const testSettings = `Preset: ${presetValue}\nTest Name: ${testName}\nSubject Identification: ${subjectID}\nTrial Duration: ${trialDuration} minutes\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
+    const testSettings = `Preset: ${presetValue}\n
+    Test Name: ${testName}\n
+    Subject Identification: ${subjectID}\n
+    Trial Duration: ${trialDuration} minutes\n
+    Goal for Trial: ${goalForTrial}\n
+    Goal for Test: ${goalForTest}\n
+    Cooldown: ${cooldown} seconds\n
+    Reward Type: ${rewardType}\n
+    Interaction Type: ${interactionType}\n
+    Stimulus Type: ${stimulusType}\n
+    Time Stimulus Active:${StimTimeOn}\n
+    Time Between Reward and New Stimulus:${RewaStimTime}\n
+    Light Color: ${lightColor}`;
 
     const blob = new Blob([testSettings], { type: "text/plain" });
     const a = document.createElement("a");
@@ -250,6 +262,9 @@ const TestManager = () => {
       subjectID,
       trialDuration, 
       goalForTrial,
+      goalForTest,
+      RewaStimTime,
+      StimTimeOn,
       cooldown,
       rewardType, 
       interactionType, 
@@ -303,6 +318,9 @@ const TestManager = () => {
       `Subject Identification:${subjectID}`,
       `Trial Duration (minutes):${trialDuration}`,
       `Goal for Trial:${goalForTrial}`,
+      `Goal for Test:${goalForTest}`,
+      `Time between reward and stimulus:${RewaStimTime}`,
+      `How long stimulus is active:${StimTimeOn}`,
       `Cooldown (seconds):${cooldown}`,
       `Reward Type:${rewardType}`,
       `Interaction Type:${interactionType}`,
