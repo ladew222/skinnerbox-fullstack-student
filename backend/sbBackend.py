@@ -326,6 +326,9 @@ def get_information():
         subject_id = data.get("subjectID")
         duration = data.get("trialDuration")
         goal = data.get("goalForTrial")
+        test_goal = data.get("goalForTest")
+        RewardStim = data.get("RewaStimTime")
+        StimDur = data.get("StimTimeOn")
         cooldown = data.get("cooldown")
         reward_type = data.get("rewardType")
         interaction_type = data.get("interactionType")
@@ -336,7 +339,10 @@ def get_information():
         
         # TODO: Used the int function to convert the string values to integers. 
         subject_id_converted = int(subject_id)
-        trial_goal_converted = int(goal)
+        trial_goal_converted = float(goal)
+        test_goal_converted = float(test_goal)
+        StimDur_converted = float(StimDur)
+        RewardStim_converted = float(RewardStim)
         nose_poke_val = int(nose_poke_val)
         lever_press_val_converted = int(lever_press_val)
         nose_poke_val_converted = int(nose_poke_val)
@@ -360,15 +366,17 @@ def get_information():
 
         sql_command = """
             INSERT INTO Active_Test (
-                testID, subjectID, Name, Goal, Reward, 
-                Light, Stimulus, Interaction, Cooldown, Duration,nose_poke, lever_press
+                testID, subjectID, Name, Trial Goal, Test Goal, Duration Between Reward and Stimulus, Duration of Stimulus, Reward Type, 
+                Light, Stimulus, Interaction, Cooldown, Duration, Nose Poke Amount, Lever Press Amount
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         cursor.execute(sql_command, (
             test_identification, 
-            subject_id_converted, 
-            test_name, 
+            subject_id_converted,  
             trial_goal_converted, 
+            test_goal_converted,
+            RewardStim_converted,
+            StimDur_converted,
             reward_type, 
             light_color, 
             stimulus_type, 
@@ -390,6 +398,9 @@ def get_information():
                 "testName": test_name,
                 "rewardType": reward_type,
                 "goalForTrial": trial_goal_converted,
+                "goalForTest": test_goal_converted,
+                "RewaStimTime": RewardStim_converted,
+                "StimTimeOn": StimDur_converted,
                 "lightColor": light_color,
                 "stimulusType": stimulus_type,
                 "interactionType": interaction_type,
@@ -488,7 +499,7 @@ collectedTimes = []
 
 def running_test_one_stimulus():
     TimeC = time.perf_counter
-    for i in range(1, test_goal): #Keynote i is the number of the current trial. Must import from front-end and export to back-end.
+    for i in range(1, test_goal_converted): #Keynote i is the number of the current trial. Must import from front-end and export to back-end.
         time.sleep(2) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
         global ResponseFlag
         if TimeC >= int(duration):
