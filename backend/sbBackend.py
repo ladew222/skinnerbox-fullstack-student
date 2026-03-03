@@ -36,6 +36,7 @@ lever_press_count = 0
 nose_poke_count = 0
 current_test_goal = None
 testStatus = False
+testStopped = False
 # ADDED: Track which interaction type ("Lever" or "Poke") should be checked against the goal
 current_interaction_type = None
 counter_lock = threading.Lock()
@@ -92,7 +93,7 @@ def end_trial():
     testStatus = True
     # ADDED: Call stop_hardware() instead of pause_test() route handler directly
     stop_hardware()
-
+"""
 def reset_counts():
     testStatus = False
     testStopped = False
@@ -107,13 +108,7 @@ def reset_counts():
     TimeD = 0
     i = 0
     interaction_number = 0
-
-def ending_test(): #Getting functions primed to port all logic to backend
-    if testStopped == True:
-        testStatus = False
-        #Return to start page or whatever.
-
-        reset_counts()
+"""
 
 
 
@@ -130,6 +125,14 @@ def stop_test(): #Getting functions primed to port all logic to backend
     except Exception as e:
         print("Error stopping test:", str(e))
         return jsonify({"error": "Failed to stop test"}), 500
+    
+def ending_test(): #Getting functions primed to port all logic to backend
+    if testStopped == True:
+        testStatus = False
+        #Return to start page or whatever.
+
+    reset_counts()
+
 
 
 def resume_test(): #Getting functions primed to port all logic to backend
@@ -319,6 +322,8 @@ def get_information():
             raise Exception("Failed to connect to database")
             
         cursor = conn.cursor()
+        
+        global stimulus_type, interaction_type, reward_type, test_goal_converted, RewardStim_converted, duration, StimDur_converted, trial_goal_converted
     
         # Grabbing the information from the front-end:
         test_identification = unique_id_time_based
@@ -337,19 +342,20 @@ def get_information():
         nose_poke_val = data.get("nosePoke")
         lever_press_val = data.get("leverPress")
         
-        # TODO: Used the int function to convert the string values to integers. 
+        # TODO:  Convert  trial_goal_converted, test_goal_converted, StimDur_converted, RewardStim_converted to float. Logic change is needed
         subject_id_converted = int(subject_id)
-        trial_goal_converted = float(goal)
-        test_goal_converted = float(test_goal)
-        StimDur_converted = float(StimDur)
-        RewardStim_converted = float(RewardStim)
+        trial_goal_converted = int(goal)
+        test_goal_converted = int(test_goal)
+        StimDur_converted = int(StimDur)
+        RewardStim_converted = int(RewardStim)
         nose_poke_val = int(nose_poke_val)
         lever_press_val_converted = int(lever_press_val)
         nose_poke_val_converted = int(nose_poke_val)
         
         
+        
         # ADDED: Reset testStatus to False when a new test starts so stale "finished" state is cleared
-        global current_test_goal, testStatus, current_interaction_type, lever_press_count, nose_poke_count
+        global  current_test_goal, testStatus, current_interaction_type, lever_press_count, nose_poke_count
         testStatus = False
         # ADDED: Reset counters here (at the start of a new test) instead of in end_trial(),
         # so the previous test's final counts are still available for the frontend to read.
@@ -357,6 +363,8 @@ def get_information():
         nose_poke_count = 0
         # ADDED: Store the interaction type globally so callbacks know which input to check against the goal
         current_interaction_type = interaction_type
+        
+        running_test_one_stimulus()
          # Update global goal
         try:
              current_test_goal = int(trial_goal_converted) if trial_goal_converted is not None else None
@@ -498,7 +506,9 @@ def test_reward():
 collectedTimes = []   
 
 def running_test_one_stimulus():
-    TimeC = time.perf_counter
+    TimeC = time.perf_counter()
+    
+    print(type(TimeC))
     for i in range(1, test_goal_converted): #Keynote i is the number of the current trial. Must import from front-end and export to back-end.
         time.sleep(RewardStim_converted) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
         global ResponseFlag
@@ -506,13 +516,13 @@ def running_test_one_stimulus():
             ending_test()
             global goalUndone
             goalUndone = i #Keynote Export goalUndone (number of trials completed if goal was not reached before duration ends.)
-            i = test_goal
+            i = test_goal_converted
             break
         else:
             if stimulus_type == "Tone":
                 buzzer.on()
                 TimeA = time.process_time()
-                time.sleep(StimDur_coverted)  #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time stimulus is on).
+                time.sleep(StimDur_converted)  #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time stimulus is on).
                 buzzer.off()
             elif stimulus_type == "Light":
                 blue_led.on()

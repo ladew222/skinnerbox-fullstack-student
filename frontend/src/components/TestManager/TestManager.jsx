@@ -509,7 +509,7 @@ const handlePreset = (event) => {
            */}
           <div className="input-group">
             <FormControl fullWidth error={Boolean(trialGoalError)}>
-              <InputLabel htmlFor="goalForTrial">Goal for Trial:</InputLabel>
+              <InputLabel htmlFor="goalForTrial">Number of presses until reward:</InputLabel>
               <Input
                 id="txtGoalForTrial"
                 placeholder="Enter Goal"
