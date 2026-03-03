@@ -131,7 +131,7 @@ def ending_test(): #Getting functions primed to port all logic to backend
         testStatus = False
         #Return to start page or whatever.
 
-    reset_counts()
+    #reset_counts()
 
 
 
@@ -174,6 +174,7 @@ def on_lever_press():
             lever_press_count += 1
             interaction_number += 1
             print("Lever pressed. Count:", lever_press_count)
+            time.sleep(StimDur_converted)
         lever_press_total += 1
 
     # Use a new connection inside the callback
@@ -199,6 +200,7 @@ def on_nose_poke():
             nose_poke_count += 1
             interaction_number += 1
             print("Nose poke. Count:", nose_poke_count)
+            time.sleep(StimDur_converted)
         nose_poke_total += 1 
 
         
@@ -507,7 +509,6 @@ collectedTimes = []
 
 def running_test_one_stimulus():
     TimeC = time.perf_counter()
-    
     print(type(TimeC))
     for i in range(1, test_goal_converted): #Keynote i is the number of the current trial. Must import from front-end and export to back-end.
         time.sleep(RewardStim_converted) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
@@ -539,7 +540,7 @@ def running_test_one_stimulus():
             collectedTimes.append(TimeBetween) #Keynote Export collectedTimes (collection of each trial's latency between stimulus and response.)
             if reward_type == "Water" and trial_goal_converted >= interaction_number:
                 water_pump.on()
-                time.sleep(.15) #Keynote .15 seconds / replace '.15' with an imported input from the frontend (Seconds reward is on.)
+                time.sleep(0.0275438596491) #Keynote .15 seconds / replace '.15' with an imported input from the frontend (Seconds reward is on.)
                 water_pump.off()
                 interaction_number = 0
             #'''elif reward_type == "Food" and trial_goal_converted >= interaction_number:   If food availability is added.
