@@ -1,25 +1,30 @@
+// Importing the necessary resources needed within this page:
 import React, { useState, useEffect, useRef } from "react";
-import "./TestManager.css";
+// Backend API helpers - hardware control and persistence endpoints
 import { runTest, stopTest, getCounts, setBlueLight, setOrangeLight, setRGBLight, getTestInformation, getTestStatus } from "../../utilities/api";
-import { FormControl, InputLabel, Input} from '@mui/material';
-import { validationFunctions } from "../../validation/test_manager";
-import ButtonGroup from '@mui/material/ButtonGroup';
-// CHANGE HISTORY: Originally added getAllPresets API import for backend preset loading
-// UPDATED: Removed getAllPresets import - now using localStorage directly instead of backend API
-// Reason: Backend preset endpoints (/preset/save, /preset/all) are not yet implemented in sbBackend.py
-// Using browser's localStorage as temporary solution until backend is ready
 
+// Input validation helpers and component styles
+import { validationFunctions } from "../../validation/test_manager";
+import "./TestManager.css";
+
+// Importing MUI Components:
+import ButtonGroup from '@mui/material/ButtonGroup';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormHelperText from '@mui/material/FormHelperText';
 import Button from '@mui/material/Button';
+import { FormControl, InputLabel, Input} from '@mui/material';
 import { PresentToAll } from "@mui/icons-material";
 
 
+// Component state: form fields, operational flags, counters, timers, and error messages
 const TestManager = () => {
+  // Preset selection (string name)
   const [presetValue, setPresetValue] = useState("");
+  // Subject / test identifiers and human-readable name
   const [subjectID, setSubjectID] = useState(""); 
   const [testName, setTestName] = useState("");
+  // Trial parameters (numeric strings or numbers depending on input handling)
   const [trialDuration, setTrialDuration] = useState("");
   const [goalForTrial, setGoalForTrial] = useState("");
   const [cooldown, setCooldown] = useState("");
@@ -28,25 +33,27 @@ const TestManager = () => {
   const [stimulusType, setStimulusType] = useState("Light");
   const [lightColor, setLightColor] = useState("Red");
   const [userPresets, setUserPresets] = useState([]);
+  // Runtime flags
   const [testRunning, setTestRunning] = useState(false);
   const [testPaused, setTestPaused] = useState(false);
   const [testFinished, setTestFinished] = useState(false);
+  // Results and counters
   const [testResults, setTestResults] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const elapsedTimeRef = useRef(0);
   const [leverPressCount, setLeverPressCount] = useState(0);
   const [nosePokeCount, setNosePokeCount] = useState(0);
   const [lightOn, setLightOn] = useState(false);
-
+  // Snapshot used to detect unsaved changes
   const [originalSettings, setOriginalSettings] = useState(null);
+  // File upload state for importing preset-like settings
   const [uploadedFile, setUploadedFile] = useState(null);
-
+  // Reward cooldown enforcement (timestamp) + a simple boolean that indicates reward was given
   const [lastRewardTime, setLastRewardTime] = useState(0);
-  const [rewardCount, setRewardCount] = useState(0);
-
+  // const [isRewaredGiven, setRewardGiven] = useState(false); 
+  // Generic status or feedback message shown to user
   const [message, setMessage] = useState("");
-
-
+  // Validation errors for form fields
   const [testNameError, setTestNameError] = useState('');
   const [trialDurationError, setTrialDurationError] = useState('');
   const [trialGoalError, setTrialGoalError] = useState('');
@@ -54,6 +61,7 @@ const TestManager = () => {
   const [subjectIDError, setSubjectIDError] = useState('');
 
 
+  // Creating a function that handles the presets in the front-end:
   useEffect(() => {
     setOriginalSettings({ testName, trialDuration, goalForTrial, cooldown, rewardType, interactionType, stimulusType, lightColor });
   
@@ -70,21 +78,25 @@ const TestManager = () => {
     }
   }, []); // Empty dependency array = run once on component mount
 
+  // Change detector: compares current form values to the original snapshot
+  // Returns true when the form has unsaved changes (used to enable Save button)
   const hasChanged = () => {
     return JSON.stringify(originalSettings) !== JSON.stringify({ testName, trialDuration, goalForTrial, cooldown, rewardType, interactionType, stimulusType, lightColor });
   };
 
-
+  // Creating a function called handleSaveTest, that is responsible for handling the logice of saving the current test:
   const handleSaveTest = () => {
+
+    // Checking to see if any of these fields are empty, if so alert the user to please fill these elements in.
     if (!testName || !trialDuration || !goalForTrial || !cooldown) {
       alert("Please fill in all required fields.");
       return;
     }
 
-    // const testSettings = `Test Name: ${testName}\nTrial Duration: ${trialDuration} seconds\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
-    
+    // Creating a variable called testSettings that is responsible for storing the test information.
     const testSettings = `Preset: ${presetValue}\nTest Name: ${testName}\nSubject Identification: ${subjectID}\nTrial Duration: ${trialDuration} minutes\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
 
+    // Logic that will be used in the handling and creation of the csv file:
     const blob = new Blob([testSettings], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -94,6 +106,8 @@ const TestManager = () => {
     document.body.removeChild(a);
   };
 
+  // Validate an uploaded settings text file. Expects one key per line in a fixed order.
+  // Returns true when the file matches the required template used by the importer.
   const validateFileFormat = (text) => {
     const lines = text.split("\n");
     const expectedKeys = [
@@ -103,10 +117,11 @@ const TestManager = () => {
     return lines.length === expectedKeys.length && lines.every((line, index) => line.startsWith(expectedKeys[index] + ": "));
   };
 
+  // Handle user-uploaded settings files: parse, validate, and populate form fields.
+  // NOTE: Mapping is positional (line index) — see TODOs if you need a more robust parser.
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (e) => {
       const fileText = e.target.result;
@@ -120,7 +135,6 @@ const TestManager = () => {
       const lines = fileText.split("\n");
       const values = lines.map((line) => line.split(": ")[1]);
 
-      // TODO: TASK, the handleFileUpload to reflect the changes to UI
       setTestName(values[0] || "");
       setSubjectID(values[1] || "")
       setTrialDuration(values[1] ? values[1].replace(" minutes", "") : "");
@@ -134,6 +148,7 @@ const TestManager = () => {
     reader.readAsText(file);
   };
 
+  // Creating a function called handleDeleteUploade that is resposible for handling the deletion of a file from the skinnerbox application:
   const handleDeleteUpload = () => {
     setUploadedFile(null);
     setTestName("");
@@ -147,7 +162,6 @@ const TestManager = () => {
     document.querySelector(".upload-button").value = "";
   };
 
-  // TODO: Task, change logic to send it to the back-end
   useEffect(() => {
     let interval;
     if (testRunning) {
@@ -176,12 +190,10 @@ const TestManager = () => {
                 rewardType === "Water" ? setBlueLight(false) : setOrangeLight(false);
               }, 1000);
               setLastRewardTime(now);
-              setRewardCount(prev => prev + 1);
+              // setRewardGiven(true);
             }
           }
 
-
-          // TODO: TASK, understand logic that is dealing with the timer
           // Track elapsed time using ref to avoid stale closure issues
           elapsedTimeRef.current += 1;
           setElapsedTime(elapsedTimeRef.current);
@@ -199,9 +211,7 @@ const TestManager = () => {
               nosePoke: data.nose_poke_count,
               leverPress: data.lever_press_count
             };
-            // updateTestInformation(currentSettings).catch(e => console.error("Error sending 5s update:", e));
           }
-
         } catch (error) {
           console.error("Error fetching test counts:", error);
         }
@@ -229,10 +239,8 @@ const TestManager = () => {
     setElapsedTime(0);
     elapsedTimeRef.current = 0;
     setLastRewardTime(0);
-    setRewardCount(0);
+    // setRewardGiven(false);
 
-    // FIX: Changed leverPressCount -> leverPress and nosePokeCount -> nosePoke
-    // to match the key names the backend expects in data.get("leverPress") and data.get("nosePoke")
     const testSettings = { 
       testName, 
       subjectID,
@@ -247,7 +255,6 @@ const TestManager = () => {
       nosePoke: nosePokeCount
     };
 
-    // TODO: Changed runTest to reflect sending the updated information
     try {
       // Save test information to database FIRST to ensure record exists
       console.log("Saving test configuration...");
@@ -302,8 +309,9 @@ const TestManager = () => {
       `Lever Press Count:${testResults.lever_press_count}`,
       `Nose Poke Count:${testResults.nose_poke_count}`,
       `Light Status:${testResults.light_on ? "ON" : "OFF"}`,
-      `Rewards Given:${rewardCount}`
+      // `Reward Given:${rewardGiven ? "Yes" : "No"}`
     ];
+
     const csvData = csvLines.join("\n");
     const blob = new Blob([csvData], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
@@ -324,42 +332,35 @@ const TestManager = () => {
     }
   };
 
-// CHANGE: Completely rewrote handlePreset to support user-created presets from localStorage
-// Previous version: Only handled hardcoded Preset 1-4
-// New version: Handles Preset 1, "None", AND dynamically-loaded user presets
 const handlePreset = (event) => {
     const value = event.target.value;
     
     try {
         setPresetValue(value);
         
-        // CHANGE: Simplified Preset 1 (removed Preset 2-4 for now)
-        // NOTE: These values look like test data - you may want to restore proper preset values
         if (value === "Preset 1") {
-            setTestName("Preset 1 Test")        // CHANGE: Set to descriptive string
-            setTrialDuration(1)         // CHANGE: 1 minute duration
-            setGoalForTrial(5)          // CHANGE: Fixed to numeric value (was "Test")
-            setCooldown(2)              // CHANGE: 2 second cooldown
+            setTestName("Preset 1 Test")        
+            setTrialDuration(1)         
+            setGoalForTrial(5)          
+            setCooldown(2)              
             setRewardType("Food")
             setInteractionType("Lever")
             setStimulusType("Light")
             setLightColor("Green")
         }
-        // CHANGE: Simplified "None" option - now clears ALL fields including testName
-        // Previous version only cleared some fields
+
         else if (value === "None") {
-            setTestName("")             // CHANGE: Now clears test name
+            setTestName("")             
             setTrialDuration("")
             setSubjectID("")
             setGoalForTrial("")
             setCooldown("")
-            setRewardType("")            // CHANGE: Now clears to empty instead of default "Water"
-            setInteractionType("")       // CHANGE: Now clears to empty instead of default "Lever"
-            setStimulusType("")          // CHANGE: Now clears to empty instead of default "Light"
-            setLightColor("")            // CHANGE: Now clears to empty instead of default "Red"
+            setRewardType("")            
+            setInteractionType("")       
+            setStimulusType("")          
+            setLightColor("")            
         }
-        // CHANGE: NEW - Added else block to handle user-created presets
-        // This enables dynamic preset loading from PresetManager-created configurations
+
         else {
             // Search userPresets array for matching preset name
             const userPreset = userPresets.find(p => p.name === value);
@@ -379,14 +380,14 @@ const handlePreset = (event) => {
         alert("Error loading preset");
     }
 };
-  // TODO: Add cookies and sessions for the refresh and login
-  // TODO: Determine why name is getting set to a number 
   
+  // Render: shows either the setup form or the live test screen depending on runtime flags
   return (
     <div className="trial-settings">
       {!testRunning && !testPaused && !testFinished ? (
         <div id = "formControlContainer">
           <div className="input-group">
+            {/* Preset selector: choose a saved preset or "None" to clear fields */}
             <FormControl fullWidth>
               <InputLabel id="lblPresetManager">Preset:</InputLabel>
                 <Select value={presetValue} onChange={handlePreset}>
@@ -401,6 +402,7 @@ const handlePreset = (event) => {
           </div>  
 
           <div className="input-group">
+            {/* Test name: user-provided label for this trial (validated) */}
             <FormControl  fullWidth error={Boolean(testNameError)}>
               <InputLabel htmlFor="testName">Test Name:</InputLabel>
               <Input
@@ -422,6 +424,7 @@ const handlePreset = (event) => {
 
 
           <div className="input-group">
+            {/* Subject ID: numeric identifier for the animal/subject (validated) */}
             <FormControl  fullWidth error={Boolean(subjectIDError)}>
               <InputLabel htmlFor="subjectIdentification">Subject Identification:</InputLabel>
               <Input
@@ -442,6 +445,7 @@ const handlePreset = (event) => {
           </div>
         
           <div className="input-group">
+            {/* Trial duration: length of trial in minutes (numeric, validated) */}
             <FormControl fullWidth error={Boolean(trialDurationError)}>
               <InputLabel htmlFor="trialDuration">Trial Duration(Minutes):</InputLabel>
               <Input
@@ -513,6 +517,7 @@ const handlePreset = (event) => {
           </div>
          
          <div className="input-group">
+          {/* Reward type: controls which dispenser/light is used when goal is reached */}
           <FormControl fullWidth>
             <InputLabel id="rewardType">Reward Type:</InputLabel>
               <Select
@@ -527,6 +532,7 @@ const handlePreset = (event) => {
          </div>
         
           <div className="input-group">
+            {/* Interaction type: which input the hardware reports (Poke or Lever) */}
             <FormControl fullWidth>
               <InputLabel id="interactionType">Interaction Type:</InputLabel>
                 <Select
@@ -541,6 +547,7 @@ const handlePreset = (event) => {
           </div>
           
           <div className="input-group">
+            {/* Stimulus type: visual or auditory cue during trials */}
             <FormControl fullWidth>
               <InputLabel id="stimulusType">Stimulus Type:</InputLabel>
                 <Select
@@ -553,22 +560,9 @@ const handlePreset = (event) => {
                 </Select>
             </FormControl>
           </div>
-
-          {/* <div className="input-group">
-            <FormControl fullWidth>
-              <InputLabel id="stimulusTypeTwo">Stimulus Type:</InputLabel>
-                <Select
-                  id="selectStimulasTypeTwo"
-                  value={stimulusType}
-                  onChange = {(e) => setStimulusType(e.target.value)}
-                >
-                  <MenuItem value={"Light"}>Light</MenuItem>
-                  <MenuItem value={"Tone"}>Tone</MenuItem>
-                </Select>
-            </FormControl>
-          </div> */}
-        
+          
           <div className="input-group">
+            {/* Light color: selects the color used for visual stimulus */}
             <FormControl fullWidth>
               <InputLabel id="lightColor">Light Color:</InputLabel>
                 <Select
@@ -585,6 +579,7 @@ const handlePreset = (event) => {
           </div>  
           
           <div className="input-group">
+            {/* Action buttons: save config, upload settings file, delete upload, start test */}
             <ButtonGroup variant="contained"  className="input-group" aria-label="Basic button group">
               <Button className="save-button" onClick={handleSaveTest} disabled={!hasChanged()}>Save Test</Button>
               <Button><input type="file" accept=".txt" onChange={handleFileUpload} className="upload-button" /></Button>
@@ -601,23 +596,25 @@ const handlePreset = (event) => {
       ) : (
    
           <div className="test-screen">
-            {/* Dynamic title based on test completion state */}
+            {/* Live test screen: shows status, counters, and runtime controls */}
             <h1>{testFinished ? "Test Completed" : "Test in Progress"}</h1>
+            {/* Runtime metrics displayed to the user */}
             <p>Elapsed Time: {elapsedTime}s</p>
             <p>Lever Presses: {leverPressCount}</p>
             <p>Nose Pokes: {nosePokeCount}</p>
             <p>Light Status: {lightOn ? "ON" : "OFF"}</p>
 
             <div className="button-group">
+              {/* Manual RGB controls for debugging or manual stimulus */}
               <button className='redlight-button' onClick={() => handleRGB('on', 'off', 'off')}>RGB Red On</button>
               <button className='greenlight-button' onClick={() => handleRGB('off', 'on', 'off')}>RGB Green On</button>
               <button className='bluelight-button' onClick={() => handleRGB('off', 'off', 'on')}>RGB Blue On</button>
               <button className='rgblight-button' onClick={() => handleRGB('off', 'off', 'off')}>RGB Off</button>
 
-  
+              {/* Status/message area */}
               {message && <p>{message}</p>}
 
-
+              {/* Runtime control buttons vary by test state */}
               {testRunning && <button className="stop-button" onClick={() => handleStopTest(false)}>Stop Test</button>}
               {testPaused && (
                 <>
@@ -628,6 +625,7 @@ const handlePreset = (event) => {
               )}
               {testFinished && (
                 <>
+                  {/* Export or return to setup after trial completion */}
                   <button className="download-button" onClick={handleDownloadResults}>Download Results</button>
                   <button className="return-button" onClick={() => { setTestFinished(false); setTestResults(null); }}>Return to Test Setup</button>
                 </>

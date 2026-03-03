@@ -63,7 +63,9 @@ export const validationFunctions = {
 
 
     testSubjectID: (value) => {
-        const nonDigits = /[^\d]/g; // numeric goal only
+        // const nonDigits = /[^\d]/g; // numeric goal only
+        const nonDigits = /[a-zA-Z]/g;
+        
         try {
             const input = value ?? "";
             const converted = input.replace(nonDigits, "");

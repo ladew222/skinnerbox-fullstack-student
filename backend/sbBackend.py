@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+# gpio_adapter provides hardware abstractions (buttons, LEDs, pumps)
 from gpio_adapter import Button, LED, RGBLED, OutputDevice
 import time
 import threading
@@ -7,41 +8,44 @@ import os
 import sqlite3
 import uuid
 
-# File that is storing the database name
-file = "testdatabase.db"  ## for database
+# Database filename used by sqlite3
+file = "testdatabase.db"
 
+# Flask application instance
 app = Flask(__name__)
 
-# Allow all domains for development
-CORS(app) 
+# Enable CORS during development so the frontend (React) can call APIs
+CORS(app)
 
 
-# Define directories (if needed)
+# File-system directories used for logs/temp if needed
 log_directory = os.path.join(os.path.dirname(__file__), 'logs')
 temp_directory = os.path.join(os.path.dirname(__file__), 'temp')
 
-
-# Initialize buttons (with pull-down resistors)
+# Hardware initialization: buttons, buzzer, LEDs, pump
+# Pins are BCM numbers; buttons use pull-down resistors where appropriate
 lever = Button(23, pull_up = False, bounce_time=0.15)
 buzzer = OutputDevice(13)
 nose_poke_button = Button(18, pull_up=False)
 
-# Initialize LEDs
-blue_led = LED(25, active_high = False) #Blue light in the box
-water_pump = OutputDevice(17)
-rgb_led = RGBLED(red=6, green=5, blue=26)
+# Visual and reward devices
+blue_led = LED(25, active_high = False) # Blue light inside box
+water_pump = OutputDevice(17)           # Water pump control
+rgb_led = RGBLED(red=6, green=5, blue=26)  # RGB LED
 
-# Global counters for interactions
+# Runtime globals: counters, current goal, test status and interaction type
 lever_press_count = 0
 nose_poke_count = 0
 current_test_goal = None
 testStatus = False
-# ADDED: Track which interaction type ("Lever" or "Poke") should be checked against the goal
+# Which interaction type is active for goal checking ("Lever" or "Poke")
 current_interaction_type = None
+# Lock to protect concurrent counter updates from callbacks and API threads
 counter_lock = threading.Lock()
 # Helper function to get a new SQLite connection
 #TODO: Added a a try catch to the get_db_connection
 def get_db_connection():
+    # Returns a new sqlite3 connection or None on failure
     try:
         if len(file) != 0:
              conn = sqlite3.connect(file)
@@ -49,25 +53,14 @@ def get_db_connection():
              return conn
         else:
             raise ValueError("Connection Failed: Unable to connect to the Database.")
-    except Exception as e: 
+    except Exception as e:
         print(f"Error connecting to database: {e}")
         return None
     
-
-# Ending trial, resetting nose and lever count, and booting back to the menu.
-# def end_trial():
-#     global lever_press_count
-#     print(f"Ended Test")
-#     global nose_poke_count
-#     lever_press_count = 0
-#     nose_poke_count = 0
-#     # TODO: Set up boolean to determine when test is done 
-#     testStatus = True
-#     stop_test()
-
 # ADDED: Extracted hardware stop logic into its own function so it can be
 # called from both end_trial() and the stop_test() route without returning a Flask response.
 def _stop_hardware():
+    # Centralized hardware shutdown: turn off lights and pump
     blue_led.off()
     water_pump.off()
     rgb_led.color = (0, 0, 0)
@@ -77,38 +70,34 @@ def _stop_hardware():
 # ADDED: Removed counter reset from here — counters are now reset when the NEXT test starts
 # in get_information(). This preserves final counts so the frontend can read them after stopping.
 def end_trial():
-    # ADDED: global testStatus so the flag is actually updated (was a local variable bug before)
+    # Called when the trial ends (goal reached). Leaves reward devices on briefly
+    # so the subject can consume the reward, then turns them off after a delay.
     global testStatus
     print(f"Ended Test")
 
-    # leave the reward devices on briefly then turn them off; do NOT immediately kill them
+    # Turn off reward devices after a short delay to allow reward consumption
     import threading
     def turn_off_reward_devices():
-        # only turn off the pump/leds after the animal has had time to receive the reward
         blue_led.off()
         water_pump.off()
-        # we optionally turn off the rgb as well if you want it reset here
         rgb_led.color = (0, 0, 0)
         print("Reward devices turned off after delay")
-    reward_duration = 2  # seconds (change as needed)
+    reward_duration = 2  # seconds (adjustable)
     threading.Timer(reward_duration, turn_off_reward_devices).start()
 
+    # Mark backend state as finished so frontend can detect completion
     testStatus = True
-    # NOTE: _stop_hardware() would immediately shut everything off, which
-    # defeats the purpose of the delay above.  Remove the call so the pump
-    # actually stays on for `reward_duration` seconds.
-    # _stop_hardware()
 
 # Callback functions to count button presses
 # TODO: Unit test to see if end_trial function is called when goal is reach.
 def on_lever_press():
+    # Hardware callback: increments lever counter and checks goal logic
     global lever_press_count
     with counter_lock:
         lever_press_count += 1
         print("Lever pressed. Count:", lever_press_count)
         try:
-            # ADDED: Only check goal if the selected interaction type is "Lever".
-            # only activate the pump when the count exactly matches the goal
+            # Only trigger reward if interaction type is Lever and goal matches
             if (current_interaction_type == "Lever" and
                     current_test_goal is not None and
                     lever_press_count == current_test_goal):
@@ -117,7 +106,7 @@ def on_lever_press():
         except Exception as e:
             print(f"Error checking trial goal on lever press: {e}")
 
-    # Use a new connection inside the callback
+    # Update persistent counters in DB; use a fresh connection inside callback
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -131,13 +120,13 @@ def on_lever_press():
         
 # TODO: Unit test to see if end_trial function is called when goal is reach.
 def on_nose_poke():
+    # Hardware callback: increments nose poke counter and checks goal logic
     global nose_poke_count
     with counter_lock:
         nose_poke_count += 1
         print("Nose poke. Count:", nose_poke_count)
-        
         try:
-            # ADDED: Only check goal if the selected interaction type is "Poke"
+            # Only trigger reward if the interaction type is Poke and goal reached
             if current_interaction_type == "Poke" and current_test_goal is not None and nose_poke_count >= current_test_goal:
                 blue_led.on()
                 water_pump.on()
@@ -145,8 +134,7 @@ def on_nose_poke():
         except Exception as e:
             print(f"Error checking trial goal on nose poke: {e}")
 
-
-    # Use a new connection inside the callback
+    # Persist nose poke increment in the DB
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -158,7 +146,7 @@ def on_nose_poke():
     finally:
         conn.close()
 
-# Re-register callbacks to ensure they remain active
+# Re-register GPIO callbacks so the hardware button events invoke our handlers
 lever.when_pressed = on_lever_press
 nose_poke_button.when_pressed = on_nose_poke
 
@@ -166,6 +154,7 @@ nose_poke_button.when_pressed = on_nose_poke
 # Disable caching to ensure React always gets fresh data
 @app.after_request
 def add_header(response):
+    # Prevent caching so frontend always gets fresh experiment data
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
