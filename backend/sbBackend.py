@@ -36,6 +36,7 @@ lever_press_count = 0
 nose_poke_count = 0
 current_test_goal = None
 testStatus = False
+testStopped = False
 # ADDED: Track which interaction type ("Lever" or "Poke") should be checked against the goal
 current_interaction_type = None
 counter_lock = threading.Lock()
@@ -63,11 +64,11 @@ def get_db_connection():
 #     nose_poke_count = 0
 #     # TODO: Set up boolean to determine when test is done 
 #     testStatus = True
-#     stop_test()
+#     pause_test()
 
 # ADDED: Extracted hardware stop logic into its own function so it can be
-# called from both end_trial() and the stop_test() route without returning a Flask response.
-def _stop_hardware():
+# called from both end_trial() and the pause_test() route without returning a Flask response.
+def stop_hardware():
     blue_led.off()
     water_pump.off()
     rgb_led.color = (0, 0, 0)
@@ -94,15 +95,82 @@ def end_trial():
     threading.Timer(reward_duration, turn_off_reward_devices).start()
 
     testStatus = True
-    # NOTE: _stop_hardware() would immediately shut everything off, which
-    # defeats the purpose of the delay above.  Remove the call so the pump
-    # actually stays on for `reward_duration` seconds.
-    # _stop_hardware()
+    # ADDED: Call stop_hardware() instead of pause_test() route handler directly
+    stop_hardware()
+"""
+def reset_counts():
+    testStatus = False
+    testStopped = False
+    testPaused = False
+    lever_press_count = 0
+    lever_press_total = 0
+    nose_poke_count = 0
+    nose_poke_total = 0
+    TimeA = 0
+    TimeB = 0
+    TimeC = 0
+    TimeD = 0
+    i = 0
+    interaction_number = 0
+"""
+
+
+
+def stop_test(): #Getting functions primed to port all logic to backend
+    try:
+        if testPaused == True:
+            print("Stopping test...")
+            testPaused = False
+            global testStopped
+            testStopped = True
+            return jsonify({"message": "Test stopped successfully!"}), 200
+        else:
+            print("Test is not paused!")
+    except Exception as e:
+        print("Error stopping test:", str(e))
+        return jsonify({"error": "Failed to stop test"}), 500
+    
+def ending_test(): #Getting functions primed to port all logic to backend
+    if testStopped == True:
+        testStatus = False
+        #Return to start page or whatever.
+
+    #reset_counts()
+
+
+
+def resume_test(): #Getting functions primed to port all logic to backend
+    try:
+        if testPaused == True:
+            print("Resuming test...")
+            testPaused = False
+            return jsonify({"message": "Test resumed successfully!"}), 200
+        else:
+            print("Test is not paused!")
+    except Exception as e:
+        print("Error resuming test:", str(e))
+        return jsonify({"error": "Failed to resume test"}), 500
+    
+
+@app.route('/api/test/stop', methods=['POST'])
+def pause_test():
+    try:
+        global testPaused
+        testPaused = True
+        print("Pausing test...")
+        # ADDED: Use stop_hardware() to centralize hardware shutdown logic
+        stop_hardware()
+
+        return jsonify({"message": "Test paused successfully!"}), 200
+    except Exception as e:
+        print("Error pausing test:", str(e))
+        return jsonify({"error": "Pause to stop test"}), 500
 
 # Callback functions to count button presses
-# TODO: Unit test to see if end_trial function is called when goal is reach.
 def on_lever_press():
     global lever_press_count
+    global lever_press_total
+    global interaction_number
     with counter_lock:
         lever_press_count += 1
         print("Lever pressed. Count:", lever_press_count)
@@ -116,6 +184,14 @@ def on_lever_press():
                 end_trial()
         except Exception as e:
             print(f"Error checking trial goal on lever press: {e}")
+        global TimeB
+        TimeB = time.process_time()
+        if ResponseFlag == False:
+            lever_press_count += 1
+            interaction_number += 1
+            print("Lever pressed. Count:", lever_press_count)
+            time.sleep(StimDur_converted)
+        lever_press_total += 1
 
     # Use a new connection inside the callback
     try:
@@ -129,23 +205,21 @@ def on_lever_press():
     finally:
         conn.close()
         
-# TODO: Unit test to see if end_trial function is called when goal is reach.
 def on_nose_poke():
     global nose_poke_count
+    global nose_poke_total
+    global interaction_number
     with counter_lock:
-        nose_poke_count += 1
-        print("Nose poke. Count:", nose_poke_count)
+        global TimeB
+        TimeB = time.process_time()
+        if ResponseFlag == False:
+            nose_poke_count += 1
+            interaction_number += 1
+            print("Nose poke. Count:", nose_poke_count)
+            time.sleep(StimDur_converted)
+        nose_poke_total += 1 
+
         
-        try:
-            # ADDED: Only check goal if the selected interaction type is "Poke"
-            if current_interaction_type == "Poke" and current_test_goal is not None and nose_poke_count >= current_test_goal:
-                blue_led.on()
-                water_pump.on()
-                end_trial()
-        except Exception as e:
-            print(f"Error checking trial goal on nose poke: {e}")
-
-
     # Use a new connection inside the callback
     try:
         conn = get_db_connection()
@@ -240,21 +314,6 @@ def simulate_nose_poke():
     on_nose_poke()
     return jsonify({"status": "simulated nose poke"}), 200
 
-
-@app.route('/api/test/stop', methods=['POST'])
-def stop_test():
-    try:
-        print("Stopping test...")
-
-        # ADDED: Use _stop_hardware() to centralize hardware shutdown logic
-        _stop_hardware()
-
-        return jsonify({"message": "Test stopped successfully!"}), 200
-    except Exception as e:
-        print("Error stopping test:", str(e))
-        return jsonify({"error": "Failed to stop test"}), 500
-
-
 # ADDED: Endpoint so the frontend can poll whether the backend has ended the test (e.g., goal reached)
 @app.route('/api/test/status', methods=['GET'])
 def get_test_status():
@@ -281,6 +340,8 @@ def get_information():
             raise Exception("Failed to connect to database")
             
         cursor = conn.cursor()
+        
+        global stimulus_type, interaction_type, reward_type, test_goal_converted, RewardStim_converted, duration, StimDur_converted, trial_goal_converted
     
         # Grabbing the information from the front-end:
         test_identification = unique_id_time_based
@@ -288,6 +349,9 @@ def get_information():
         subject_id = data.get("subjectID")
         duration = data.get("trialDuration")
         goal = data.get("goalForTrial")
+        test_goal = data.get("goalForTest")
+        RewardStim = data.get("RewaStimTime")
+        StimDur = data.get("StimTimeOn")
         cooldown = data.get("cooldown")
         reward_type = data.get("rewardType")
         interaction_type = data.get("interactionType")
@@ -296,16 +360,20 @@ def get_information():
         nose_poke_val = data.get("nosePoke")
         lever_press_val = data.get("leverPress")
         
-        # TODO: Used the int function to convert the string values to integers. 
+        # TODO:  Convert  trial_goal_converted, test_goal_converted, StimDur_converted, RewardStim_converted to float. Logic change is needed
         subject_id_converted = int(subject_id)
-        goal_converted = int(goal)
+        trial_goal_converted = int(goal)
+        test_goal_converted = int(test_goal)
+        StimDur_converted = int(StimDur)
+        RewardStim_converted = int(RewardStim)
         nose_poke_val = int(nose_poke_val)
         lever_press_val_converted = int(lever_press_val)
         nose_poke_val_converted = int(nose_poke_val)
         
         
+        
         # ADDED: Reset testStatus to False when a new test starts so stale "finished" state is cleared
-        global current_test_goal, testStatus, current_interaction_type, lever_press_count, nose_poke_count
+        global  current_test_goal, testStatus, current_interaction_type, lever_press_count, nose_poke_count
         testStatus = False
         # ADDED: Reset counters here (at the start of a new test) instead of in end_trial(),
         # so the previous test's final counts are still available for the frontend to read.
@@ -316,24 +384,28 @@ def get_information():
         blue_led.off()
         # ADDED: Store the interaction type globally so callbacks know which input to check against the goal
         current_interaction_type = interaction_type
+        
+        running_test_one_stimulus()
          # Update global goal
         try:
-             current_test_goal = int(goal_converted) if goal_converted is not None else None
+             current_test_goal = int(trial_goal_converted) if trial_goal_converted is not None else None
              print(current_test_goal)
         except ValueError:
              current_test_goal = None
 
         sql_command = """
             INSERT INTO Active_Test (
-                testID, subjectID, Name, Goal, Reward, 
-                Light, Stimulus, Interaction, Cooldown, Duration,nose_poke, lever_press
+                testID, subjectID, Name, Trial Goal, Test Goal, Duration Between Reward and Stimulus, Duration of Stimulus, Reward Type, 
+                Light, Stimulus, Interaction, Cooldown, Duration, Nose Poke Amount, Lever Press Amount
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         cursor.execute(sql_command, (
             test_identification, 
-            subject_id_converted, 
-            test_name, 
-            goal_converted, 
+            subject_id_converted,  
+            trial_goal_converted, 
+            test_goal_converted,
+            RewardStim_converted,
+            StimDur_converted,
             reward_type, 
             light_color, 
             stimulus_type, 
@@ -360,6 +432,7 @@ def get_information():
                 exit
         
         threading.Thread(target=start_light_sequence).start()
+        #threading.Thread(target=start_light_sequence).start() something Jared added. Gonna be honest, don't know what this does
         
         return jsonify({
             "message": "Start Test Successfully!",
@@ -368,7 +441,10 @@ def get_information():
                 "subjectID": subject_id_converted,
                 "testName": test_name,
                 "rewardType": reward_type,
-                "goalForTrial": goal_converted,
+                "goalForTrial": trial_goal_converted,
+                "goalForTest": test_goal_converted,
+                "RewaStimTime": RewardStim_converted,
+                "StimTimeOn": StimDur_converted,
                 "lightColor": light_color,
                 "stimulusType": stimulus_type,
                 "interactionType": interaction_type,
@@ -425,6 +501,92 @@ def update_information():
         if conn:
             conn.close()
 
+# Test stimuli
+def test_stimuli():
+    if stimulus_type == "Tone":
+        buzzer.on()
+        time.sleep(2)  # 2 seconds / replace '2' with an input from the frontend
+        buzzer.off()
+    elif stimulus_type == "Light":
+        blue_led.on()
+        time.sleep(2)
+        blue_led.off()
+    else:
+        print("Error with stimulus type.")
+        exit
+        
+# Test response/interaction
+def test_interaction():
+    if interaction_type == "Lever":
+        simulate_lever_press()
+    elif interaction_type == "Poke":
+        simulate_nose_poke()
+    else:
+        print("Error with interaction type.")
+        exit
+        
+#Test reward
+def test_reward():
+    if reward_type == "Food":
+        blue_led.on()
+        time.sleep(2)
+        blue_led.off()
+    elif reward_type == "Water":
+        water_pump.on()
+        time.sleep(2)
+        water_pump.off()
+    else:
+        print("Error with reward type.")
+        exit
+
+collectedTimes = []   
+
+def running_test_one_stimulus():
+    TimeC = time.perf_counter()
+    print(type(TimeC))
+    for i in range(1, test_goal_converted): #Keynote i is the number of the current trial. Must import from front-end and export to back-end.
+        time.sleep(RewardStim_converted) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
+        global ResponseFlag
+        if TimeC >= int(duration):
+            ending_test()
+            global goalUndone
+            goalUndone = i #Keynote Export goalUndone (number of trials completed if goal was not reached before duration ends.)
+            i = test_goal_converted
+            break
+        else:
+            if stimulus_type == "Tone":
+                buzzer.on()
+                TimeA = time.process_time()
+                time.sleep(StimDur_converted)  #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time stimulus is on).
+                buzzer.off()
+            elif stimulus_type == "Light":
+                blue_led.on()
+                TimeA = time.process_time()
+                time.sleep(StimDur_converted)
+                blue_led.off()
+                ResponseFlag = False
+            if interaction_type == "Lever" and ResponseFlag == False:
+                on_lever_press()
+            elif interaction_type == "Poke" and ResponseFlag == False:
+                on_nose_poke()
+            ResponseFlag = True
+            TimeBetween = TimeB - TimeA
+            collectedTimes.append(TimeBetween) #Keynote Export collectedTimes (collection of each trial's latency between stimulus and response.)
+            if reward_type == "Water" and trial_goal_converted >= interaction_number:
+                water_pump.on()
+                time.sleep(0.0275438596491) #Keynote .15 seconds / replace '.15' with an imported input from the frontend (Seconds reward is on.)
+                water_pump.off()
+                interaction_number = 0
+            #'''elif reward_type == "Food" and trial_goal_converted >= interaction_number:   If food availability is added.
+                #food.on()
+                #time.sleep(.15)
+                #food.off()
+                #interaction_number = 0'''
+            if i >= trial_goal_converted:
+                global TimeD
+                TimeD = time.perf_counter() # Keynote Export TimeD (Time of test if completed.)
+                ending_test()
+            i = i + 1
 
 if __name__ == '__main__':
     #TODO: Added the connection to the database to happen as soon as the application begins.

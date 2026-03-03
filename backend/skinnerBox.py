@@ -555,7 +555,7 @@ class TrialStateMachine:
                 self.time_between = (current_time - self.lastSuccessfulInteractTime).__round__(2)
             else:
                 self.time_between = 0  # Default for the first successful interaction
-
+                
             self.interactable = False
             self.currentIteration += 1
             self.give_reward()

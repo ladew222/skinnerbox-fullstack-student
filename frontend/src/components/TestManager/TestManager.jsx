@@ -22,6 +22,9 @@ const TestManager = () => {
   const [testName, setTestName] = useState("");
   const [trialDuration, setTrialDuration] = useState("");
   const [goalForTrial, setGoalForTrial] = useState("");
+  const [goalForTest, setGoalForTest] = useState("");
+  const [RewaStimTime, setRewaStimTime] = useState("");
+  const [StimTimeOn, setStimTimeOn] = useState("");
   const [cooldown, setCooldown] = useState("");
   const [rewardType, setRewardType] = useState("Water");
   const [interactionType, setInteractionType] = useState("Lever");
@@ -50,12 +53,15 @@ const TestManager = () => {
   const [testNameError, setTestNameError] = useState('');
   const [trialDurationError, setTrialDurationError] = useState('');
   const [trialGoalError, setTrialGoalError] = useState('');
+  const [testGoalError, setTestGoalError] = useState('');
+  const [RewaStimTimeError, setRewaStimTimeError] = useState('');
+  const [StimTimeOnError, setStimTimeOnError] = useState('');
   const [coolDownError, setCoolDownError] = useState('');
   const [subjectIDError, setSubjectIDError] = useState('');
 
 
   useEffect(() => {
-    setOriginalSettings({ testName, trialDuration, goalForTrial, cooldown, rewardType, interactionType, stimulusType, lightColor });
+    setOriginalSettings({ testName, trialDuration, goalForTrial, goalForTest, RewaStimTime, StimTimeOn, cooldown, rewardType, interactionType, stimulusType, lightColor });
   
     try {
         // Get presets from localStorage (defaults to empty array if not found)
@@ -71,19 +77,31 @@ const TestManager = () => {
   }, []); // Empty dependency array = run once on component mount
 
   const hasChanged = () => {
-    return JSON.stringify(originalSettings) !== JSON.stringify({ testName, trialDuration, goalForTrial, cooldown, rewardType, interactionType, stimulusType, lightColor });
+    return JSON.stringify(originalSettings) !== JSON.stringify({ testName, trialDuration, goalForTrial, goalForTest, RewaStimTime, StimTimeOn, cooldown, rewardType, interactionType, stimulusType, lightColor });
   };
 
 
   const handleSaveTest = () => {
-    if (!testName || !trialDuration || !goalForTrial || !cooldown) {
+    if (!testName || !trialDuration || !goalForTrial || !cooldown || !goalForTest || !RewaStimTime || !StimTimeOn) {
       alert("Please fill in all required fields.");
       return;
     }
 
     // const testSettings = `Test Name: ${testName}\nTrial Duration: ${trialDuration} seconds\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
     
-    const testSettings = `Preset: ${presetValue}\nTest Name: ${testName}\nSubject Identification: ${subjectID}\nTrial Duration: ${trialDuration} minutes\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
+    const testSettings = `Preset: ${presetValue}\n
+    Test Name: ${testName}\n
+    Subject Identification: ${subjectID}\n
+    Trial Duration: ${trialDuration} minutes\n
+    Goal for Trial: ${goalForTrial}\n
+    Goal for Test: ${goalForTest}\n
+    Cooldown: ${cooldown} seconds\n
+    Reward Type: ${rewardType}\n
+    Interaction Type: ${interactionType}\n
+    Stimulus Type: ${stimulusType}\n
+    Time Stimulus Active:${StimTimeOn}\n
+    Time Between Reward and New Stimulus:${RewaStimTime}\n
+    Light Color: ${lightColor}`;
 
     const blob = new Blob([testSettings], { type: "text/plain" });
     const a = document.createElement("a");
@@ -125,11 +143,14 @@ const TestManager = () => {
       setSubjectID(values[1] || "")
       setTrialDuration(values[1] ? values[1].replace(" minutes", "") : "");
       setGoalForTrial(values[2] || "");
-      setCooldown(values[3] ? values[3].replace(" seconds", "") : "");
-      setRewardType(values[4] || "Water");
-      setInteractionType(values[5] || "Lever");
-      setStimulusType(values[6] || "Light");
-      setLightColor(values[7] || "Red");
+      setGoalForTest(values[3] || "");
+      setRewaStimTime(values[4] || "");
+      setStimTimeOn(values[5] || "");
+      setCooldown(values[6] ? values[6].replace(" seconds", "") : "");
+      setRewardType(values[7] || "Water");
+      setInteractionType(values[8] || "Lever");
+      setStimulusType(values[9] || "Light");
+      setLightColor(values[10] || "Red");
     };
     reader.readAsText(file);
   };
@@ -139,6 +160,9 @@ const TestManager = () => {
     setTestName("");
     setTrialDuration("");
     setGoalForTrial("");
+    setGoalForTest("");
+    setRewaStimTime("");
+    setStimTimeOn("");
     setCooldown("");
     setRewardType("Water");
     setInteractionType("Lever");
@@ -238,6 +262,9 @@ const TestManager = () => {
       subjectID,
       trialDuration, 
       goalForTrial,
+      goalForTest,
+      RewaStimTime,
+      StimTimeOn,
       cooldown,
       rewardType, 
       interactionType, 
@@ -291,6 +318,9 @@ const TestManager = () => {
       `Subject Identification:${subjectID}`,
       `Trial Duration (minutes):${trialDuration}`,
       `Goal for Trial:${goalForTrial}`,
+      `Goal for Test:${goalForTest}`,
+      `Time between reward and stimulus:${RewaStimTime}`,
+      `How long stimulus is active:${StimTimeOn}`,
       `Cooldown (seconds):${cooldown}`,
       `Reward Type:${rewardType}`,
       `Interaction Type:${interactionType}`,
@@ -338,7 +368,10 @@ const handlePreset = (event) => {
         if (value === "Preset 1") {
             setTestName("Preset 1 Test")        // CHANGE: Set to descriptive string
             setTrialDuration(1)         // CHANGE: 1 minute duration
-            setGoalForTrial(5)          // CHANGE: Fixed to numeric value (was "Test")
+            setGoalForTrial("Test")     // CHANGE: Non-numeric goal value
+            setGoalForTest("Test")
+            setRewaStimTime(1)
+            setStimTimeOn(1)
             setCooldown(2)              // CHANGE: 2 second cooldown
             setRewardType("Food")
             setInteractionType("Lever")
@@ -352,6 +385,9 @@ const handlePreset = (event) => {
             setTrialDuration("")
             setSubjectID("")
             setGoalForTrial("")
+            setGoalForTest("")
+            setRewaStimTime("")
+            setStimTimeOn("")
             setCooldown("")
             setRewardType("")            // CHANGE: Now clears to empty instead of default "Water"
             setInteractionType("")       // CHANGE: Now clears to empty instead of default "Lever"
@@ -372,6 +408,9 @@ const handlePreset = (event) => {
                 setStimulusType(userPreset.stimulusType);
                 setLightColor(userPreset.lightColor);
                 setGoalForTrial(userPreset.goalForTrial);
+                setGoalForTest(userPreset.goalForTest);
+                setRewaStimTime(userPreset.RewaStimTime);
+                setStimTimeOn(userPreset.StimTimeOn);
                 // NOTE: testName is NOT set from preset (intentional - user should provide unique name per trial)
             }
         }
@@ -470,7 +509,7 @@ const handlePreset = (event) => {
            */}
           <div className="input-group">
             <FormControl fullWidth error={Boolean(trialGoalError)}>
-              <InputLabel htmlFor="goalForTrial">Goal for Trial:</InputLabel>
+              <InputLabel htmlFor="goalForTrial">Number of presses until reward:</InputLabel>
               <Input
                 id="txtGoalForTrial"
                 placeholder="Enter Goal"
@@ -484,6 +523,53 @@ const handlePreset = (event) => {
             </FormControl>
           </div>
           
+          <div>
+            <FormControl fullWidth error={Boolean(testGoalError)}>
+              <InputLabel htmlFor="goalForTest">Goal for Test:</InputLabel>
+              <Input
+                id="txtGoalForTest"
+                placeholder="Enter Goal"
+                required
+                value={goalForTest}
+                onChange={(e) => setGoalForTest(e.target.value)}
+                />
+                <FormHelperText>
+                  {testGoalError}
+                </FormHelperText>
+            </FormControl>
+          </div>
+
+          <div>
+            <FormControl fullWidth error={Boolean(RewaStimTimeError)}>
+              <InputLabel htmlFor="RewaStimTime">Time between reward given and stimulus activated (s):</InputLabel>
+              <Input
+                id="txtRewaStimTime"
+                placeholder="Enter Time (s)"
+                required
+                value={RewaStimTime}
+                onChange={(e) => setRewaStimTime(e.target.value)}
+                />
+                <FormHelperText>
+                  {RewaStimTimeError}
+                </FormHelperText>
+            </FormControl>
+          </div>
+          
+          <div>
+            <FormControl fullWidth error={Boolean(StimTimeOnError)}>
+              <InputLabel htmlFor="StimTimeOn">Time stimulus is on (s):</InputLabel>
+              <Input
+                id="txtStimTimeOn"
+                placeholder="Enter Time (s)"
+                required
+                value={StimTimeOn}
+                onChange={(e) => setStimTimeOn(e.target.value)}
+                />
+                <FormHelperText>
+                  {StimTimeOnError}
+                </FormHelperText>
+            </FormControl>
+          </div>
 
           {/* COOLDOWN INPUT (Required, Numeric Only, Seconds)
            * Minimum time (in seconds) that must elapse between rewards.
@@ -536,6 +622,8 @@ const handlePreset = (event) => {
                   >
                   <MenuItem value={"Poke"}>Poke</MenuItem>
                   <MenuItem value={"Lever"}>Lever</MenuItem>
+                  <MenuItem value={"Poke Then Lever"}>Poke then Lever</MenuItem>
+                  <MenuItem value={"Lever then Poke"}>Lever then Poke</MenuItem>
                 </Select>
             </FormControl>
           </div>
@@ -544,7 +632,7 @@ const handlePreset = (event) => {
             <FormControl fullWidth>
               <InputLabel id="stimulusType">Stimulus Type:</InputLabel>
                 <Select
-                  id="selectStimulasType"
+                  id="selectStimulusType"
                   value={stimulusType}
                   onChange = {(e) => setStimulusType(e.target.value)}
                 >
@@ -558,7 +646,7 @@ const handlePreset = (event) => {
             <FormControl fullWidth>
               <InputLabel id="stimulusTypeTwo">Stimulus Type:</InputLabel>
                 <Select
-                  id="selectStimulasTypeTwo"
+                  id="selectStimulusTypeTwo"
                   value={stimulusType}
                   onChange = {(e) => setStimulusType(e.target.value)}
                 >
