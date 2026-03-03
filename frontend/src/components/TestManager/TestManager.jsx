@@ -622,6 +622,8 @@ const handlePreset = (event) => {
                   >
                   <MenuItem value={"Poke"}>Poke</MenuItem>
                   <MenuItem value={"Lever"}>Lever</MenuItem>
+                  <MenuItem value={"Poke Then Lever"}>Poke then Lever</MenuItem>
+                  <MenuItem value={"Lever then Poke"}>Lever then Poke</MenuItem>
                 </Select>
             </FormControl>
           </div>

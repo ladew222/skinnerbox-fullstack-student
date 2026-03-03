@@ -500,7 +500,7 @@ collectedTimes = []
 def running_test_one_stimulus():
     TimeC = time.perf_counter
     for i in range(1, test_goal_converted): #Keynote i is the number of the current trial. Must import from front-end and export to back-end.
-        time.sleep(2) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
+        time.sleep(RewardStim_converted) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
         global ResponseFlag
         if TimeC >= int(duration):
             ending_test()
@@ -512,12 +512,12 @@ def running_test_one_stimulus():
             if stimulus_type == "Tone":
                 buzzer.on()
                 TimeA = time.process_time()
-                time.sleep(2)  #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time stimulus is on).
+                time.sleep(StimDur_coverted)  #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time stimulus is on).
                 buzzer.off()
             elif stimulus_type == "Light":
                 blue_led.on()
                 TimeA = time.process_time()
-                time.sleep(stimulus_time)
+                time.sleep(StimDur_converted)
                 blue_led.off()
                 ResponseFlag = False
             if interaction_type == "Lever" and ResponseFlag == False:
@@ -532,7 +532,7 @@ def running_test_one_stimulus():
                 time.sleep(.15) #Keynote .15 seconds / replace '.15' with an imported input from the frontend (Seconds reward is on.)
                 water_pump.off()
                 interaction_number = 0
-            #'''elif reward_type == "Food":   If food availability is added.
+            #'''elif reward_type == "Food" and trial_goal_converted >= interaction_number:   If food availability is added.
                 #food.on()
                 #time.sleep(.15)
                 #food.off()
