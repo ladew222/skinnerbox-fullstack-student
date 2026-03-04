@@ -375,8 +375,55 @@ def get_information():
         # ADDED: Store the interaction type globally so callbacks know which input to check against the goal
         current_interaction_type = interaction_type
         
-        running_test_one_stimulus()
-         # Update global goal
+        collectedTimes = []   
+
+        def running_test_one_stimulus():
+            TimeC = time.perf_counter()
+            print(type(TimeC))
+            for i in range(1, test_goal_converted): #Keynote i is the number of the current trial. Must import from front-end and export to back-end.
+                time.sleep(RewardStim_converted) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
+                global ResponseFlag
+                if TimeC >= int(duration):
+                    ending_test()
+                    global goalUndone
+                    goalUndone = i #Keynote Export goalUndone (number of trials completed if goal was not reached before duration ends.)
+                    i = test_goal_converted
+                    break
+                else:
+                    if stimulus_type == "Tone":
+                        buzzer.on()
+                        TimeA = time.process_time()
+                        time.sleep(StimDur_converted)  #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time stimulus is on).
+                        buzzer.off()
+                    elif stimulus_type == "Light":
+                        blue_led.on()
+                        TimeA = time.process_time()
+                        time.sleep(StimDur_converted)
+                        blue_led.off()
+                        ResponseFlag = False
+                    if interaction_type == "Lever" and ResponseFlag == False:
+                        on_lever_press()
+                    elif interaction_type == "Poke" and ResponseFlag == False:
+                        on_nose_poke()
+                    ResponseFlag = True
+                    TimeBetween = TimeB - TimeA
+                    collectedTimes.append(TimeBetween) #Keynote Export collectedTimes (collection of each trial's latency between stimulus and response.)
+                    if reward_type == "Water" and trial_goal_converted >= interaction_number:
+                        water_pump.on()
+                        time.sleep(0.0275438596491) #Keynote .15 seconds / replace '.15' with an imported input from the frontend (Seconds reward is on.)
+                        water_pump.off()
+                        interaction_number = 0
+                    #'''elif reward_type == "Food" and trial_goal_converted >= interaction_number:   If food availability is added.
+                        #food.on()
+                        #time.sleep(.15)
+                        #food.off()
+                        #interaction_number = 0'''
+                    if i >= trial_goal_converted:
+                        global TimeD
+                        TimeD = time.perf_counter() # Keynote Export TimeD (Time of test if completed.)
+                        ending_test()
+                    i = i + 1
+            threading.Thread(target=running_test_one_stimulus).start()
         try:
              current_test_goal = int(trial_goal_converted) if trial_goal_converted is not None else None
              print(current_test_goal)
@@ -529,54 +576,7 @@ def test_reward():
         print("Error with reward type.")
         exit
 
-collectedTimes = []   
 
-def running_test_one_stimulus():
-    TimeC = time.perf_counter()
-    print(type(TimeC))
-    for i in range(1, test_goal_converted): #Keynote i is the number of the current trial. Must import from front-end and export to back-end.
-        time.sleep(RewardStim_converted) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
-        global ResponseFlag
-        if TimeC >= int(duration):
-            ending_test()
-            global goalUndone
-            goalUndone = i #Keynote Export goalUndone (number of trials completed if goal was not reached before duration ends.)
-            i = test_goal_converted
-            break
-        else:
-            if stimulus_type == "Tone":
-                buzzer.on()
-                TimeA = time.process_time()
-                time.sleep(StimDur_converted)  #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time stimulus is on).
-                buzzer.off()
-            elif stimulus_type == "Light":
-                blue_led.on()
-                TimeA = time.process_time()
-                time.sleep(StimDur_converted)
-                blue_led.off()
-                ResponseFlag = False
-            if interaction_type == "Lever" and ResponseFlag == False:
-                on_lever_press()
-            elif interaction_type == "Poke" and ResponseFlag == False:
-                on_nose_poke()
-            ResponseFlag = True
-            TimeBetween = TimeB - TimeA
-            collectedTimes.append(TimeBetween) #Keynote Export collectedTimes (collection of each trial's latency between stimulus and response.)
-            if reward_type == "Water" and trial_goal_converted >= interaction_number:
-                water_pump.on()
-                time.sleep(0.0275438596491) #Keynote .15 seconds / replace '.15' with an imported input from the frontend (Seconds reward is on.)
-                water_pump.off()
-                interaction_number = 0
-            #'''elif reward_type == "Food" and trial_goal_converted >= interaction_number:   If food availability is added.
-                #food.on()
-                #time.sleep(.15)
-                #food.off()
-                #interaction_number = 0'''
-            if i >= trial_goal_converted:
-                global TimeD
-                TimeD = time.perf_counter() # Keynote Export TimeD (Time of test if completed.)
-                ending_test()
-            i = i + 1
 
 if __name__ == '__main__':
     #TODO: Added the connection to the database to happen as soon as the application begins.
