@@ -174,16 +174,6 @@ def on_lever_press():
     with counter_lock:
         lever_press_count += 1
         print("Lever pressed. Count:", lever_press_count)
-        try:
-            # ADDED: Only check goal if the selected interaction type is "Lever".
-            # only activate the pump when the count exactly matches the goal
-            if (current_interaction_type == "Lever" and
-                    current_test_goal is not None and
-                    lever_press_count == current_test_goal):
-                water_pump.on()
-                end_trial()
-        except Exception as e:
-            print(f"Error checking trial goal on lever press: {e}")
         global TimeB
         TimeB = time.process_time()
         if ResponseFlag == False:
