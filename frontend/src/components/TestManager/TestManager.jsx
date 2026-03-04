@@ -89,18 +89,18 @@ const TestManager = () => {
 
     // const testSettings = `Test Name: ${testName}\nTrial Duration: ${trialDuration} seconds\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
     
-    const testSettings = `Preset: ${presetValue}\n
-    Test Name: ${testName}\n
-    Subject Identification: ${subjectID}\n
-    Trial Duration: ${trialDuration} minutes\n
-    Goal for Trial: ${goalForTrial}\n
-    Goal for Test: ${goalForTest}\n
-    Cooldown: ${cooldown} seconds\n
-    Reward Type: ${rewardType}\n
-    Interaction Type: ${interactionType}\n
-    Stimulus Type: ${stimulusType}\n
-    Time Stimulus Active:${StimTimeOn}\n
-    Time Between Reward and New Stimulus:${RewaStimTime}\n
+    const testSettings = `Preset: ${presetValue}
+    Test Name: ${testName}
+    Subject Identification: ${subjectID}
+    Trial Duration: ${trialDuration} minutes
+    Goal for Trial: ${goalForTrial}
+    Goal for Test: ${goalForTest}
+    Time Between Reward and New Stimulus: ${RewaStimTime}
+    Time Stimulus Active: ${StimTimeOn}
+    Cooldown: ${cooldown} seconds
+    Reward Type: ${rewardType}
+    Interaction Type: ${interactionType}
+    Stimulus Type: ${stimulusType}
     Light Color: ${lightColor}`;
 
     const blob = new Blob([testSettings], { type: "text/plain" });
