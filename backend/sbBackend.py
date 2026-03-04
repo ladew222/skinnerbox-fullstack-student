@@ -383,29 +383,29 @@ def get_information():
         except ValueError:
              current_test_goal = None
 
-        sql_command = """
-            INSERT INTO Active_Test (
-                testID, subjectID, Name, Trial Goal, Test Goal, Duration Between Reward and Stimulus, Duration of Stimulus, Reward Type, 
-                Light, Stimulus, Interaction, Cooldown, Duration, Nose Poke Amount, Lever Press Amount
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        cursor.execute(sql_command, (
-            test_identification, 
-            subject_id_converted,  
-            trial_goal_converted, 
-            test_goal_converted,
-            RewardStim_converted,
-            StimDur_converted,
-            reward_type, 
-            light_color, 
-            stimulus_type, 
-            interaction_type, 
-            cooldown, 
-            duration,
-            nose_poke_val_converted,
-            lever_press_val_converted,
-        ))
-        conn.commit()
+        # sql_command = """
+        #     INSERT INTO Active_Test (
+        #         testID, subjectID, Name, Trial Goal, Test Goal, Duration Between Reward and Stimulus, Duration of Stimulus, Reward Type, 
+        #         Light, Stimulus, Interaction, Cooldown, Duration, Nose Poke Amount, Lever Press Amount
+        #     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)
+        # """
+        # cursor.execute(sql_command, (
+        #     test_identification, 
+        #     subject_id_converted,  
+        #     trial_goal_converted, 
+        #     test_goal_converted,
+        #     RewardStim_converted,
+        #     StimDur_converted,
+        #     reward_type, 
+        #     light_color, 
+        #     stimulus_type, 
+        #     interaction_type, 
+        #     cooldown, 
+        #     duration,
+        #     nose_poke_val_converted,
+        #     lever_press_val_converted,
+        # ))
+        # conn.commit()
         
         # Start light sequence at test start
         def start_light_sequence():
@@ -448,9 +448,9 @@ def get_information():
     except Exception as e:
         print("Error Getting Information:", str(e))
         return jsonify({"error": "Failed to Get Information"}), 500
-    finally:
-        if conn:
-            conn.close()
+    # finally:
+    #     if conn:
+    #         conn.close()
 
 
 # TODO: TASK, look into this logic to see if it would work.
