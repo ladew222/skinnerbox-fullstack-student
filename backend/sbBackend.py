@@ -423,7 +423,7 @@ def get_information():
                         TimeD = time.perf_counter() # Keynote Export TimeD (Time of test if completed.)
                         ending_test()
                     i = i + 1
-            threading.Thread(target=running_test_one_stimulus).start()
+        threading.Thread(target=running_test_one_stimulus).start()
         try:
              current_test_goal = int(trial_goal_converted) if trial_goal_converted is not None else None
              print(current_test_goal)
