@@ -31,12 +31,24 @@ blue_led = LED(25, active_high = False) #Blue light in the box
 water_pump = OutputDevice(17)
 rgb_led = RGBLED(red=6, green=5, blue=26)
 
+# Re-register callbacks to ensure they remain active
+#lever.when_pressed = on_lever_press
+#nose_poke_button.when_pressed = on_nose_poke
+
 # Global counters for interactions
 lever_press_count = 0
 nose_poke_count = 0
 current_test_goal = None
 testStatus = False
 testStopped = False
+stimulus_active = False  # Add this with your other globals at the top
+lever_press_total = 0
+interaction_number = 0
+reward_count = 0 
+ReponseFlag = True
+stimulus_active = False
+TimeB = 0 
+TimeA = 0
 # ADDED: Track which interaction type ("Lever" or "Poke") should be checked against the goal
 current_interaction_type = None
 counter_lock = threading.Lock()
@@ -167,33 +179,85 @@ def pause_test():
         return jsonify({"error": "Pause to stop test"}), 500
 
 # Callback functions to count button presses
+#def on_lever_press():
+    #global lever_press_count
+    #global lever_press_total
+    #global interaction_number
+    #with counter_lock:
+        #print("Lever pressed. Count:", lever_press_count)
+        #global TimeB
+        #TimeB = time.time()
+        #try:
+            #if :
+                #lever_press_count += 1
+                #interaction_number += 1
+                #print("Lever pressed. Count:", lever_press_count)
+                #time.sleep(StimDur_converted)
+            #lever_press_total += 1
+        #except Exception as e:
+            #print(f"Error with lever press")
+
+
 def on_lever_press():
-    global lever_press_count
-    global lever_press_total
-    global interaction_number
+    global lever_press_count, lever_press_total, interaction_number, TimeB, ResponseFlag
+
+    if stimulus_active:  # ADD THIS - ignore presses while light is on
+        print("Lever pressed during stimulus - ignored")
+        return
+
     with counter_lock:
         lever_press_count += 1
         print("Lever pressed. Count:", lever_press_count)
-        global TimeB
-        TimeB = time.process_time()
+        TimeB = time.time()
         if ResponseFlag == False:
-            lever_press_count += 1
             interaction_number += 1
-            print("Lever pressed. Count:", lever_press_count)
-            time.sleep(StimDur_converted)
+            print("Interaction number:", interaction_number)
+        ResponseFlag = True
         lever_press_total += 1
 
-    # Use a new connection inside the callback
+
+"""
+def on_lever_press():
+    global lever_press_count, lever_press_total, interaction_number, TimeB, ResponseFlag
+    TimeB = time.time()
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('UPDATE TestDB SET "Lever Presses Actual" = "Lever Presses Actual" + 1')
-        conn.commit()
-        print("Data updated - Lever Press") 
+        lever_press_count += 1
+        interaction_number += 1
+        lever_press_total += 1
+        ResponseFlag = True
+        print("Lever pressed. Count:", lever_press_count)
+        print("Lever Interaction Number. Count:", interaction_number)
     except Exception as e:
-        print(f"Database error on lever press: {e}")
-    finally:
-        conn.close()
+        print(f"Error with lever press: {e}")
+        """
+"""
+def on_lever_press():
+    global lever_press_count, lever_press_total, interaction_number, TimeB, ResponseFlag
+    if stimulus_active == False:  # Only count if stimulus is off
+        return
+    TimeB = time.time()
+    try:
+        lever_press_count += 1
+        interaction_number += 1
+        lever_press_total += 1
+        ResponseFlag = True
+        print("Lever pressed. Count:", lever_press_count)
+        print("Lever Interaction Number. Count:", interaction_number)
+    except Exception as e:
+        print(f"Error with lever press: {e}")
+        """
+
+# Use a new connection inside the callback
+try:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE TestDB SET "Lever Presses Actual" = "Lever Presses Actual" + 1')
+    conn.commit()
+    print("Data updated - Lever Press") 
+except Exception as e:
+    print(f"Database error on lever press: {e}")
+finally:
+    conn.close()
         
 def on_nose_poke():
     global nose_poke_count
@@ -201,7 +265,7 @@ def on_nose_poke():
     global interaction_number
     with counter_lock:
         global TimeB
-        TimeB = time.process_time()
+        TimeB = time.time()
         if ResponseFlag == False:
             nose_poke_count += 1
             interaction_number += 1
@@ -245,7 +309,8 @@ def get_counts():
     with counter_lock:
         counts = {
             "lever_press_count": lever_press_count,
-            "nose_poke_count": nose_poke_count
+            "nose_poke_count": nose_poke_count,
+            "reward_count": reward_count
         }
     return jsonify(counts), 200
 
@@ -359,16 +424,18 @@ def get_information():
         nose_poke_val = int(nose_poke_val)
         lever_press_val_converted = int(lever_press_val)
         nose_poke_val_converted = int(nose_poke_val)
+        duration_converted = float(duration) * 60
         
         
         
         # ADDED: Reset testStatus to False when a new test starts so stale "finished" state is cleared
-        global  current_test_goal, testStatus, current_interaction_type, lever_press_count, nose_poke_count
+        global  current_test_goal, testStatus, current_interaction_type, lever_press_count, nose_poke_count, reward_count
         testStatus = False
         # ADDED: Reset counters here (at the start of a new test) instead of in end_trial(),
         # so the previous test's final counts are still available for the frontend to read.
         lever_press_count = 0
         nose_poke_count = 0
+        reward_count = 0
         # make sure reward devices are off at the beginning of a run
         water_pump.off()
         blue_led.off()
@@ -376,59 +443,321 @@ def get_information():
         current_interaction_type = interaction_type
         
         collectedTimes = []   
-
+        """
         def running_test_one_stimulus():
-            TimeC = time.perf_counter()
+            global interaction_number, TimeB, TimeD, ResponseFlag, TimeA
+            print(trial_goal_converted)
+            TimeC = 0
+            TimeC = time.time()
+            duration_converted = float(duration)
+            test = 0
+            ResponseFlag = True
             print(type(TimeC))
-            for i in range(1, test_goal_converted): #Keynote i is the number of the current trial. Must import from front-end and export to back-end.
-                time.sleep(RewardStim_converted) #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time between reward given and stimulus activated).
-                global ResponseFlag
-                if TimeC >= int(duration):
+            print(TimeC)
+            print("running")
+            while interaction_number < trial_goal_converted:
+                # Check if duration has been exceeded
+                if time.time() - TimeC >= duration_converted:
+                    print("Duration exceeded, ending test")
                     ending_test()
-                    global goalUndone
-                    goalUndone = i #Keynote Export goalUndone (number of trials completed if goal was not reached before duration ends.)
-                    i = test_goal_converted
                     break
-                else:
-                    if stimulus_type == "Tone":
-                        buzzer.on()
-                        TimeA = time.process_time()
-                        time.sleep(StimDur_converted)  #Keynote 2 seconds / replace '2' with an imported input from the frontend (Time stimulus is on).
-                        buzzer.off()
-                    elif stimulus_type == "Light":
-                        blue_led.on()
-                        TimeA = time.process_time()
-                        time.sleep(StimDur_converted)
-                        blue_led.off()
-                        ResponseFlag = False
-                    if interaction_type == "Lever" and ResponseFlag == False:
-                        on_lever_press()
-                    elif interaction_type == "Poke" and ResponseFlag == False:
-                        on_nose_poke()
-                    ResponseFlag = True
+                    
+                time.sleep(RewardStim_converted)
+                
+                if stimulus_type == "Tone" and ResponseFlag == True:
+                    buzzer.on()
+                    TimeA = time.time()
+                    time.sleep(StimDur_converted)
+                    buzzer.off()
+                    ResponseFlag = False
+                elif stimulus_type == "Light" and ResponseFlag == True:
+                    blue_led.on()
+                    TimeA = time.time()
+                    time.sleep(StimDur_converted)
+                    blue_led.off()
+                    ResponseFlag = False
+                    
+                # REMOVED: manual calls to on_lever_press and on_nose_poke
+                
+                TimeBetween = TimeB - TimeA
+                if TimeB > 0:
                     TimeBetween = TimeB - TimeA
-                    collectedTimes.append(TimeBetween) #Keynote Export collectedTimes (collection of each trial's latency between stimulus and response.)
-                    if reward_type == "Water" and trial_goal_converted >= interaction_number:
+                    collectedTimes.append(TimeBetween)
+                
+                if reward_type == "Water" and trial_goal_converted <= interaction_number:
+                    print("Pump Running")
+                    water_pump.on()
+                    time.sleep(0.5)
+                    water_pump.off()
+                    interaction_number = 0
+                    ResponseFlag = True
+                    if(ResponseFlag == True):
+                        if stimulus_type == "Tone" and ResponseFlag == True:
+                            buzzer.on()
+                            TimeA = time.time()
+                            time.sleep(StimDur_converted)
+                            buzzer.off()
+                            ResponseFlag = False
+                            
+                        elif stimulus_type == "Light" and ResponseFlag == True:
+                            blue_led.on()
+                            TimeA = time.time()
+                            time.sleep(StimDur_converted)
+                            blue_led.off()
+                            ResponseFlag = False
+                        
+                    if reward_type == "Water" and trial_goal_converted <= interaction_number:
+                        print("Pump Running")
                         water_pump.on()
-                        time.sleep(0.0275438596491) #Keynote .15 seconds / replace '.15' with an imported input from the frontend (Seconds reward is on.)
+                        time.sleep(0.5)
                         water_pump.off()
                         interaction_number = 0
-                    #'''elif reward_type == "Food" and trial_goal_converted >= interaction_number:   If food availability is added.
-                        #food.on()
-                        #time.sleep(.15)
-                        #food.off()
-                        #interaction_number = 0'''
-                    if i >= trial_goal_converted:
-                        global TimeD
-                        TimeD = time.perf_counter() # Keynote Export TimeD (Time of test if completed.)
-                        ending_test()
-                    i = i + 1
+                        ResponseFlag = True
+                    
+                if lever_press_count >= test_goal_converted:
+                    TimeD = time.time() - TimeC
+                    print("Temp")
+                    end_trial()
+                    break
+
+        threading.Thread(target=running_test_one_stimulus).start()
+        """
+        """
+        def running_test_one_stimulus():
+            global interaction_number, TimeB, TimeD, ResponseFlag, TimeA
+            TimeC = time.time()
+            duration_converted = float(duration) * 60  # convert minutes to seconds
+            print("running")
+            
+            while interaction_number < test_goal_converted:
+                # Check if duration has been exceeded
+                if time.time() - TimeC >= duration_converted:
+                    print("Duration exceeded, ending test")
+                    ending_test()
+                    break
+                    
+                time.sleep(RewardStim_converted)
+                
+                # Stimulus runs every iteration
+                if stimulus_type == "Tone":
+                    buzzer.on()
+                    TimeA = time.time()
+                    time.sleep(StimDur_converted)
+                    buzzer.off()
+                    ResponseFlag = False
+                elif stimulus_type == "Light":
+                    blue_led.on()
+                    TimeA = time.time()
+                    time.sleep(StimDur_converted)
+                    blue_led.off()
+                    ResponseFlag = False
+                
+                if TimeB > 0:
+                    TimeBetween = TimeB - TimeA
+                    collectedTimes.append(TimeBetween)
+                
+                # Pump only turns on when trial_goal_converted is reached
+                if reward_type == "Water" and interaction_number >= trial_goal_converted:
+                    print("Pump Running")
+                    water_pump.on()
+                    time.sleep(0.5)
+                    water_pump.off()
+                    interaction_number = 0
+                    ResponseFlag = True
+                    
+                if lever_press_count >= test_goal_converted:
+                    TimeD = time.time() - TimeC
+                    print("Temp")
+                    end_trial()
+                    break
+
         threading.Thread(target=running_test_one_stimulus).start()
         try:
              current_test_goal = int(trial_goal_converted) if trial_goal_converted is not None else None
              print(current_test_goal)
         except ValueError:
              current_test_goal = None
+        """
+
+        
+        def running_test_one_stimulus():
+            global interaction_number, TimeB, TimeD, ResponseFlag, TimeA, stimulus_active,TimeC, ReponseFlag, reward_count
+            TimeC = time.time()
+            duration_converted = float(duration) * 60
+            print("running")
+            
+            # Turn on stimulus at the beginning
+            if stimulus_type == "Tone":
+                buzzer.on()
+                TimeA = time.time()
+                time.sleep(StimDur_converted)
+                buzzer.off()
+                ResponseFlag = False
+            elif stimulus_type == "Light":
+               stimulus_active = True   # ADD before light turns on
+               blue_led.on()
+               TimeA = time.time()
+               time.sleep(StimDur_converted)
+               blue_led.off()
+               stimulus_active = False  # ADD after light turns off
+            ResponseFlag = False
+               #blue_led.on()
+               #TimeA = time.time()
+               #time.sleep(StimDur_converted)
+               #blue_led.off()
+               #ResponseFlag = False
+            #elif stimulus_type == "Light":
+                #stimulus_active = True
+                #blue_led.on()
+                #TimeA = time.time()
+                #time.sleep(StimDur_converted)
+                #blue_led.off()
+                #stimulus_active = False  # Now lever press will count
+                #ResponseFlag = False
+            
+            while lever_press_count < test_goal_converted:
+                # Check if duration has been exceeded
+                if time.time() - TimeC >= duration_converted:
+                    print("Duration exceeded, ending test")
+                    ending_test()
+                    break
+                
+                # Wait here until lever is pressed
+                while ResponseFlag == False:
+                    time.sleep(RewardStim_converted)
+                
+                if TimeB > 0:
+                    TimeBetween = TimeB - TimeA
+                    collectedTimes.append(TimeBetween)
+                    TimeB = 0
+                
+                # Pump only turns on when trial_goal_converted is reached
+                if reward_type == "Water" and interaction_number >= trial_goal_converted:
+                    print("Pump Running")
+                    water_pump.on()
+                    time.sleep(0.0275438596491)
+                    #time.sleep(1)
+                    water_pump.off()
+                    interaction_number = 0
+                    reward_count += 1
+                    print(reward_count)
+                        
+                    
+                if lever_press_count >= test_goal_converted:
+                    TimeD = time.time() - TimeC
+                    print("Temp")
+                    end_trial()
+                    break
+                
+                time.sleep(RewardStim_converted)
+                
+                # Turn on stimulus again after lever press
+                if stimulus_type == "Tone":
+                    stimulus_active = True   # ADD
+                    buzzer.on()
+                    TimeA = time.time()
+                    time.sleep(StimDur_converted)
+                    buzzer.off()
+                    stimulus_active = False  # ADD
+                    #buzzer.on()
+                    #TimeA = time.time()
+                    #time.sleep(StimDur_converted)
+                    #buzzer.off()
+                  
+                elif stimulus_type == "Light":
+                     stimulus_active = True   # ADD before light turns on
+                     blue_led.on()
+                     TimeA = time.time()
+                     time.sleep(StimDur_converted)
+                     blue_led.off()
+                     stimulus_active = False
+                   # blue_led.on()
+                   # TimeA = time.time()
+                   # time.sleep(StimDur_converted)
+                   # blue_led.off()
+                ResponseFlag = False
+        threading.Thread(target=running_test_one_stimulus).start()
+        try:
+             current_test_goal = int(trial_goal_converted)	 if trial_goal_converted is not None else None
+             print(current_test_goal)
+        except ValueError:
+             current_test_goal = None
+            
+        """
+        def running_test_one_stimulus():
+         global interaction_number, TimeB, TimeD, ResponseFlag, TimeA,TimeC
+
+         TimeC = time.time()
+         duration_converted = float(duration) * 60
+         interaction_number = 0
+         print("Test running")
+
+    	 # Play stimulus before the loop starts
+         if stimulus_type == "Tone":
+           buzzer.on()
+           TimeA = time.time()
+           time.sleep(StimDur_converted)
+           buzzer.off()
+         elif stimulus_type == "Light":
+           blue_led.on()
+           TimeA = time.time()
+           time.sleep(StimDur_converted)
+           blue_led.off()
+         ResponseFlag = False
+
+        while lever_press_count < test_goal_converted:
+
+         # Check duration
+         if time.time() - TimeC >= duration_converted:
+            print("Duration exceeded, ending test")
+            end_trial()
+            break
+
+         # Log latency if a response happened
+         if TimeB > 0:
+            TimeBetween = TimeB - TimeA
+            collectedTimes.append(TimeBetween)
+            TimeB = 0  # Reset so it doesn't log again next iteration
+
+         # Check reward condition
+         if reward_type == "Water" and interaction_number >= trial_goal_converted:
+            print("Pump running")
+            water_pump.on()
+            time.sleep(0.0275438596491)
+            water_pump.off()
+            interaction_number = 0
+
+         # Check if test goal reached
+         if lever_press_count >= test_goal_converted:
+            TimeD = time.time() - TimeC
+            print("Test goal reached")
+            end_trial()
+            break
+
+         # Wait between reward and next stimulus
+         time.sleep(RewardStim_converted)
+
+         # Play stimulus again
+         if stimulus_type == "Tone":
+            buzzer.on()
+            TimeA = time.time()
+            time.sleep(StimDur_converted)
+            buzzer.off()
+         elif stimulus_type == "Light":
+            blue_led.on()
+            TimeA = time.time()
+            time.sleep(StimDur_converted)
+            blue_led.off()
+         ResponseFlag = False
+
+        threading.Thread(target=running_test_one_stimulus).start()
+        try:
+             current_test_goal = int(trial_goal_converted) if trial_goal_converted is not None else None
+             print(current_test_goal)
+        except ValueError:
+             current_test_goal = None
+         """
+
 
         # sql_command = """
         #     INSERT INTO Active_Test (
@@ -468,7 +797,7 @@ def get_information():
                 print("Error with stimulus type.")
                 exit
         
-        threading.Thread(target=start_light_sequence).start()
+       # threading.Thread(target=start_light_sequence).start()
         #threading.Thread(target=start_light_sequence).start() something Jared added. Gonna be honest, don't know what this does
         
         return jsonify({
@@ -575,7 +904,7 @@ def test_reward():
     else:
         print("Error with reward type.")
         exit
-
+    
 
 
 if __name__ == '__main__':

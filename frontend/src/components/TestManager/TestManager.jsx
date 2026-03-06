@@ -58,6 +58,7 @@ const TestManager = () => {
   const [StimTimeOnError, setStimTimeOnError] = useState('');
   const [coolDownError, setCoolDownError] = useState('');
   const [subjectIDError, setSubjectIDError] = useState('');
+  const lastRewardedCount = useRef(-1);
 
 
   useEffect(() => {
@@ -172,6 +173,7 @@ const TestManager = () => {
   };
 
   // TODO: Task, change logic to send it to the back-end
+
   useEffect(() => {
     let interval;
     if (testRunning) {
@@ -191,7 +193,7 @@ const TestManager = () => {
 
           const count = interactionType === "Lever" ? data.lever_press_count : data.nose_poke_count;
           const goal = parseInt(goalForTrial);
-
+          {/*
           if (goal > 0 && count > 0 && count % goal === 0) {
             const now = Date.now();
             if (now - lastRewardTime >= parseInt(cooldown) * 1000) {
@@ -203,6 +205,8 @@ const TestManager = () => {
               setRewardCount(prev => prev + 1);
             }
           }
+          */}
+          setRewardCount(data.reward_count);
 
 
           // TODO: TASK, understand logic that is dealing with the timer
@@ -233,6 +237,33 @@ const TestManager = () => {
     }
     return () => clearInterval(interval);
   }, [testRunning]);
+  
+  const handleResumeTest = async () => {
+    try {
+        setTestPaused(false);
+        setTestRunning(true);
+        // Just restart the polling, don't reset anything
+        await runTest({
+            testName,
+            subjectID,
+            trialDuration,
+            goalForTrial,
+            goalForTest,
+            RewaStimTime,
+            StimTimeOn,
+            cooldown,
+            rewardType,
+            interactionType,
+            stimulusType,
+            lightColor,
+            leverPress: leverPressCount,
+            nosePoke: nosePokeCount
+        });
+    } catch (error) {
+        console.error("Error resuming test:", error);
+    }
+};
+
 
   const handleRunTest = async () => {
     if (!testName || !trialDuration) {
@@ -296,6 +327,7 @@ const TestManager = () => {
       setTestRunning(false);
       const finalCounts = await getCounts();
       setTestResults(finalCounts);
+      setRewardCount(finalCounts.reward_count);  // ADD THIS
       if (autoStop) {
         setTestFinished(true);
       } else {
@@ -332,7 +364,7 @@ const TestManager = () => {
       `Lever Press Count:${testResults.lever_press_count}`,
       `Nose Poke Count:${testResults.nose_poke_count}`,
       `Light Status:${testResults.light_on ? "ON" : "OFF"}`,
-      `Rewards Given:${rewardCount}`
+      `Rewards Given:${testResults.reward_count}`
     ];
     const csvData = csvLines.join("\n");
     const blob = new Blob([csvData], { type: "text/csv" });
@@ -579,11 +611,11 @@ const handlePreset = (event) => {
            */}
           <div className="input-group">
              <FormControl fullWidth error={Boolean(coolDownError)}>
-              <InputLabel htmlFor="coolDown">Cooldown:</InputLabel>
+              <InputLabel htmlFor="coolDown">Cooldown(Do Not Not To Fill Out):</InputLabel>
               <Input
                 id="txtCooldown"
                 placeholder="Enter Cooldown"
-                required
+                inputProps={{ readOnly: true }}
                 min = "0"
                 value={cooldown}
                 onChange={(e) => {
@@ -709,7 +741,8 @@ const handlePreset = (event) => {
               {testRunning && <button className="stop-button" onClick={() => handleStopTest(false)}>Stop Test</button>}
               {testPaused && (
                 <>
-                  <button className="resume-button" onClick={handleRunTest}>Resume</button>
+                  {/*<button className="resume-button" onClick={handleRunTest}>Resume</button>  */}
+                  <button className="resume-button" onClick={handleResumeTest}>Resume</button>
                   <button className="finish-button" onClick={() => { setTestPaused(false); setTestFinished(true); }}>Finish Test</button>
                   <button className="return-button" onClick={() => { setTestPaused(false); setTestResults(null); }}>Return to Test Setup</button>
                 </>
