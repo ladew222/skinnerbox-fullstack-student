@@ -588,11 +588,12 @@ def get_information():
             
             # Turn on stimulus at the beginning
             if stimulus_type == "Tone":
-                buzzer.on()
-                TimeA = time.time()
-                time.sleep(StimDur_converted)
-                buzzer.off()
-                ResponseFlag = False
+               stimulus_active = True   # ADD
+               buzzer.on()
+               TimeA = time.time()
+               time.sleep(StimDur_converted)
+               buzzer.off()
+               stimulus_active = False  # ADD
             elif stimulus_type == "Light":
                stimulus_active = True   # ADD before light turns on
                blue_led.on()
