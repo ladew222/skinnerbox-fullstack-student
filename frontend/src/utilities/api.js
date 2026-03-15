@@ -184,6 +184,16 @@ export const updateAdminUserStatus = async (userId, status) => {
   }
 };
 
+export const resetAdminUserPassword = async (userId, password) => {
+  try {
+    const response = await apiClient.post(`/api/auth/admin/users/${userId}/password`, { password });
+    return response.data;
+  } catch (error) {
+    console.error('Error resetting user password:', error);
+    rethrowNormalizedError(error, 'PASSWORD_RESET_ERROR', 'Unable to reset the selected user password.');
+  }
+};
+
 export const getPresets = async () => {
   try {
     const response = await apiClient.get('/api/presets');
@@ -265,6 +275,16 @@ export const primePump = async (durationSeconds) => {
   }
 };
 
+export const testBuzzer = async () => {
+  try {
+    const response = await apiClient.post('/api/buzzer/test');
+    return response.data;
+  } catch (error) {
+    console.error('Error testing buzzer:', error);
+    rethrowNormalizedError(error, 'BUZZER_TEST_ERROR', 'Unable to play the buzzer test.');
+  }
+};
+
 // Test Management
 export const runTest = async (testSettings) => {
   try {
@@ -303,6 +323,16 @@ export const getResults = async () => {
   } catch (error) {
     console.error('Error getting saved results:', error);
     rethrowNormalizedError(error, 'RESULTS_FETCH_ERROR', 'Unable to fetch saved test results.');
+  }
+};
+
+export const deleteResult = async (resultId) => {
+  try {
+    const response = await apiClient.delete(`/api/results/${encodeURIComponent(resultId)}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting saved result:', error);
+    rethrowNormalizedError(error, 'RESULT_DELETE_ERROR', 'Unable to delete the selected saved trial.');
   }
 };
 

@@ -37,10 +37,26 @@ test('renders the home page and primary navigation', () => {
   );
 
   expect(
-    screen.getByRole('heading', { name: /welcome to the skinner box user application/i })
+    screen.getByRole('heading', { name: /skinnerbox trial control/i })
   ).toBeInTheDocument();
+  expect(screen.getByText(/run authenticated behavioral experiments from one place/i)).toBeInTheDocument();
   expect(screen.getAllByRole('link', { name: /log in/i }).length).toBeGreaterThan(0);
   expect(screen.getByRole('link', { name: /register/i })).toBeInTheDocument();
+  expect(screen.getAllByRole('link', { name: /about us/i }).length).toBeGreaterThan(0);
+});
+
+test('renders the hawk works about page', () => {
+  render(
+    <MemoryRouter initialEntries={['/About']}>
+      <App />
+    </MemoryRouter>
+  );
+
+  expect(screen.getByRole('heading', { name: /about us/i })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /hawk works at viterbo university/i })).toHaveAttribute(
+    'href',
+    'https://www.viterbo.edu/engineering/hawk-works'
+  );
 });
 
 test('renders the trial setup for an authenticated operator', async () => {
@@ -63,5 +79,30 @@ test('renders the trial setup for an authenticated operator', async () => {
 
   expect(await screen.findByRole('heading', { name: /save current settings as preset/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /run test/i })).toBeInTheDocument();
-  expect(screen.getByText(/one fixed stimulus light/i)).toBeInTheDocument();
+  expect(screen.getByText(/the backend owns the timing, counts, rewards/i)).toBeInTheDocument();
+});
+
+test('renders the real-time pump prime controls on the I/O testing page', async () => {
+  sessionStorage.setItem('skinnerbox.authToken', 'test-token');
+  sessionStorage.setItem(
+    'skinnerbox.authUser',
+    JSON.stringify({
+      id: 1,
+      email: 'operator@example.com',
+      displayName: 'Operator User',
+      role: 'operator',
+    })
+  );
+
+  render(
+    <MemoryRouter initialEntries={['/IoTesting']}>
+      <App />
+    </MemoryRouter>
+  );
+
+  expect(await screen.findByRole('heading', { name: /i\/o testing/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /play buzzer test/i })).toBeInTheDocument();
+  expect(screen.getByText(/confirm the passive buzzer can be heard/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /prime now/i })).toBeInTheDocument();
+  expect(screen.getByText(/does not start, queue, or change a test/i)).toBeInTheDocument();
 });

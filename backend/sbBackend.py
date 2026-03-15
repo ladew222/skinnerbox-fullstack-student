@@ -15,7 +15,7 @@ from flask import Flask, g, jsonify, request
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
-from auth import SQLiteAuthRepository
+from auth import AuthenticatedUser, SQLiteAuthRepository
 from display_adapter import StatusDisplay
 from gpio_adapter import Button, LED, OutputDevice, PassiveBuzzer
 from shared_errors import ApiError, ConfigurationError
@@ -64,7 +64,7 @@ class TestConfiguration:
         if not isinstance(payload, dict):
             raise ConfigurationError("Request body must be a JSON object.")
 
-        return cls(
+        configuration = cls(
             test_id=_coerce_int(payload.get("testID"), "testID", default=_default_test_id()),
             test_name=_coerce_text(payload.get("testName"), "testName", default="Untitled Test"),
             subject_id=_coerce_int(payload.get("subjectID"), "subjectID", default=0),
@@ -89,6 +89,30 @@ class TestConfiguration:
                 default=DEFAULT_END_CHIME_PATTERN,
             ),
         )
+        configuration.validate()
+        return configuration
+
+    def validate(self) -> None:
+        """Reject impossible or confusing test combinations before a run starts."""
+
+        if not self.test_name.strip():
+            raise ConfigurationError("testName is required.")
+        if self.subject_id <= 0:
+            raise ConfigurationError("subjectID must be greater than 0.")
+        if self.trial_duration_minutes <= 0:
+            raise ConfigurationError("trialDuration must be greater than 0.")
+        if self.goal_for_trial <= 0:
+            raise ConfigurationError("goalForTrial must be greater than 0.")
+        if self.goal_for_test <= 0:
+            raise ConfigurationError("goalForTest must be greater than 0.")
+        if self.goal_for_test < self.goal_for_trial:
+            raise ConfigurationError("goalForTest must be greater than or equal to goalForTrial.")
+        if self.reward_delay_seconds < 0:
+            raise ConfigurationError("RewaStimTime cannot be negative.")
+        if self.stimulus_duration_seconds < 0:
+            raise ConfigurationError("StimTimeOn cannot be negative.")
+        if self.cooldown_seconds < 0:
+            raise ConfigurationError("cooldown cannot be negative.")
 
     def to_response_payload(self) -> dict[str, object]:
         """Return the normalized configuration using the frontend's expected keys."""
@@ -109,6 +133,34 @@ class TestConfiguration:
             "trialDuration": self.trial_duration_minutes,
             "endChimeEnabled": self.end_chime_enabled,
             "endChimePattern": self.end_chime_pattern,
+        }
+
+
+@dataclass(slots=True)
+class ConductedBySnapshot:
+    """Small user snapshot stored on each saved test result for later reporting."""
+
+    user_id: int
+    email: str
+    display_name: str
+
+    @classmethod
+    def from_authenticated_user(cls, user: AuthenticatedUser) -> "ConductedBySnapshot":
+        """Capture the stable operator details we want to keep with a saved test."""
+
+        return cls(
+            user_id=user.user_id,
+            email=user.email,
+            display_name=user.display_name,
+        )
+
+    def to_response_payload(self) -> dict[str, object]:
+        """Return the operator snapshot in the same shape the frontend uses elsewhere."""
+
+        return {
+            "id": self.user_id,
+            "email": self.email,
+            "displayName": self.display_name,
         }
 
 
@@ -246,6 +298,9 @@ class SQLiteTestRepository:
                 elapsed_seconds REAL DEFAULT 0,
                 end_chime_enabled INTEGER DEFAULT 0,
                 end_chime_pattern TEXT DEFAULT '',
+                conducted_by_user_id INTEGER,
+                conducted_by_email TEXT DEFAULT '',
+                conducted_by_display_name TEXT DEFAULT '',
                 created_at TEXT,
                 updated_at TEXT
             )
@@ -272,6 +327,9 @@ class SQLiteTestRepository:
             "elapsed_seconds": "REAL DEFAULT 0",
             "end_chime_enabled": "INTEGER DEFAULT 0",
             "end_chime_pattern": "TEXT DEFAULT ''",
+            "conducted_by_user_id": "INTEGER",
+            "conducted_by_email": "TEXT DEFAULT ''",
+            "conducted_by_display_name": "TEXT DEFAULT ''",
             "created_at": "TEXT",
             "updated_at": "TEXT",
         }
@@ -371,6 +429,7 @@ class SQLiteTestRepository:
         configuration: TestConfiguration,
         counts: dict[str, int],
         status: str,
+        conducted_by: ConductedBySnapshot | None = None,
     ) -> None:
         """Insert or replace the current test configuration and its latest counters."""
         now = self._timestamp()
@@ -399,9 +458,12 @@ class SQLiteTestRepository:
                         elapsed_seconds,
                         end_chime_enabled,
                         end_chime_pattern,
+                        conducted_by_user_id,
+                        conducted_by_email,
+                        conducted_by_display_name,
                         created_at,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(testID) DO UPDATE SET
                         subjectID = excluded.subjectID,
                         Name = excluded.Name,
@@ -422,6 +484,9 @@ class SQLiteTestRepository:
                         elapsed_seconds = excluded.elapsed_seconds,
                         end_chime_enabled = excluded.end_chime_enabled,
                         end_chime_pattern = excluded.end_chime_pattern,
+                        conducted_by_user_id = excluded.conducted_by_user_id,
+                        conducted_by_email = excluded.conducted_by_email,
+                        conducted_by_display_name = excluded.conducted_by_display_name,
                         updated_at = excluded.updated_at
                     """,
                     (
@@ -445,6 +510,9 @@ class SQLiteTestRepository:
                         counts.get("elapsed_seconds", 0),
                         int(configuration.end_chime_enabled),
                         configuration.end_chime_pattern,
+                        conducted_by.user_id if conducted_by else None,
+                        conducted_by.email if conducted_by else "",
+                        conducted_by.display_name if conducted_by else "",
                         now,
                         now,
                     ),
@@ -554,6 +622,9 @@ class SQLiteTestRepository:
                         elapsed_seconds,
                         end_chime_enabled,
                         end_chime_pattern,
+                        conducted_by_user_id,
+                        conducted_by_email,
+                        conducted_by_display_name,
                         created_at,
                         updated_at
                     FROM Active_Test
@@ -571,6 +642,46 @@ class SQLiteTestRepository:
             ) from error
 
         return [self._row_to_result(row) for row in rows]
+
+    def delete_result(self, result_id: str) -> None:
+        """Delete one saved test run by its stable test identifier."""
+
+        normalized_result_id = str(result_id or "").strip()
+        if not normalized_result_id:
+            raise ApiError(
+                code="RESULT_NOT_FOUND",
+                message="The requested saved trial was not found.",
+                status=404,
+                details={"resultId": result_id},
+            )
+
+        try:
+            with self.connect() as connection:
+                cursor = connection.execute(
+                    """
+                    DELETE FROM Active_Test
+                    WHERE CAST(testID AS TEXT) = ?
+                    """,
+                    (normalized_result_id,),
+                )
+                connection.commit()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="RESULT_DELETE_ERROR",
+                message="Unable to delete the selected saved trial.",
+                status=500,
+                details={"reason": str(error), "resultId": normalized_result_id},
+            ) from error
+
+        if cursor.rowcount == 0:
+            raise ApiError(
+                code="RESULT_NOT_FOUND",
+                message="The requested saved trial was not found.",
+                status=404,
+                details={"resultId": normalized_result_id},
+            )
 
     def list_presets(self, user_id: int) -> list[dict[str, object]]:
         """Return the saved presets for one authenticated user."""
@@ -807,6 +918,11 @@ class SQLiteTestRepository:
             "stimulusDescription": _describe_stimulus(row["Stimulus"] or "", row["Light"] or ""),
             "endChimeEnabled": bool(row["end_chime_enabled"] or 0),
             "endChimePattern": row["end_chime_pattern"] or DEFAULT_END_CHIME_PATTERN,
+            "conductedBy": {
+                "id": row["conducted_by_user_id"],
+                "email": row["conducted_by_email"] or "",
+                "displayName": row["conducted_by_display_name"] or "",
+            },
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
         }
@@ -855,11 +971,16 @@ class SkinnerHardware:
     END_CHIME_GAP_SECONDS = 0.05
     ERROR_BLINK_INTERVAL_SECONDS = 0.25
     STARTUP_IP_DISPLAY_SECONDS = 10
+    LEVER_INPUT_GPIO = 23
+    NOSE_POKE_INPUT_GPIO = 16
 
     def __init__(self) -> None:
         # Input devices used to detect user interactions inside the box.
-        self.lever_button = Button(23, pull_up=False, bounce_time=0.15)
-        self.nose_poke_button = Button(18, pull_up=False)
+        self.lever_button = Button(self.LEVER_INPUT_GPIO, pull_up=False, bounce_time=0.15)
+
+        # The nose-poke distance sensor is wired as a simple digital trigger, so
+        # the backend can treat it like the other GPIO input callbacks.
+        self.nose_poke_button = Button(self.NOSE_POKE_INPUT_GPIO, pull_up=False)
 
         # Trial hardware that affects the experiment itself.
         self.buzzer = PassiveBuzzer(27)
@@ -1375,10 +1496,19 @@ class TestSessionManager:
         self.hardware.register_status_refresh(self._refresh_status_display)
         self._refresh_status_display()
 
-    def configure_test(self, payload: dict) -> TestConfiguration:
+    def configure_test(
+        self,
+        payload: dict,
+        current_user: AuthenticatedUser | None = None,
+    ) -> TestConfiguration:
         """Save incoming test settings and reset runtime state for a fresh run."""
         try:
             configuration = TestConfiguration.from_payload(payload)
+            conducted_by = (
+                ConductedBySnapshot.from_authenticated_user(current_user)
+                if current_user is not None
+                else None
+            )
             initial_lever_presses = _coerce_int(payload.get("leverPress"), "leverPress", default=0)
             initial_nose_pokes = _coerce_int(payload.get("nosePoke"), "nosePoke", default=0)
 
@@ -1402,10 +1532,16 @@ class TestSessionManager:
                 self.last_stimulus_started_at = 0.0
                 self.last_response_at = 0.0
                 self.last_error = None
+                self.active_conducted_by = conducted_by
                 self.latencies.clear()
                 counts = self._counts_locked()
 
-            self.repository.save_configuration(configuration, counts, "configured")
+            self.repository.save_configuration(
+                configuration,
+                counts,
+                "configured",
+                conducted_by,
+            )
             self._refresh_status_display()
             return configuration
         except ApiError as error:
@@ -1421,19 +1557,26 @@ class TestSessionManager:
             self._remember_error(api_error)
             raise api_error from error
 
-    def start_test(self, payload: dict | None = None) -> None:
+    def start_test(
+        self,
+        payload: dict | None = None,
+        current_user: AuthenticatedUser | None = None,
+    ) -> None:
         """Start the background test loop after a configuration has been provided."""
         start_prepared = False
         worker_thread: threading.Thread | None = None
         try:
             if payload and self.active_test is None:
-                self.configure_test(payload)
+                self.configure_test(payload, current_user=current_user)
 
             with self.lock:
                 if self.active_test is None:
                     raise ConfigurationError("No test configuration has been saved yet.")
                 if self.test_running:
                     return
+
+                if current_user is not None:
+                    self.active_conducted_by = ConductedBySnapshot.from_authenticated_user(current_user)
 
                 self.hardware.clear_error_state()
                 self.stop_event = threading.Event()
@@ -1451,9 +1594,17 @@ class TestSessionManager:
                 self.worker_thread = worker_thread
                 counts = self._counts_locked()
                 test_id = self.active_test.test_id
+                active_test = self.active_test
+                active_conducted_by = self.active_conducted_by
                 start_prepared = True
 
             self.hardware.set_running_indicator(True)
+            self.repository.save_configuration(
+                active_test,
+                counts,
+                "running",
+                active_conducted_by,
+            )
             self.repository.update_counts(test_id, counts, status="running")
             if worker_thread is not None:
                 worker_thread.start()
@@ -1565,6 +1716,7 @@ class TestSessionManager:
                 "testFinished": self.test_finished,
                 "testRunning": self.test_running,
                 "testPaused": self.test_paused,
+                "conductedBy": self._conducted_by_payload_locked(),
                 "error": self.last_error,
             }
 
@@ -1601,6 +1753,41 @@ class TestSessionManager:
             api_error = ApiError(
                 code="PUMP_PRIME_ERROR",
                 message="Unable to prime the pump.",
+                status=500,
+                details={"reason": str(error)},
+            )
+            self._remember_error(api_error)
+            raise api_error from error
+
+    def test_buzzer(self, payload: dict | None = None) -> dict[str, object]:
+        """Play a short buzzer chirp from the I/O page while no test is running."""
+
+        payload = payload or {}
+        pattern = str(payload.get("pattern") or "523:0.08,659:0.08")
+        try:
+            with self.lock:
+                if self.test_running:
+                    raise ApiError(
+                        code="BUZZER_TEST_BLOCKED",
+                        message="Stop the current test before playing the buzzer test.",
+                        status=409,
+                        details={"testRunning": True},
+                    )
+
+            self.hardware.clear_error_state()
+            self.hardware.play_end_chime(pattern)
+            self._refresh_status_display()
+            return {
+                "message": "Buzzer test played successfully.",
+                "pattern": pattern,
+            }
+        except ApiError as error:
+            self._remember_error(error)
+            raise
+        except Exception as error:
+            api_error = ApiError(
+                code="BUZZER_TEST_ERROR",
+                message="Unable to play the buzzer test.",
                 status=500,
                 details={"reason": str(error)},
             )
@@ -1839,6 +2026,7 @@ class TestSessionManager:
         self.last_stimulus_started_at = 0.0
         self.last_response_at = 0.0
         self.last_error = None
+        self.active_conducted_by: ConductedBySnapshot | None = None
 
     def _advance_sequence_locked(self, interaction: str, configured_interaction: str) -> bool:
         """Check whether the latest input completes the configured interaction pattern."""
@@ -1883,6 +2071,13 @@ class TestSessionManager:
         if self.test_paused:
             return "paused"
         return "configured"
+
+    def _conducted_by_payload_locked(self) -> dict[str, object] | None:
+        """Expose the current operator snapshot in the frontend's expected shape."""
+
+        if self.active_conducted_by is None:
+            return None
+        return self.active_conducted_by.to_response_payload()
 
     def _elapsed_seconds(self) -> float:
         """Thread-safe helper for total elapsed runtime across pauses/resumes."""
@@ -2369,6 +2564,25 @@ def update_admin_user_status(user_id: int):
     ), 200
 
 
+@app.route("/api/auth/admin/users/<int:user_id>/password", methods=["POST"])
+@require_authenticated_user(admin_only=True)
+def reset_admin_user_password(user_id: int):
+    """Allow a signed-in admin to set a new password for a non-admin user."""
+
+    payload = request.get_json(silent=True) or {}
+    updated_user = auth_repository.reset_user_password(
+        user_id=user_id,
+        password=str(payload.get("password") or ""),
+        acting_admin_user_id=g.current_user.user_id,
+    )
+    return jsonify(
+        {
+            "message": "Password reset successfully. Existing sessions were signed out.",
+            "user": updated_user,
+        }
+    ), 200
+
+
 @app.route("/api/presets", methods=["GET"])
 @require_authenticated_user()
 def get_presets():
@@ -2420,6 +2634,23 @@ def get_results():
     return jsonify(repository.list_results()), 200
 
 
+@app.route("/api/results/<result_id>", methods=["DELETE"])
+@require_authenticated_user(admin_only=True)
+def delete_result(result_id: str):
+    """Allow administrators to remove saved trial records from SQLite."""
+
+    repository.delete_result(result_id)
+    return (
+        jsonify(
+            {
+                "message": "Saved trial deleted successfully.",
+                "resultId": result_id,
+            }
+        ),
+        200,
+    )
+
+
 @app.route("/api/light/blue", methods=["POST"])
 @require_authenticated_user()
 def control_blue():
@@ -2464,11 +2695,23 @@ def prime_pump():
     return jsonify(result), 200
 
 
+@app.route("/api/buzzer/test", methods=["POST"])
+@require_authenticated_user()
+def test_buzzer():
+    """Play a short buzzer chirp so the operator can verify the passive buzzer."""
+
+    result = session_manager.test_buzzer(request.get_json(silent=True) or {})
+    return jsonify(result), 200
+
+
 @app.route("/api/test/information", methods=["POST"])
 @require_authenticated_user()
 def get_information():
     """Save the current test settings before the user starts the run."""
-    configuration = session_manager.configure_test(request.get_json(silent=True) or {})
+    configuration = session_manager.configure_test(
+        request.get_json(silent=True) or {},
+        current_user=g.current_user,
+    )
 
     return jsonify({
         "message": "Start Test Successfully!",
@@ -2481,7 +2724,10 @@ def get_information():
 def run_test():
     """Start the active test session and background stimulus loop."""
     payload = request.get_json(silent=True)
-    session_manager.start_test(payload if isinstance(payload, dict) else None)
+    session_manager.start_test(
+        payload if isinstance(payload, dict) else None,
+        current_user=g.current_user,
+    )
 
     return jsonify({"message": "Test started successfully!"}), 200
 

@@ -7,11 +7,18 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  Input,
+  InputLabel,
   Stack,
   Typography,
 } from '@mui/material';
 
-import { getAdminUsers, updateAdminUserStatus } from '../../utilities/api';
+import { getAdminUsers, resetAdminUserPassword, updateAdminUserStatus } from '../../utilities/api';
 
 
 const AdminPanel = () => {
@@ -21,6 +28,10 @@ const AdminPanel = () => {
   const [isLoading, setIsLoading] = useState(true);
   // Friendly UI message surfaced when admin actions succeed or fail.
   const [feedback, setFeedback] = useState(null);
+  // Dialog state for admin-triggered password resets.
+  const [resetDialogUser, setResetDialogUser] = useState(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -57,6 +68,48 @@ const AdminPanel = () => {
         severity: 'error',
         message: error.message,
       });
+    }
+  };
+
+  const openResetDialog = (user) => {
+    setResetDialogUser(user);
+    setResetPassword('');
+    setFeedback(null);
+  };
+
+  const closeResetDialog = () => {
+    if (isResettingPassword) {
+      return;
+    }
+
+    setResetDialogUser(null);
+    setResetPassword('');
+  };
+
+  const handlePasswordReset = async () => {
+    if (!resetDialogUser) {
+      return;
+    }
+
+    try {
+      setIsResettingPassword(true);
+      const response = await resetAdminUserPassword(resetDialogUser.id, resetPassword);
+      setUsers((currentUsers) =>
+        currentUsers.map((user) => (user.id === resetDialogUser.id ? response.user : user))
+      );
+      setFeedback({
+        severity: 'success',
+        message: response.message,
+      });
+      setResetDialogUser(null);
+      setResetPassword('');
+    } catch (error) {
+      setFeedback({
+        severity: 'error',
+        message: error.message,
+      });
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -124,6 +177,12 @@ const AdminPanel = () => {
                             </Button>
                             <Button
                               variant="outlined"
+                              onClick={() => openResetDialog(user)}
+                            >
+                              Reset Password
+                            </Button>
+                            <Button
+                              variant="outlined"
                               color="warning"
                               onClick={() => handleStatusChange(user.id, 'disabled')}
                             >
@@ -174,18 +233,26 @@ const AdminPanel = () => {
                           </Typography>
                         </Box>
                         {user.role !== 'admin' && (
-                          <Button
-                            variant={user.status === 'approved' ? 'outlined' : 'contained'}
-                            color={user.status === 'approved' ? 'warning' : 'primary'}
-                            onClick={() =>
-                              handleStatusChange(
-                                user.id,
-                                user.status === 'approved' ? 'disabled' : 'approved'
-                              )
-                            }
-                          >
-                            {user.status === 'approved' ? 'Disable Access' : 'Approve Access'}
-                          </Button>
+                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                            <Button
+                              variant="outlined"
+                              onClick={() => openResetDialog(user)}
+                            >
+                              Reset Password
+                            </Button>
+                            <Button
+                              variant={user.status === 'approved' ? 'outlined' : 'contained'}
+                              color={user.status === 'approved' ? 'warning' : 'primary'}
+                              onClick={() =>
+                                handleStatusChange(
+                                  user.id,
+                                  user.status === 'approved' ? 'disabled' : 'approved'
+                                )
+                              }
+                            >
+                              {user.status === 'approved' ? 'Disable Access' : 'Approve Access'}
+                            </Button>
+                          </Stack>
                         )}
                       </Stack>
                     </CardContent>
@@ -196,6 +263,40 @@ const AdminPanel = () => {
           </Card>
         </Stack>
       )}
+      <Dialog open={Boolean(resetDialogUser)} onClose={closeResetDialog} fullWidth maxWidth="xs">
+        <DialogTitle>Reset User Password</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Set a new password for {resetDialogUser?.displayName || 'this user'}. Existing sessions will be signed out.
+            </Typography>
+            <FormControl fullWidth>
+              <InputLabel htmlFor="resetPassword">New Password</InputLabel>
+              <Input
+                id="resetPassword"
+                type="password"
+                value={resetPassword}
+                onChange={(event) => setResetPassword(event.target.value)}
+              />
+            </FormControl>
+            <Typography variant="caption" color="text.secondary">
+              Passwords must be at least 8 characters long.
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeResetDialog} disabled={isResettingPassword}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handlePasswordReset}
+            disabled={isResettingPassword || resetPassword.length < 8}
+          >
+            {isResettingPassword ? 'Resetting...' : 'Reset Password'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

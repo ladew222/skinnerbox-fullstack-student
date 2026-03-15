@@ -1,6 +1,6 @@
 /* aly work here */
 
-import React, { useContext } from 'react';
+import React from 'react';
 import IoTestingGrid from '../IoTestingGrid/IoTestingGrid';
 
 function IoTesting() {

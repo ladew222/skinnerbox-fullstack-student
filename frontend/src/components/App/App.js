@@ -20,12 +20,13 @@ import Admin from '../Pages/Admin';
 function App() {
   return (
     <AuthProvider>
-      <div>
+      <div className="app-shell">
         <NavBar />
-        <div className="container">
+        <main className="app-route-surface">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/Home" element={<Home />} />
+            <Route path="/About" element={<Contact />} />
             <Route path="/Contact" element={<Contact />} />
             <Route path="/LogIn" element={<LogIn />} />
             <Route path="/Register" element={<Register />} />
@@ -43,7 +44,7 @@ function App() {
 
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
-        </div>
+        </main>
         <Footer />
       </div>
     </AuthProvider>

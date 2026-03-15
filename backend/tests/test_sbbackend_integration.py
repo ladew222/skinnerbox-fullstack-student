@@ -56,6 +56,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
             password="OperatorPass123",
             display_name="Operator User",
         )
+        self.operator_user_id = operator_user.user_id
         temp_auth_repository.update_user_status(
             user_id=operator_user.user_id,
             status="approved",
@@ -67,6 +68,13 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         )
         self.auth_headers = {
             "Authorization": f"Bearer {login_payload['token']}",
+        }
+        admin_login_payload = temp_auth_repository.login_user(
+            email="admin@example.com",
+            password="AdminPass123",
+        )
+        self.admin_headers = {
+            "Authorization": f"Bearer {admin_login_payload['token']}",
         }
 
         sbBackend.app.config["TESTING"] = True
@@ -111,6 +119,8 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         status = self._wait_for_status(lambda current: current["testFinished"] is True)
         self.assertTrue(status["testFinished"])
         self.assertIsNone(status["error"])
+        self.assertEqual(status["conductedBy"]["displayName"], "Operator User")
+        self.assertEqual(status["conductedBy"]["email"], "operator@example.com")
 
         results_response = self.client.get("/api/results", headers=self.auth_headers)
         self.assertEqual(results_response.status_code, 200)
@@ -121,6 +131,9 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["rewardCount"], 3)
         self.assertEqual(results[0]["stimulusType"], "Light")
         self.assertEqual(results[0]["stimulusDescription"], "Light")
+        self.assertEqual(results[0]["conductedBy"]["displayName"], "Operator User")
+        self.assertEqual(results[0]["conductedBy"]["email"], "operator@example.com")
+        self.assertEqual(results[0]["conductedBy"]["id"], self.operator_user_id)
         self.assertTrue(results[0]["complete"])
 
     def test_backend_timer_finishes_test_without_frontend_timekeeping(self):
@@ -220,6 +233,24 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
             sbBackend.hardware.status_display.last_lines,
             ("SkinnerBox", "READY", "OLED Waiting Trial", "Subj 12", "Press Start"),
         )
+
+    def test_invalid_goal_relationship_is_rejected_by_backend_validation(self):
+        payload = self._base_payload(
+            testName="Invalid Goal Trial",
+            goalForTrial=5,
+            goalForTest=3,
+        )
+
+        response = self.client.post("/api/test/information", json=payload, headers=self.auth_headers)
+
+        self.assertEqual(response.status_code, 400)
+        error_payload = response.get_json()["error"]
+        self.assertEqual(error_payload["code"], "INVALID_TEST_CONFIGURATION")
+        self.assertIn("goalForTest", error_payload["message"])
+
+    def test_hardware_gpio_mapping_matches_current_box_wiring(self):
+        self.assertEqual(sbBackend.SkinnerHardware.LEVER_INPUT_GPIO, 23)
+        self.assertEqual(sbBackend.SkinnerHardware.NOSE_POKE_INPUT_GPIO, 16)
 
     def test_oled_shows_ip_address_during_startup_window(self):
         sbBackend.hardware.startup_ip_address = "192.168.1.158"
@@ -371,6 +402,85 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         error_payload = response.get_json()["error"]
         self.assertEqual(error_payload["code"], "PUMP_PRIME_BLOCKED")
 
+    def test_buzzer_test_endpoint_runs_before_a_test(self):
+        response = self.client.post(
+            "/api/buzzer/test",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        payload = response.get_json()
+        self.assertEqual(payload["message"], "Buzzer test played successfully.")
+        self.assertEqual(payload["pattern"], "523:0.08,659:0.08")
+        self.assertEqual(
+            sbBackend.hardware.last_chime_pattern,
+            ((523.0, 0.08), (659.0, 0.08)),
+        )
+
+    def test_buzzer_test_endpoint_is_blocked_while_test_is_running(self):
+        payload = self._base_payload(testName="Buzzer Test Guard")
+
+        configure_response = self.client.post("/api/test/information", json=payload, headers=self.auth_headers)
+        self.assertEqual(configure_response.status_code, 200)
+
+        run_response = self.client.post("/api/test/run", json=payload, headers=self.auth_headers)
+        self.assertEqual(run_response.status_code, 200)
+
+        response = self.client.post(
+            "/api/buzzer/test",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(response.status_code, 409)
+
+        error_payload = response.get_json()["error"]
+        self.assertEqual(error_payload["code"], "BUZZER_TEST_BLOCKED")
+
+    def test_saved_results_show_dates_and_can_be_deleted_by_admin(self):
+        payload = self._base_payload(
+            testName="Admin Delete Trial",
+            goalForTest=1,
+        )
+
+        configure_response = self.client.post(
+            "/api/test/information",
+            json=payload,
+            headers=self.auth_headers,
+        )
+        self.assertEqual(configure_response.status_code, 200)
+
+        run_response = self.client.post("/api/test/run", json=payload, headers=self.auth_headers)
+        self.assertEqual(run_response.status_code, 200)
+
+        lever_response = self.client.post("/api/input/lever", headers=self.auth_headers)
+        self.assertEqual(lever_response.status_code, 200)
+
+        self._wait_for_status(lambda current: current["testFinished"] is True)
+
+        results_response = self.client.get("/api/results", headers=self.auth_headers)
+        self.assertEqual(results_response.status_code, 200)
+        results = results_response.get_json()
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0]["createdAt"])
+        self.assertTrue(results[0]["updatedAt"])
+        self.assertEqual(results[0]["conductedBy"]["displayName"], "Operator User")
+        self.assertEqual(results[0]["conductedBy"]["email"], "operator@example.com")
+
+        operator_delete_response = self.client.delete(
+            f"/api/results/{results[0]['id']}",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(operator_delete_response.status_code, 403)
+
+        admin_delete_response = self.client.delete(
+            f"/api/results/{results[0]['id']}",
+            headers=self.admin_headers,
+        )
+        self.assertEqual(admin_delete_response.status_code, 200)
+
+        final_results_response = self.client.get("/api/results", headers=self.auth_headers)
+        self.assertEqual(final_results_response.status_code, 200)
+        self.assertEqual(final_results_response.get_json(), [])
+
     def test_repository_migrates_legacy_active_test_schema(self):
         legacy_database_path = Path(self.temp_dir.name) / "legacy-testdatabase.db"
 
@@ -410,6 +520,9 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
                 "lever_press",
                 "reward_count",
                 "elapsed_seconds",
+                "conducted_by_user_id",
+                "conducted_by_email",
+                "conducted_by_display_name",
                 "created_at",
                 "updated_at",
             }.issubset(columns)
@@ -452,14 +565,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertTrue(updated_payload["replaced"])
         self.assertEqual(updated_payload["preset"]["goalForTest"], 8)
 
-        admin_login_payload = sbBackend.auth_repository.login_user(
-            email="admin@example.com",
-            password="AdminPass123",
-        )
-        admin_headers = {
-            "Authorization": f"Bearer {admin_login_payload['token']}",
-        }
-        admin_preset_response = self.client.get("/api/presets", headers=admin_headers)
+        admin_preset_response = self.client.get("/api/presets", headers=self.admin_headers)
         self.assertEqual(admin_preset_response.status_code, 200)
         self.assertEqual(admin_preset_response.get_json()["presets"], [])
 

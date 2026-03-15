@@ -1,84 +1,190 @@
-/* TestManager.css */
-
-
-/* TODO: Add CSS to new form */
-
-#testNameContainer {
-  padding-bottom: 20px;
-}
-
-#rewardTypeContainer {
-  margin: 10px;
-}
 .trial-settings {
   font-family: Arial, sans-serif;
-  padding: 20px;
-  max-width: 600px;
-  margin: auto;
+  width: min(100%, 860px);
+  padding: 32px;
+  margin: 24px auto;
   background-color: #f9f9f9;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(30, 41, 59, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 20px;
+  box-sizing: border-box;
+}
+
+#formControlContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.trial-form-intro {
+  padding: 24px 26px;
+  border: 1px solid #d6dde5;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f7fd 100%);
+}
+
+.trial-form-intro h2 {
+  margin: 0 0 8px 0;
+  color: #153c5a;
+}
+
+.trial-form-intro p {
+  margin: 0;
+  color: #35566f;
+  line-height: 1.7;
+}
+
+.trial-section-card {
+  padding: 22px 24px;
+  border: 1px solid #d6dde5;
+  border-radius: 14px;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trial-section-card h3 {
+  margin: 0;
+  color: #184d7a;
+}
+
+.trial-section-card p {
+  margin: 0;
+  line-height: 1.7;
+  color: #35566f;
+}
+
+.trial-section-note {
+  font-size: 0.96rem;
+}
+
+.trial-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px 20px;
+  align-items: start;
 }
 
 .input-group {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
 
-.input-group label {
-  font-weight: bold;
-  color: #555;
-}
-
-.input-group input[type="number"],
-.input-group input[type="text"],
-.input-group select {
+.input-group .MuiFormControl-root {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  font-size: 1rem;
-  background-color: white;
+}
+
+.input-group .MuiFormHelperText-root {
+  margin-top: 8px;
+  line-height: 1.55;
+}
+
+.input-group .MuiInputBase-root,
+.preset-save-grid .MuiInputBase-root,
+.pump-prime-controls .MuiInputBase-root {
+  background-color: #ffffff;
 }
 
 .button-group {
   display: flex;
   justify-content: space-between;
-  margin-top: 20px;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.button-group button {
+  padding: 12px 20px;
+  min-height: 48px;
+  font-size: 1rem;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.button-group button:hover {
+  opacity: 0.9;
+}
+
+.trial-action-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.trial-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.trial-action-row > * {
+  min-height: 50px;
+}
+
+.trial-action-row .MuiButton-root,
+.upload-action-button {
+  flex: 1 1 180px;
+}
+
+.save-button,
+.start-button,
+.delete-button,
+.upload-action-button {
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: none;
+  padding: 12px 18px;
 }
 
 .save-button {
-  background-color: #4CAF50;
+  background-color: #2f8f46;
   color: white;
-  padding: 10px;
-  border: none;
-  cursor: pointer;
-  border-radius: 5px;
 }
 
 .upload-button {
-  background-color: #2196F3;
+  display: none;
+}
+
+.upload-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #1565c0;
   color: white;
-  padding: 10px;
-  border: none;
   cursor: pointer;
-  border-radius: 5px;
+  box-sizing: border-box;
+}
+
+.upload-action-button:hover {
+  background-color: #0f4f97;
+}
+
+.delete-button {
+  background-color: #c62828;
+  color: white;
 }
 
 .start-button {
-  background-color:#4CAF50;
+  background-color: #197a37;
   color: white;
-  padding: 10px;
-  border: none;
-  cursor: pointer;
-  border-radius: 5px;
 }
+
+.upload-file-name {
+  margin: 0;
+  font-weight: 600;
+  color: #184d7a;
+  word-break: break-word;
+}
+
 .stop-button {
-  background-color:red;
+  background-color: red;
   color: white;
   padding: 10px;
   border: none;
@@ -87,7 +193,7 @@
 }
 
 .resume-button {
-  background-color:#4CAF50;
+  background-color: #4caf50;
   color: white;
   padding: 10px;
   border: none;
@@ -96,7 +202,7 @@
 }
 
 .finish-button {
-  background-color:red;
+  background-color: red;
   color: white;
   padding: 10px;
   border: none;
@@ -105,7 +211,7 @@
 }
 
 .return-button {
-  background-color:#2196F3;
+  background-color: #2196f3;
   color: white;
   padding: 10px;
   border: none;
@@ -114,7 +220,7 @@
 }
 
 .download-button {
-  background-color:#2196F3;
+  background-color: #2196f3;
   color: white;
   padding: 10px;
   border: none;
@@ -122,37 +228,16 @@
   border-radius: 5px;
 }
 
-.button-group button:hover {
-  opacity: 0.9;
-}
-
-/* Styling for buttons */
-.button-group button {
-    padding: 10px 20px;
-    font-size: 1rem;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-}
-.bluelight-button {
-  background-color: #2196F3;
-}
-.redlight-button {
-  background-color: #d71313;
-}
-.greenlight-button {
-  background-color: #0eae26;
-}
-.rgblight-button {
-  background-color: #2ea380;
-}
-
 .pump-prime-panel {
-  padding: 16px;
+  padding: 20px;
   border: 1px solid #d6dde5;
-  border-radius: 8px;
+  border-radius: 12px;
   background-color: #eef6ff;
+}
+
+.manual-prime-panel {
+  border-color: #d7c79f;
+  background-color: #fff8e8;
 }
 
 .pump-prime-panel h3 {
@@ -163,6 +248,18 @@
 .pump-prime-panel p {
   margin: 0 0 12px 0;
   color: #35566f;
+}
+
+.manual-prime-panel h3 {
+  color: #725200;
+}
+
+.manual-prime-panel p {
+  color: #6d5a25;
+}
+
+.pump-prime-status-note {
+  font-weight: 600;
 }
 
 .pump-prime-controls {
@@ -184,17 +281,18 @@
 }
 
 .stimulus-note {
-  padding: 12px 14px;
+  padding: 16px 18px;
   border: 1px solid #d9d9d9;
-  border-radius: 6px;
+  border-radius: 10px;
   background-color: #f4f4f4;
   color: #444;
+  line-height: 1.65;
 }
 
 .preset-save-panel {
-  padding: 16px;
+  padding: 20px;
   border: 1px solid #d6dde5;
-  border-radius: 8px;
+  border-radius: 12px;
   background-color: #f5f9ff;
 }
 
@@ -211,10 +309,11 @@
 .preset-save-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  gap: 16px;
 }
 
 .save-preset-button {
+  align-self: flex-start;
   margin-top: 12px;
   background-color: #0f74bd;
 }
@@ -225,7 +324,46 @@
   color: #1b5a86;
 }
 
-@media (max-width: 640px) {
+.test-screen {
+  padding: 26px 28px;
+  border: 1px solid #d6dde5;
+  border-radius: 14px;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.test-screen h1,
+.test-screen p {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .trial-settings {
+    padding: 20px 16px;
+    margin: 16px auto;
+  }
+
+  .trial-form-intro,
+  .trial-section-card,
+  .test-screen {
+    padding: 18px 16px;
+  }
+
+  .trial-action-row {
+    flex-direction: column;
+  }
+
+  .trial-action-row .MuiButton-root,
+  .upload-action-button {
+    width: 100%;
+  }
+
+  .save-preset-button {
+    align-self: stretch;
+  }
+
   .pump-prime-controls {
     flex-direction: column;
     align-items: stretch;

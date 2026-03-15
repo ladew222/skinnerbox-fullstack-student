@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../context/AuthContext';
 import './NavBar.css';
-import logo from '../../assets/RGB_Horizontal_A_Logo.png';
+import logo from '../../assets/hawkworks-logo.png';
 
 
 function NavBar() {
@@ -65,8 +65,8 @@ function NavBar() {
 
             <ul className="navbar-nav ms-auto mb-2 mb-lg-0 d-flex align-items-center">
               <li className="nav-item">
-                <Link className="nav-link" aria-current="page" to="/Contact">
-                  Contact Us
+                <Link className="nav-link" aria-current="page" to="/About">
+                  About Us
                 </Link>
               </li>
               {isAuthenticated ? (
@@ -108,10 +108,6 @@ function NavBar() {
           >
             <span className="navbar-toggler-icon"></span>
           </button>
-
-          <Link className="navbar-brand position-absolute start-50 translate-middle" to="/" style={{ top: '50%' }}>
-            Skinner Box
-          </Link>
         </div>
       </nav>
     </div>

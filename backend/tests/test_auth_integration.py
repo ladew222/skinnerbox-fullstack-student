@@ -165,6 +165,91 @@ class AuthenticationIntegrationTest(unittest.TestCase):
         self.assertEqual(admin_user.role, "admin")
         self.assertEqual(admin_user.status, "approved")
 
+    def test_admin_can_reset_an_operator_password_and_revoke_old_sessions(self):
+        admin_user = self.auth_repository.upsert_admin(
+            email="admin@example.com",
+            password="AdminPass123",
+            display_name="Local Admin",
+        )
+        operator_user = self.auth_repository.register_user(
+            email="operator@example.com",
+            password="OperatorPass123",
+            display_name="Operator User",
+        )
+        self.auth_repository.update_user_status(
+            user_id=operator_user.user_id,
+            status="approved",
+            acting_admin_user_id=admin_user.user_id,
+        )
+
+        admin_login_response = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "admin@example.com",
+                "password": "AdminPass123",
+            },
+        )
+        self.assertEqual(admin_login_response.status_code, 200)
+        admin_headers = {
+            "Authorization": f"Bearer {admin_login_response.get_json()['token']}",
+        }
+
+        operator_login_response = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "operator@example.com",
+                "password": "OperatorPass123",
+            },
+        )
+        self.assertEqual(operator_login_response.status_code, 200)
+        operator_headers = {
+            "Authorization": f"Bearer {operator_login_response.get_json()['token']}",
+        }
+
+        reset_response = self.client.post(
+            f"/api/auth/admin/users/{operator_user.user_id}/password",
+            json={"password": "OperatorPass456"},
+            headers=admin_headers,
+        )
+        self.assertEqual(reset_response.status_code, 200)
+        self.assertEqual(
+            reset_response.get_json()["message"],
+            "Password reset successfully. Existing sessions were signed out.",
+        )
+
+        old_password_login_response = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "operator@example.com",
+                "password": "OperatorPass123",
+            },
+        )
+        self.assertEqual(old_password_login_response.status_code, 401)
+        self.assertEqual(
+            old_password_login_response.get_json()["error"]["code"],
+            "INVALID_CREDENTIALS",
+        )
+
+        revoked_session_response = self.client.get("/api/auth/me", headers=operator_headers)
+        self.assertEqual(revoked_session_response.status_code, 401)
+        self.assertEqual(
+            revoked_session_response.get_json()["error"]["code"],
+            "AUTH_TOKEN_REVOKED",
+        )
+
+        new_password_login_response = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "operator@example.com",
+                "password": "OperatorPass456",
+            },
+        )
+        self.assertEqual(new_password_login_response.status_code, 200)
+        self.assertEqual(
+            new_password_login_response.get_json()["user"]["email"],
+            "operator@example.com",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

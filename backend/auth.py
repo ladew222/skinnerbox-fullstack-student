@@ -491,6 +491,88 @@ class SQLiteAuthRepository:
                 details={"reason": str(error), "userId": user_id},
             ) from error
 
+    def reset_user_password(
+        self,
+        *,
+        user_id: int,
+        password: str,
+        acting_admin_user_id: int,
+    ) -> dict[str, object]:
+        """Allow a local admin to replace an operator password and revoke old sessions."""
+
+        _validate_password(password)
+        now = self._timestamp()
+
+        try:
+            with self.connect() as connection:
+                row = connection.execute(
+                    "SELECT * FROM users WHERE id = ?",
+                    (user_id,),
+                ).fetchone()
+                if row is None:
+                    raise ApiError(
+                        code="USER_NOT_FOUND",
+                        message="The requested user account was not found.",
+                        status=404,
+                        details={"userId": user_id},
+                    )
+
+                if row["role"] == "admin":
+                    raise ApiError(
+                        code="ADMIN_MANAGED_LOCALLY",
+                        message="Admin accounts are managed locally with the reset_admin.py script.",
+                        status=400,
+                    )
+
+                connection.execute(
+                    """
+                    UPDATE users
+                    SET password_hash = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        generate_password_hash(password),
+                        now,
+                        user_id,
+                    ),
+                )
+                connection.execute(
+                    """
+                    UPDATE auth_tokens
+                    SET revoked_at = ?
+                    WHERE user_id = ? AND revoked_at IS NULL
+                    """,
+                    (now, user_id),
+                )
+                connection.commit()
+
+                updated_row = connection.execute(
+                    """
+                    SELECT
+                        users.*,
+                        approver.email AS approved_by_email
+                    FROM users
+                    LEFT JOIN users AS approver ON approver.id = users.approved_by_user_id
+                    WHERE users.id = ?
+                    """,
+                    (user_id,),
+                ).fetchone()
+                return self._row_to_admin_payload(updated_row)
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="PASSWORD_RESET_ERROR",
+                message="Unable to reset the selected user password.",
+                status=500,
+                details={
+                    "reason": str(error),
+                    "userId": user_id,
+                    "actingAdminUserId": acting_admin_user_id,
+                },
+            ) from error
+
     def upsert_admin(
         self,
         *,

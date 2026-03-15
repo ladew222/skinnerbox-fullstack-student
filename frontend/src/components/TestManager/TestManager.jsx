@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./TestManager.css";
-import { runTest, stopTest, finishTest, getCounts, primePump, getTestInformation, getTestStatus } from "../../utilities/api";
+import { runTest, stopTest, finishTest, getCounts, getTestInformation, getTestStatus } from "../../utilities/api";
 import { DEFAULT_END_CHIME_PATTERN, PRESET_STORAGE_EVENT, loadUserPresets, upsertUserPreset } from "../../utilities/presets";
 import {
   buildStimulusSummary,
@@ -11,15 +11,15 @@ import {
 } from "../../utilities/resultsCsv";
 import { buildTestSettingsText, parseTestSettingsText } from "../../utilities/testSettingsFile";
 import { Alert, FormControl, Input, InputLabel, Snackbar } from '@mui/material';
-import { validationFunctions } from "../../validation/test_manager";
-import ButtonGroup from '@mui/material/ButtonGroup';
-
+import { validateTrialForm, validationFunctions } from "../../validation/test_manager";
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormHelperText from '@mui/material/FormHelperText';
 import Button from '@mui/material/Button';
+import { useAuth } from "../../context/AuthContext";
 
 const DEFAULT_COOLDOWN_SECONDS = "0";
+const FIXED_REWARD_TYPE = "Water";
 const DEFAULT_FORM_SNAPSHOT = {
   testName: "",
   subjectID: "",
@@ -29,7 +29,7 @@ const DEFAULT_FORM_SNAPSHOT = {
   RewaStimTime: "",
   StimTimeOn: "",
   cooldown: DEFAULT_COOLDOWN_SECONDS,
-  rewardType: "Water",
+  rewardType: FIXED_REWARD_TYPE,
   interactionType: "Lever",
   stimulusType: "Light",
   lightColor: SINGLE_LIGHT_LABEL,
@@ -37,8 +37,38 @@ const DEFAULT_FORM_SNAPSHOT = {
   endChimePattern: DEFAULT_END_CHIME_PATTERN,
 };
 
+const FIELD_HELP_TEXT = {
+  testName:
+    "This name appears in saved results, preset lists, CSV exports, and the backend status display while the trial is configured or running.",
+  subjectID:
+    "Use the numeric animal or subject identifier you want saved with this run so results can be matched back later.",
+  trialDuration:
+    "This is the maximum length of the trial in minutes. The backend timer runs the test and will stop early if the test goal is reached first.",
+  goalForTrial:
+    "Each time the required valid interaction count reaches this number, the backend triggers one reward. Example: 3 means a reward after every 3 valid responses.",
+  goalForTest:
+    "This is the total number of valid interactions needed before the backend ends the trial. It must be the same as or larger than the reward goal.",
+  RewaStimTime:
+    "After a reward is delivered, the backend waits this many seconds before starting the next stimulus cycle.",
+  StimTimeOn:
+    "At the start of each cycle, the backend turns on the selected light or tone for this many seconds before waiting for the next valid interaction.",
+  cooldown:
+    "This value is still saved in presets and text files for compatibility, but the current backend loop does not use it during the live trial.",
+  rewardType:
+    "Water is the only enabled reward output right now, so this stays fixed to water.",
+  interactionType:
+    "This tells the backend what counts as one valid response: just a lever press, just a poke, or a required sequence of both.",
+  stimulusType:
+    "Choose whether each trial cycle begins with the box light or the passive buzzer tone.",
+  endChimeEnabled:
+    "Turn this on if you want the passive buzzer to play one short custom pattern after the trial finishes.",
+  endChimePattern:
+    "Enter the finish pattern as frequency:seconds pairs separated by commas, for example 523:0.12,659:0.12.",
+};
+
 
 const TestManager = () => {
+  const { user } = useAuth();
   const [presetValue, setPresetValue] = useState("");
   const [presetName, setPresetName] = useState("");
   const [presetDescription, setPresetDescription] = useState("");
@@ -50,7 +80,7 @@ const TestManager = () => {
   const [RewaStimTime, setRewaStimTime] = useState("");
   const [StimTimeOn, setStimTimeOn] = useState("");
   const [cooldown, setCooldown] = useState(DEFAULT_COOLDOWN_SECONDS);
-  const [rewardType, setRewardType] = useState("Water");
+  const [rewardType, setRewardType] = useState(FIXED_REWARD_TYPE);
   const [interactionType, setInteractionType] = useState("Lever");
   const [stimulusType, setStimulusType] = useState("Light");
   const [endChimeEnabled, setEndChimeEnabled] = useState(false);
@@ -70,9 +100,6 @@ const TestManager = () => {
   const [uploadedFile, setUploadedFile] = useState(null);
 
   const [rewardCount, setRewardCount] = useState(0);
-  const [pumpPrimeSeconds, setPumpPrimeSeconds] = useState("1");
-  const [pumpPrimeBusy, setPumpPrimeBusy] = useState(false);
-  const [pumpPrimeMessage, setPumpPrimeMessage] = useState("");
   const [presetSaveMessage, setPresetSaveMessage] = useState("");
 
   const [uiError, setUiError] = useState({
@@ -90,6 +117,7 @@ const TestManager = () => {
   const [StimTimeOnError, setStimTimeOnError] = useState('');
   const [coolDownError, setCoolDownError] = useState('');
   const [subjectIDError, setSubjectIDError] = useState('');
+  const [endChimePatternError, setEndChimePatternError] = useState('');
 
   const selectedPreset = userPresets.find((preset) => preset.id === presetValue) || null;
 
@@ -162,6 +190,46 @@ const TestManager = () => {
     };
   }, []); // Empty dependency array = run once on component mount
 
+  const buildCurrentFormSnapshot = (overrides = {}) => ({
+    testName,
+    subjectID,
+    trialDuration,
+    goalForTrial,
+    goalForTest,
+    RewaStimTime,
+    StimTimeOn,
+    cooldown,
+    rewardType,
+    interactionType,
+    stimulusType,
+    lightColor: effectiveLightColor,
+    endChimeEnabled,
+    endChimePattern,
+    ...overrides,
+  });
+
+  const syncValidationErrors = (errors) => {
+    setTestNameError(errors.testName || "");
+    setSubjectIDError(errors.subjectID || "");
+    setTrialDurationError(errors.trialDuration || "");
+    setTrialGoalError(errors.goalForTrial || "");
+    setTestGoalError(errors.goalForTest || "");
+    setRewaStimTimeError(errors.RewaStimTime || "");
+    setStimTimeOnError(errors.StimTimeOn || "");
+    setCoolDownError(errors.cooldown || "");
+    setEndChimePatternError(errors.endChimePattern || "");
+  };
+
+  const clearValidationErrors = () => {
+    syncValidationErrors({});
+  };
+
+  const validateCurrentTrialForm = (overrides = {}) => {
+    const validation = validateTrialForm(buildCurrentFormSnapshot(overrides));
+    syncValidationErrors(validation.errors);
+    return validation;
+  };
+
   const hasChanged = () => {
     return JSON.stringify(originalSettings) !== JSON.stringify({
       testName,
@@ -183,28 +251,31 @@ const TestManager = () => {
 
 
   const handleSaveTest = () => {
-    if (!testName || !trialDuration || !goalForTrial || !cooldown || !goalForTest || !RewaStimTime || !StimTimeOn) {
+    const validation = validateCurrentTrialForm();
+    if (!validation.isValid) {
       showUiError(
-        { code: "VALIDATION_ERROR", message: "Please fill in all required fields before saving the test." },
+        { code: "VALIDATION_ERROR", message: validation.firstError || "Please correct the highlighted trial settings before saving." },
       );
       return;
     }
 
+    const normalizedValues = validation.normalizedValues;
+
     const testSettings = buildTestSettingsText({
       appliedPresetName,
-      testName,
-      subjectID,
-      trialDuration,
-      goalForTrial,
-      goalForTest,
-      RewaStimTime,
-      StimTimeOn,
-      cooldown,
+      testName: normalizedValues.testName,
+      subjectID: normalizedValues.subjectID,
+      trialDuration: normalizedValues.trialDuration,
+      goalForTrial: normalizedValues.goalForTrial,
+      goalForTest: normalizedValues.goalForTest,
+      RewaStimTime: normalizedValues.RewaStimTime,
+      StimTimeOn: normalizedValues.StimTimeOn,
+      cooldown: normalizedValues.cooldown,
       rewardType,
       interactionType,
       stimulusType,
       endChimeEnabled,
-      endChimePattern,
+      endChimePattern: normalizedValues.endChimePattern,
     });
 
     const blob = new Blob([testSettings], { type: "text/plain" });
@@ -225,21 +296,27 @@ const TestManager = () => {
       const fileText = e.target.result;
       try {
         const parsedSettings = parseTestSettingsText(fileText);
+        const validation = validateTrialForm({
+          ...buildCurrentFormSnapshot(),
+          ...parsedSettings,
+          cooldown: parsedSettings.cooldown || DEFAULT_COOLDOWN_SECONDS,
+        });
         setUploadedFile(file);
         setPresetName(parsedSettings.presetName || "");
-        setTestName(parsedSettings.testName || "");
-        setSubjectID(parsedSettings.subjectID || "");
-        setTrialDuration(parsedSettings.trialDuration || "");
-        setGoalForTrial(parsedSettings.goalForTrial || "");
-        setGoalForTest(parsedSettings.goalForTest || "");
-        setRewaStimTime(parsedSettings.RewaStimTime || "");
-        setStimTimeOn(parsedSettings.StimTimeOn || "");
-        setCooldown(parsedSettings.cooldown || DEFAULT_COOLDOWN_SECONDS);
-        setRewardType(parsedSettings.rewardType || "Water");
+        setTestName(validation.normalizedValues.testName || "");
+        setSubjectID(validation.normalizedValues.subjectID || "");
+        setTrialDuration(validation.normalizedValues.trialDuration || "");
+        setGoalForTrial(validation.normalizedValues.goalForTrial || "");
+        setGoalForTest(validation.normalizedValues.goalForTest || "");
+        setRewaStimTime(validation.normalizedValues.RewaStimTime || "");
+        setStimTimeOn(validation.normalizedValues.StimTimeOn || "");
+        setCooldown(validation.normalizedValues.cooldown || DEFAULT_COOLDOWN_SECONDS);
+        setRewardType(FIXED_REWARD_TYPE);
         setInteractionType(parsedSettings.interactionType || "Lever");
         setStimulusType(parsedSettings.stimulusType || "Light");
         setEndChimeEnabled(Boolean(parsedSettings.endChimeEnabled));
-        setEndChimePattern(parsedSettings.endChimePattern || DEFAULT_END_CHIME_PATTERN);
+        setEndChimePattern(validation.normalizedValues.endChimePattern || DEFAULT_END_CHIME_PATTERN);
+        syncValidationErrors(validation.errors);
         setPresetSaveMessage("");
       } catch (error) {
         showUiError(
@@ -260,12 +337,13 @@ const TestManager = () => {
     setRewaStimTime("");
     setStimTimeOn("");
     setCooldown(DEFAULT_COOLDOWN_SECONDS);
-    setRewardType("Water");
+    setRewardType(FIXED_REWARD_TYPE);
     setInteractionType("Lever");
     setStimulusType("Light");
     setSubjectID("");
     setEndChimeEnabled(false);
     setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
+    clearValidationErrors();
     document.querySelector(".upload-button").value = "";
   };
 
@@ -345,9 +423,10 @@ const TestManager = () => {
 
 
   const handleRunTest = async () => {
-    if (!testName || !trialDuration) {
+    const validation = validateCurrentTrialForm();
+    if (!validation.isValid) {
       showUiError(
-        { code: "VALIDATION_ERROR", message: "Please fill in all required fields before starting the test." },
+        { code: "VALIDATION_ERROR", message: validation.firstError || "Please correct the highlighted trial settings before starting the test." },
       );
       return;
     }
@@ -367,21 +446,22 @@ const TestManager = () => {
     setLightOn(false);
     setRewardCount(0);
 
+    const normalizedValues = validation.normalizedValues;
     const testSettings = { 
-      testName, 
-      subjectID,
-      trialDuration, 
-      goalForTrial,
-      goalForTest,
-      RewaStimTime,
-      StimTimeOn,
-      cooldown,
+      testName: normalizedValues.testName,
+      subjectID: normalizedValues.subjectID,
+      trialDuration: normalizedValues.trialDuration,
+      goalForTrial: normalizedValues.goalForTrial,
+      goalForTest: normalizedValues.goalForTest,
+      RewaStimTime: normalizedValues.RewaStimTime,
+      StimTimeOn: normalizedValues.StimTimeOn,
+      cooldown: normalizedValues.cooldown,
       rewardType, 
       interactionType, 
       stimulusType, 
       lightColor: effectiveLightColor,
       endChimeEnabled,
-      endChimePattern,
+      endChimePattern: normalizedValues.endChimePattern,
       leverPress: 0,
       nosePoke: 0
     };
@@ -436,6 +516,9 @@ const TestManager = () => {
       exportedAt: new Date().toISOString(),
       testName,
       subjectId: subjectID,
+      conductedByDisplayName: user?.displayName || "",
+      conductedByEmail: user?.email || "",
+      conductedByUserId: user?.id || "",
       status: testFinished ? "finished" : testPaused ? "paused" : "running",
       complete: testFinished,
       preset: appliedPresetName,
@@ -480,14 +563,16 @@ const TestManager = () => {
       return;
     }
 
-    if (!trialDuration || !goalForTrial || !goalForTest) {
+    const validation = validateCurrentTrialForm();
+    if (!validation.isValid) {
       showUiError(
-        { code: "PRESET_VALUES_REQUIRED", message: "Fill in the core trial values before saving a preset." },
+        { code: "PRESET_VALUES_REQUIRED", message: validation.firstError || "Fill in valid trial values before saving a preset." },
       );
       return;
     }
 
     try {
+      const normalizedValues = validation.normalizedValues;
       const shouldReuseSelectedPresetId = Boolean(
         selectedPreset && selectedPreset.name.trim().toLowerCase() === presetName.trim().toLowerCase()
       );
@@ -495,20 +580,20 @@ const TestManager = () => {
         id: shouldReuseSelectedPresetId ? selectedPreset.id : undefined,
         name: presetName,
         description: presetDescription,
-        testName,
-        subjectID,
-        trialDuration,
-        goalForTrial,
-        goalForTest,
-        RewaStimTime,
-        StimTimeOn,
-        cooldown,
-        rewardType,
+        testName: normalizedValues.testName,
+        subjectID: normalizedValues.subjectID,
+        trialDuration: normalizedValues.trialDuration,
+        goalForTrial: normalizedValues.goalForTrial,
+        goalForTest: normalizedValues.goalForTest,
+        RewaStimTime: normalizedValues.RewaStimTime,
+        StimTimeOn: normalizedValues.StimTimeOn,
+        cooldown: normalizedValues.cooldown,
+        rewardType: FIXED_REWARD_TYPE,
         interactionType,
         stimulusType,
         lightColor: effectiveLightColor,
         endChimeEnabled,
-        endChimePattern,
+        endChimePattern: normalizedValues.endChimePattern,
       });
 
       setUserPresets(resolvedResult.presets);
@@ -524,28 +609,6 @@ const TestManager = () => {
       showUiError(
         { code: "PRESET_SAVE_ERROR", message: error.message || "Unable to save the current preset." },
       );
-    }
-  };
-
-  const handlePrimePump = async () => {
-    const parsedSeconds = Number(pumpPrimeSeconds);
-    if (!Number.isFinite(parsedSeconds) || parsedSeconds <= 0) {
-      showUiError(
-        { code: "INVALID_PUMP_PRIME_DURATION", message: "Enter a pump-prime duration greater than zero seconds." },
-      );
-      return;
-    }
-
-    try {
-      setPumpPrimeBusy(true);
-      setPumpPrimeMessage("");
-      const result = await primePump(parsedSeconds);
-      setPumpPrimeMessage(`Pump primed for ${result.durationSeconds} second${result.durationSeconds === 1 ? "" : "s"}.`);
-    } catch (error) {
-      console.error("Error priming pump:", error);
-      showUiError(error, "Unable to prime the pump.");
-    } finally {
-      setPumpPrimeBusy(false);
     }
   };
 
@@ -566,14 +629,15 @@ const handlePreset = (event) => {
             setRewaStimTime("");
             setStimTimeOn("");
             setCooldown(DEFAULT_COOLDOWN_SECONDS);
-            setRewardType("Water");
-            setInteractionType("Lever");
-            setStimulusType("Light");
-            setEndChimeEnabled(false);
-            setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
-            setPresetSaveMessage("");
-            return;
-        }
+            setRewardType(FIXED_REWARD_TYPE);
+        setInteractionType("Lever");
+        setStimulusType("Light");
+        setEndChimeEnabled(false);
+        setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
+        setPresetSaveMessage("");
+        clearValidationErrors();
+        return;
+      }
 
         const userPreset = userPresets.find((preset) => preset.id === value);
         if (!userPreset) {
@@ -582,19 +646,25 @@ const handlePreset = (event) => {
 
         setPresetName(userPreset.name);
         setPresetDescription(userPreset.description || "");
-        setTestName(userPreset.testName || "");
-        setSubjectID(userPreset.subjectID || "");
-        setTrialDuration(userPreset.trialDuration || "");
-        setGoalForTrial(userPreset.goalForTrial || "");
-        setGoalForTest(userPreset.goalForTest || "");
-        setRewaStimTime(userPreset.RewaStimTime || "");
-        setStimTimeOn(userPreset.StimTimeOn || "");
-        setCooldown(userPreset.cooldown || "");
-        setRewardType(userPreset.rewardType || "Water");
+        const validation = validateTrialForm({
+          ...buildCurrentFormSnapshot(),
+          ...userPreset,
+          cooldown: userPreset.cooldown || DEFAULT_COOLDOWN_SECONDS,
+        });
+        setTestName(validation.normalizedValues.testName || "");
+        setSubjectID(validation.normalizedValues.subjectID || "");
+        setTrialDuration(validation.normalizedValues.trialDuration || "");
+        setGoalForTrial(validation.normalizedValues.goalForTrial || "");
+        setGoalForTest(validation.normalizedValues.goalForTest || "");
+        setRewaStimTime(validation.normalizedValues.RewaStimTime || "");
+        setStimTimeOn(validation.normalizedValues.StimTimeOn || "");
+        setCooldown(validation.normalizedValues.cooldown || DEFAULT_COOLDOWN_SECONDS);
+        setRewardType(FIXED_REWARD_TYPE);
         setInteractionType(userPreset.interactionType || "Lever");
         setStimulusType(userPreset.stimulusType || "Light");
         setEndChimeEnabled(Boolean(userPreset.endChimeEnabled));
-        setEndChimePattern(userPreset.endChimePattern || DEFAULT_END_CHIME_PATTERN);
+        setEndChimePattern(validation.normalizedValues.endChimePattern || DEFAULT_END_CHIME_PATTERN);
+        syncValidationErrors(validation.errors);
         setPresetSaveMessage(`Preset "${userPreset.name}" loaded into the test form.`);
     } catch(e) {
         showUiError(
@@ -608,364 +678,403 @@ const handlePreset = (event) => {
   return (
     <div className="trial-settings">
       {!testRunning && !testPaused && !testFinished ? (
-        <div id = "formControlContainer">
-          <div className="input-group">
-            <FormControl fullWidth>
-              <InputLabel id="lblPresetManager">Preset:</InputLabel>
-                <Select value={presetValue} onChange={handlePreset}>
-                  {userPresets.map((preset, index) => (
-                      <MenuItem key={preset.id || index} value={preset.id}>
-                          {preset.name}
-                      </MenuItem>
-                  ))}
-                  <MenuItem value={"None"}>None</MenuItem>
-                </Select>
-            </FormControl>
-          </div>  
-
-          <div className="preset-save-panel">
-            <h3>Save Current Settings As Preset</h3>
-            <p>Save this form as a reusable preset so you can auto-fill it later.</p>
-            <div className="preset-save-grid">
-              <FormControl fullWidth>
-                <InputLabel htmlFor="presetName">Preset Name:</InputLabel>
-                <Input
-                  id="presetName"
-                  placeholder="Enter preset name"
-                  value={presetName}
-                  onChange={(e) => setPresetName(e.target.value)}
-                />
-              </FormControl>
-              <FormControl fullWidth>
-                <InputLabel htmlFor="presetDescription">Preset Description:</InputLabel>
-                <Input
-                  id="presetDescription"
-                  placeholder="Optional description"
-                  value={presetDescription}
-                  onChange={(e) => setPresetDescription(e.target.value)}
-                />
-              </FormControl>
-            </div>
-            <Button variant="contained" className="save-preset-button" onClick={handleSaveCurrentAsPreset}>
-              Save Current As Preset
-            </Button>
-            {presetSaveMessage && <p className="preset-save-message">{presetSaveMessage}</p>}
+        <div id="formControlContainer">
+          <div className="trial-form-intro">
+            <h2>Configure a Trial</h2>
+            <p>
+              The backend owns the timing, counts, rewards, and final stop conditions for every run.
+              Use these settings to define how the trial should behave before you start it.
+            </p>
           </div>
 
-          <div className="input-group">
-            <FormControl  fullWidth error={Boolean(testNameError)}>
-              <InputLabel htmlFor="testName">Test Name:</InputLabel>
-              <Input
-                id="lblTestName"
-                placeholder="Enter test name"
-                required
-                value={testName}
-                onChange={(e) => {
-                  const { value, error } = validationFunctions.testNameValidation(e.target.value);
-                  setTestName(value);
-                  setTestNameError(error);
-                }}
-              />
-              <FormHelperText>
-                {testNameError}
-              </FormHelperText>
-            </FormControl>
+          <div className="trial-section-card">
+            <h3>Workflow</h3>
+            <p>
+              Choose a preset or fill out the fields below, then press <strong>Run Test</strong>.
+              While the test is active, the backend controls the timer, counts valid interactions,
+              delivers rewards, and decides when the run should finish.
+            </p>
           </div>
 
-
-          <div className="input-group">
-            <FormControl  fullWidth error={Boolean(subjectIDError)}>
-              <InputLabel htmlFor="subjectIdentification">Subject Identification:</InputLabel>
-              <Input
-                id="txtSubjectID"
-                placeholder="Enter Subject ID (numeric)"
-                required
-                value={subjectID}
-                onChange={(e) => {
-                  const { value, error } = validationFunctions.testSubjectID(e.target.value);
-                  setSubjectID(value);
-                  setSubjectIDError(error);
-                }}
-              />
-              <FormHelperText>
-                {subjectIDError}
-              </FormHelperText>
-            </FormControl>
-          </div>
-        
-          <div className="input-group">
-            <FormControl fullWidth error={Boolean(trialDurationError)}>
-              <InputLabel htmlFor="trialDuration">Trial Duration(Minutes):</InputLabel>
-              <Input
-                id="txtTrialDuration"
-                placeholder="Enter Trial Duration"
-                required
-                min = "0"
-                value={trialDuration}
-                onChange={(e) => {
-                  const { value, error } = validationFunctions.testTrialDurtion(e.target.value);
-                  setTrialDuration(value);
-                  setTrialDurationError(error);
-                }}
-              />
-              <FormHelperText>
-                {trialDurationError}
-              </FormHelperText>
-            </FormControl>
-          </div>
-          
-          {/* GOAL FOR TRIAL INPUT (Required, Numeric Only)
-           * Target number of interactions (lever presses or nose pokes) needed to trigger a reward.
-           * Example: If goal is 5, reward is given every 5th interaction.
-           * Validation ensures only numeric input.
-           * Used in reward logic: if (count % goal === 0) -> trigger reward
-           */}
-          <div className="input-group">
-            <FormControl fullWidth error={Boolean(trialGoalError)}>
-              <InputLabel htmlFor="goalForTrial">Number of presses until reward:</InputLabel>
-              <Input
-                id="txtGoalForTrial"
-                placeholder="Enter Goal"
-                required
-                value={goalForTrial}
-                onChange={(e) => {
-                  const { value, error } = validationFunctions.testTrialGoal(e.target.value);
-                  setGoalForTrial(value);
-                  setTrialGoalError(error);
-                }}
-              />
-              <FormHelperText>
-                {trialGoalError}
-              </FormHelperText>
-            </FormControl>
-          </div>
-          
-          <div>
-            <FormControl fullWidth error={Boolean(testGoalError)}>
-              <InputLabel htmlFor="goalForTest">Goal for Test:</InputLabel>
-              <Input
-                id="txtGoalForTest"
-                placeholder="Enter Goal"
-                required
-                value={goalForTest}
-                onChange={(e) => {
-                  const { value, error } = validationFunctions.testTrialGoal(e.target.value);
-                  setGoalForTest(value);
-                  setTestGoalError(error);
-                }}
-                />
-                <FormHelperText>
-                  {testGoalError}
-                </FormHelperText>
-            </FormControl>
-          </div>
-
-          <div>
-            <FormControl fullWidth error={Boolean(RewaStimTimeError)}>
-              <InputLabel htmlFor="RewaStimTime">Time between reward given and stimulus activated (s):</InputLabel>
-              <Input
-                id="txtRewaStimTime"
-                placeholder="Enter Time (s)"
-                required
-                value={RewaStimTime}
-                onChange={(e) => {
-                  const { value, error } = validationFunctions.testTrialGoal(e.target.value);
-                  setRewaStimTime(value);
-                  setRewaStimTimeError(error);
-                }}
-                />
-                <FormHelperText>
-                  {RewaStimTimeError}
-                </FormHelperText>
-            </FormControl>
-          </div>
-          
-          <div>
-            <FormControl fullWidth error={Boolean(StimTimeOnError)}>
-              <InputLabel htmlFor="StimTimeOn">Time stimulus is on (s):</InputLabel>
-              <Input
-                id="txtStimTimeOn"
-                placeholder="Enter Time (s)"
-                required
-                value={StimTimeOn}
-                onChange={(e) => {
-                  const { value, error } = validationFunctions.testTrialGoal(e.target.value);
-                  setStimTimeOn(value);
-                  setStimTimeOnError(error);
-                }}
-                />
-                <FormHelperText>
-                  {StimTimeOnError}
-                </FormHelperText>
-            </FormControl>
-          </div>
-
-          {/* COOLDOWN INPUT (Required, Numeric Only, Seconds)
-           * Minimum time (in seconds) that must elapse between rewards.
-           * Prevents rapid-fire reward dispensing even if goal is met multiple times quickly.
-           * Checked in reward logic: if (now - lastRewardTime >= cooldown * 1000)
-           * Validation ensures only numeric input.
-           */}
-          <div className="input-group">
-             <FormControl fullWidth error={Boolean(coolDownError)}>
-              <InputLabel htmlFor="coolDown">Cooldown (fixed to 0s):</InputLabel>
-              <Input
-                id="txtCooldown"
-                placeholder="0"
-                inputProps={{ readOnly: true }}
-                min = "0"
-                value={cooldown}
-                onChange={(e) => {
-                  const { value, error } = validationFunctions.testCoolDown(e.target.value);
-                  setCooldown(value);
-                  setCoolDownError(error);
-                }}
-              />
-              <FormHelperText>
-                {coolDownError}
-              </FormHelperText>
-            </FormControl>
-          </div>
-         
-         <div className="input-group">
-          <FormControl fullWidth>
-            <InputLabel id="rewardType">Reward Type:</InputLabel>
-              <Select
-                id="selectRewardType"
-                value={rewardType}
-                onChange = {(e) => setRewardType(e.target.value)}
-              >
-                <MenuItem value={"Water"}>Water</MenuItem>
-                <MenuItem value={"Food"}>Food</MenuItem>
-              </Select>
-          </FormControl>
-         </div>
-        
-          <div className="input-group">
-            <FormControl fullWidth>
-              <InputLabel id="interactionType">Interaction Type:</InputLabel>
-                <Select
-                  id="selectInteractionType"
-                  value={interactionType}
-                  onChange = {(e) => setInteractionType(e.target.value)}
-                  >
-                  <MenuItem value={"Poke"}>Poke</MenuItem>
-                  <MenuItem value={"Lever"}>Lever</MenuItem>
-                  <MenuItem value={"Poke Then Lever"}>Poke then Lever</MenuItem>
-                  <MenuItem value={"Lever then Poke"}>Lever then Poke</MenuItem>
-                </Select>
-            </FormControl>
-          </div>
-          
-          <div className="input-group">
-            <FormControl fullWidth>
-              <InputLabel id="stimulusType">Stimulus Type:</InputLabel>
-                <Select
-                  id="selectStimulusType"
-                  value={stimulusType}
-                  onChange = {(e) => setStimulusType(e.target.value)}
-                >
-                  <MenuItem value={"Light"}>Light</MenuItem>
-                  <MenuItem value={"Tone"}>Tone</MenuItem>
-                </Select>
-            </FormControl>
-          </div>
-
-          {/* <div className="input-group">
-            <FormControl fullWidth>
-              <InputLabel id="stimulusTypeTwo">Stimulus Type:</InputLabel>
-                <Select
-                  id="selectStimulusTypeTwo"
-                  value={stimulusType}
-                  onChange = {(e) => setStimulusType(e.target.value)}
-                >
-                  <MenuItem value={"Light"}>Light</MenuItem>
-                  <MenuItem value={"Tone"}>Tone</MenuItem>
-                </Select>
-            </FormControl>
-          </div> */}
-        
-          {stimulusType === "Light" ? (
-            <div className="stimulus-note">
-              Light stimulus selected. The box uses one fixed stimulus light, so there is no color choice to configure.
-            </div>
-          ) : (
-            <div className="stimulus-note">
-              Tone stimulus selected. Light color does not apply to this test.
-            </div>
-          )}
-
-          <div className="pump-prime-panel">
-            <h3>Prime Water Line</h3>
-            <p>Run the water pump before a test so the line is full.</p>
-            <div className="pump-prime-controls">
-              <FormControl fullWidth>
-                <InputLabel htmlFor="pumpPrimeSeconds">Prime Duration (s):</InputLabel>
-                <Input
-                  id="pumpPrimeSeconds"
-                  placeholder="Enter seconds"
-                  value={pumpPrimeSeconds}
-                  onChange={(e) => setPumpPrimeSeconds(e.target.value)}
-                  inputProps={{ inputMode: "decimal", min: "0", step: "0.1" }}
-                />
-              </FormControl>
-              <Button
-                className="prime-button"
-                variant="contained"
-                onClick={handlePrimePump}
-                disabled={pumpPrimeBusy}
-              >
-                {pumpPrimeBusy ? "Priming..." : "Prime Pump"}
-              </Button>
-            </div>
-            {pumpPrimeMessage && <p className="pump-prime-message">{pumpPrimeMessage}</p>}
-          </div>
-
-          <div className="input-group">
-            <FormControl fullWidth>
-              <InputLabel id="endChimeEnabled">End-of-Test Chime:</InputLabel>
-              <Select
-                id="selectEndChimeEnabled"
-                value={endChimeEnabled ? "enabled" : "disabled"}
-                onChange={(e) => setEndChimeEnabled(e.target.value === "enabled")}
-              >
-                <MenuItem value={"disabled"}>Disabled</MenuItem>
-                <MenuItem value={"enabled"}>Enabled</MenuItem>
-              </Select>
-            </FormControl>
-          </div>
-
-          {endChimeEnabled ? (
+          <div className="trial-section-card">
             <div className="input-group">
               <FormControl fullWidth>
-                <InputLabel htmlFor="endChimePattern">End Chime Pattern:</InputLabel>
-                <Input
-                  id="txtEndChimePattern"
-                  placeholder="523:0.12,659:0.12,784:0.24"
-                  value={endChimePattern}
-                  onChange={(e) => setEndChimePattern(e.target.value)}
-                />
+                <InputLabel id="lblPresetManager">Preset:</InputLabel>
+                  <Select value={presetValue} onChange={handlePreset}>
+                    {userPresets.map((preset, index) => (
+                        <MenuItem key={preset.id || index} value={preset.id}>
+                            {preset.name}
+                        </MenuItem>
+                    ))}
+                    <MenuItem value={"None"}>None</MenuItem>
+                  </Select>
+                  <FormHelperText>
+                    Load a saved preset to auto-fill the form, then adjust any fields you want before starting.
+                  </FormHelperText>
               </FormControl>
             </div>
-          ) : (
-            <div className="stimulus-note">
-              Enable this option if you want the passive buzzer on GPIO 27 to play a short custom chime when the test finishes.
-            </div>
-          )}
-          
-          <div className="input-group">
-            <ButtonGroup variant="contained"  className="input-group" aria-label="Basic button group">
-              <Button className="save-button" onClick={handleSaveTest} disabled={!hasChanged()}>Save Test</Button>
-              <Button><input type="file" accept=".txt" onChange={handleFileUpload} className="upload-button" /></Button>
-              {uploadedFile && <Button className="delete-button" onClick={handleDeleteUpload} style={{ backgroundColor: 'red', color: 'white' }}>Delete</Button>}
-              <Button 
-                className="start-button" 
-                onClick={handleRunTest}
-              >
-                Run Test
+
+            <div className="preset-save-panel">
+              <h3>Save Current Settings As Preset</h3>
+              <p>Save this form as a reusable preset so you can auto-fill it later.</p>
+              <div className="preset-save-grid">
+                <FormControl fullWidth>
+                  <InputLabel htmlFor="presetName">Preset Name:</InputLabel>
+                  <Input
+                    id="presetName"
+                    placeholder="Enter preset name"
+                    value={presetName}
+                    onChange={(e) => setPresetName(e.target.value)}
+                  />
+                </FormControl>
+                <FormControl fullWidth>
+                  <InputLabel htmlFor="presetDescription">Preset Description:</InputLabel>
+                  <Input
+                    id="presetDescription"
+                    placeholder="Optional description"
+                    value={presetDescription}
+                    onChange={(e) => setPresetDescription(e.target.value)}
+                  />
+                </FormControl>
+              </div>
+              <Button variant="contained" className="save-preset-button" onClick={handleSaveCurrentAsPreset}>
+                Save Current As Preset
               </Button>
-            </ButtonGroup>
-          </div>          
+              {presetSaveMessage && <p className="preset-save-message">{presetSaveMessage}</p>}
+            </div>
+          </div>
+
+          <div className="trial-section-card">
+            <h3>Trial Identity</h3>
+            <div className="trial-form-grid">
+              <div className="input-group">
+                <FormControl fullWidth error={Boolean(testNameError)}>
+                  <InputLabel htmlFor="testName">Test Name:</InputLabel>
+                  <Input
+                    id="lblTestName"
+                    placeholder="Enter test name"
+                    required
+                    value={testName}
+                    onChange={(e) => {
+                      const { value, error } = validationFunctions.testNameValidation(e.target.value);
+                      setTestName(value);
+                      const validation = validateCurrentTrialForm({ testName: value });
+                      setTestNameError(error || validation.errors.testName || "");
+                    }}
+                  />
+                  <FormHelperText>
+                    {testNameError || FIELD_HELP_TEXT.testName}
+                  </FormHelperText>
+                </FormControl>
+              </div>
+
+              <div className="input-group">
+                <FormControl fullWidth error={Boolean(subjectIDError)}>
+                  <InputLabel htmlFor="subjectIdentification">Subject Identification:</InputLabel>
+                  <Input
+                    id="txtSubjectID"
+                    placeholder="Enter Subject ID (numeric)"
+                    required
+                    value={subjectID}
+                    onChange={(e) => {
+                      const { value, error } = validationFunctions.testSubjectID(e.target.value);
+                      setSubjectID(value);
+                      const validation = validateCurrentTrialForm({ subjectID: value });
+                      setSubjectIDError(error || validation.errors.subjectID || "");
+                    }}
+                  />
+                  <FormHelperText>
+                    {subjectIDError || FIELD_HELP_TEXT.subjectID}
+                  </FormHelperText>
+                </FormControl>
+              </div>
+            </div>
+          </div>
+
+          <div className="trial-section-card">
+            <h3>Timing And Goals</h3>
+            <p className="trial-section-note">
+              These values tell the backend how long the test can run, when to give rewards,
+              and when to stop automatically.
+            </p>
+            <div className="trial-form-grid">
+              <div className="input-group">
+                <FormControl fullWidth error={Boolean(trialDurationError)}>
+                  <InputLabel htmlFor="trialDuration">Trial Duration (Minutes):</InputLabel>
+                  <Input
+                    id="txtTrialDuration"
+                    placeholder="Enter Trial Duration"
+                    required
+                    min="0"
+                    value={trialDuration}
+                    onChange={(e) => {
+                      const { value, error } = validationFunctions.testTrialDurtion(e.target.value);
+                      setTrialDuration(value);
+                      const validation = validateCurrentTrialForm({ trialDuration: value });
+                      setTrialDurationError(error || validation.errors.trialDuration || "");
+                    }}
+                  />
+                  <FormHelperText>
+                    {trialDurationError || FIELD_HELP_TEXT.trialDuration}
+                  </FormHelperText>
+                </FormControl>
+              </div>
+
+              <div className="input-group">
+                <FormControl fullWidth error={Boolean(trialGoalError)}>
+                  <InputLabel htmlFor="goalForTrial">Responses Needed For Each Reward:</InputLabel>
+                  <Input
+                    id="txtGoalForTrial"
+                    placeholder="Enter Goal"
+                    required
+                    value={goalForTrial}
+                    onChange={(e) => {
+                      const { value, error } = validationFunctions.testTrialGoal(e.target.value);
+                      setGoalForTrial(value);
+                      const validation = validateCurrentTrialForm({ goalForTrial: value });
+                      setTrialGoalError(error || validation.errors.goalForTrial || "");
+                    }}
+                  />
+                  <FormHelperText>
+                    {trialGoalError || FIELD_HELP_TEXT.goalForTrial}
+                  </FormHelperText>
+                </FormControl>
+              </div>
+
+              <div className="input-group">
+                <FormControl fullWidth error={Boolean(testGoalError)}>
+                  <InputLabel htmlFor="goalForTest">Total Valid Responses Before Finish:</InputLabel>
+                  <Input
+                    id="txtGoalForTest"
+                    placeholder="Enter Goal"
+                    required
+                    value={goalForTest}
+                    onChange={(e) => {
+                      const { value, error } = validationFunctions.testTrialGoal(e.target.value);
+                      setGoalForTest(value);
+                      const validation = validateCurrentTrialForm({ goalForTest: value });
+                      setTestGoalError(error || validation.errors.goalForTest || "");
+                    }}
+                    />
+                    <FormHelperText>
+                      {testGoalError || FIELD_HELP_TEXT.goalForTest}
+                    </FormHelperText>
+                </FormControl>
+              </div>
+
+              <div className="input-group">
+                <FormControl fullWidth error={Boolean(RewaStimTimeError)}>
+                  <InputLabel htmlFor="RewaStimTime">Delay After Reward Before Next Cycle (s):</InputLabel>
+                  <Input
+                    id="txtRewaStimTime"
+                    placeholder="Enter Time (s)"
+                    required
+                    value={RewaStimTime}
+                    onChange={(e) => {
+                      const { value, error } = validationFunctions.testRewardDelay(e.target.value);
+                      setRewaStimTime(value);
+                      const validation = validateCurrentTrialForm({ RewaStimTime: value });
+                      setRewaStimTimeError(error || validation.errors.RewaStimTime || "");
+                    }}
+                    />
+                    <FormHelperText>
+                      {RewaStimTimeError || FIELD_HELP_TEXT.RewaStimTime}
+                    </FormHelperText>
+                </FormControl>
+              </div>
+
+              <div className="input-group">
+                <FormControl fullWidth error={Boolean(StimTimeOnError)}>
+                  <InputLabel htmlFor="StimTimeOn">Stimulus On Time (s):</InputLabel>
+                  <Input
+                    id="txtStimTimeOn"
+                    placeholder="Enter Time (s)"
+                    required
+                    value={StimTimeOn}
+                    onChange={(e) => {
+                      const { value, error } = validationFunctions.testStimulusDuration(e.target.value);
+                      setStimTimeOn(value);
+                      const validation = validateCurrentTrialForm({ StimTimeOn: value });
+                      setStimTimeOnError(error || validation.errors.StimTimeOn || "");
+                    }}
+                    />
+                    <FormHelperText>
+                      {StimTimeOnError || FIELD_HELP_TEXT.StimTimeOn}
+                    </FormHelperText>
+                </FormControl>
+              </div>
+
+              <div className="input-group">
+                <FormControl fullWidth error={Boolean(coolDownError)}>
+                  <InputLabel htmlFor="coolDown">Cooldown (Stored Only):</InputLabel>
+                  <Input
+                    id="txtCooldown"
+                    placeholder="0"
+                    inputProps={{ readOnly: true }}
+                    min="0"
+                    value={cooldown}
+                    onChange={(e) => {
+                      const { value, error } = validationFunctions.testCoolDown(e.target.value);
+                      setCooldown(value);
+                      const validation = validateCurrentTrialForm({ cooldown: value });
+                      setCoolDownError(error || validation.errors.cooldown || "");
+                    }}
+                  />
+                  <FormHelperText>
+                    {coolDownError || FIELD_HELP_TEXT.cooldown}
+                  </FormHelperText>
+                </FormControl>
+              </div>
+            </div>
+          </div>
+
+          <div className="trial-section-card">
+            <h3>Responses And Outputs</h3>
+            <p className="trial-section-note">
+              These settings choose what counts as a valid response and which hardware outputs the backend uses during each cycle.
+            </p>
+            <div className="trial-form-grid">
+              <div className="input-group">
+                <FormControl fullWidth>
+                  <InputLabel id="rewardType">Reward Type:</InputLabel>
+                    <Select
+                      id="selectRewardType"
+                      value={rewardType}
+                      disabled
+                    >
+                      <MenuItem value={FIXED_REWARD_TYPE}>{FIXED_REWARD_TYPE}</MenuItem>
+                    </Select>
+                    <FormHelperText>{FIELD_HELP_TEXT.rewardType}</FormHelperText>
+                </FormControl>
+              </div>
+
+              <div className="input-group">
+                <FormControl fullWidth>
+                  <InputLabel id="interactionType">Interaction Type:</InputLabel>
+                    <Select
+                      id="selectInteractionType"
+                      value={interactionType}
+                      onChange = {(e) => setInteractionType(e.target.value)}
+                      >
+                      <MenuItem value={"Poke"}>Poke</MenuItem>
+                      <MenuItem value={"Lever"}>Lever</MenuItem>
+                      <MenuItem value={"Poke Then Lever"}>Poke then Lever</MenuItem>
+                      <MenuItem value={"Lever then Poke"}>Lever then Poke</MenuItem>
+                    </Select>
+                    <FormHelperText>{FIELD_HELP_TEXT.interactionType}</FormHelperText>
+                </FormControl>
+              </div>
+
+              <div className="input-group">
+                <FormControl fullWidth>
+                  <InputLabel id="stimulusType">Stimulus Type:</InputLabel>
+                    <Select
+                      id="selectStimulusType"
+                      value={stimulusType}
+                      onChange = {(e) => setStimulusType(e.target.value)}
+                    >
+                      <MenuItem value={"Light"}>Light</MenuItem>
+                      <MenuItem value={"Tone"}>Tone</MenuItem>
+                    </Select>
+                    <FormHelperText>{FIELD_HELP_TEXT.stimulusType}</FormHelperText>
+                </FormControl>
+              </div>
+            </div>
+
+            {stimulusType === "Light" ? (
+              <div className="stimulus-note">
+                Light stimulus selected. The backend will use the single box light on each cycle, so there is no separate color option to configure.
+              </div>
+            ) : (
+              <div className="stimulus-note">
+                Tone stimulus selected. The backend will use the passive buzzer on each cycle instead of the trial light.
+              </div>
+            )}
+          </div>
+
+          <div className="trial-section-card">
+            <h3>Finish Chime And File Actions</h3>
+            <div className="trial-form-grid">
+              <div className="input-group">
+                <FormControl fullWidth>
+                  <InputLabel id="endChimeEnabled">End-of-Test Chime:</InputLabel>
+                  <Select
+                    id="selectEndChimeEnabled"
+                    value={endChimeEnabled ? "enabled" : "disabled"}
+                    onChange={(e) => {
+                      const nextEnabled = e.target.value === "enabled";
+                      setEndChimeEnabled(nextEnabled);
+                      validateCurrentTrialForm({ endChimeEnabled: nextEnabled });
+                    }}
+                  >
+                    <MenuItem value={"disabled"}>Disabled</MenuItem>
+                    <MenuItem value={"enabled"}>Enabled</MenuItem>
+                  </Select>
+                  <FormHelperText>{FIELD_HELP_TEXT.endChimeEnabled}</FormHelperText>
+                </FormControl>
+              </div>
+
+              {endChimeEnabled ? (
+                <div className="input-group">
+                  <FormControl fullWidth error={Boolean(endChimePatternError)}>
+                    <InputLabel htmlFor="endChimePattern">End Chime Pattern:</InputLabel>
+                    <Input
+                      id="txtEndChimePattern"
+                      placeholder="523:0.12,659:0.12,784:0.24"
+                      value={endChimePattern}
+                      onChange={(e) => {
+                        const { value } = validationFunctions.testEndChimePattern(
+                          e.target.value,
+                          endChimeEnabled,
+                        );
+                        setEndChimePattern(value);
+                        const validation = validateCurrentTrialForm({ endChimePattern: value });
+                        setEndChimePatternError(validation.errors.endChimePattern || "");
+                      }}
+                    />
+                    <FormHelperText>
+                      {endChimePatternError || FIELD_HELP_TEXT.endChimePattern}
+                    </FormHelperText>
+                  </FormControl>
+                </div>
+              ) : (
+                <div className="stimulus-note">
+                  Leave this disabled if you want the trial to end silently. Enable it only when you want a short finish pattern after the run completes.
+                </div>
+              )}
+            </div>
+
+            <div className="trial-action-panel">
+              <p className="trial-section-note">
+                Save a settings file for later reuse, load a saved file into the form, or start the configured trial immediately.
+              </p>
+              <div className="trial-action-row" aria-label="Trial form actions">
+                <Button className="save-button" onClick={handleSaveTest} disabled={!hasChanged()}>
+                  Save Test
+                </Button>
+                <label className="upload-action-button">
+                  <input type="file" accept=".txt" onChange={handleFileUpload} className="upload-button" />
+                  <span>{uploadedFile ? "Replace Test File" : "Upload Test File"}</span>
+                </label>
+                {uploadedFile && (
+                  <Button className="delete-button" onClick={handleDeleteUpload}>
+                    Clear Loaded File
+                  </Button>
+                )}
+                <Button
+                  className="start-button"
+                  onClick={handleRunTest}
+                >
+                  Run Test
+                </Button>
+              </div>
+              {uploadedFile && (
+                <p className="upload-file-name">
+                  Loaded file: {uploadedFile.name}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
    

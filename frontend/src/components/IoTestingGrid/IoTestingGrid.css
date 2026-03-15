@@ -101,6 +101,63 @@
     opacity: 0.9;
   }
 
+.io-prime-panel {
+    margin-top: 20px;
+    padding: 16px;
+    border: 1px solid #d7c79f;
+    border-radius: 8px;
+    background-color: #fff8e8;
+  }
+
+  .io-buzzer-panel {
+    margin-top: 20px;
+    padding: 16px;
+    border: 1px solid #b8d8be;
+    border-radius: 8px;
+    background-color: #eef8f0;
+  }
+
+  .io-buzzer-panel h3 {
+    margin: 0 0 8px 0;
+    color: #23522b;
+  }
+
+  .io-buzzer-panel p {
+    margin: 0 0 12px 0;
+    color: #315b39;
+  }
+
+  .io-prime-panel h3 {
+    margin: 0 0 8px 0;
+    color: #725200;
+  }
+
+  .io-prime-panel p {
+    margin: 0 0 12px 0;
+    color: #6d5a25;
+  }
+
+  .io-prime-note {
+    font-weight: 600;
+  }
+
+  .prime-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+  }
+
+  .prime-button {
+    background-color: #0f7fce;
+  }
+
+  @media (max-width: 640px) {
+    .prime-controls {
+      flex-direction: column;
+      align-items: stretch;
+    }
+  }
+
     /* Button container */
     .link-group {
       display: flex;

@@ -11,6 +11,9 @@ const CSV_COLUMNS = [
   { key: 'exportedAt', label: 'exported_at' },
   { key: 'testName', label: 'test_name' },
   { key: 'subjectId', label: 'subject_id' },
+  { key: 'conductedByDisplayName', label: 'conducted_by_display_name' },
+  { key: 'conductedByEmail', label: 'conducted_by_email' },
+  { key: 'conductedByUserId', label: 'conducted_by_user_id' },
   { key: 'status', label: 'status' },
   { key: 'complete', label: 'complete' },
   { key: 'preset', label: 'preset' },
@@ -65,6 +68,16 @@ export const buildTraditionalCsv = (record) => {
   const headers = CSV_COLUMNS.map((column) => escapeCsvValue(column.label)).join(',');
   const row = CSV_COLUMNS.map((column) => escapeCsvValue(record[column.key])).join(',');
   return `${headers}\n${row}\n`;
+};
+
+
+export const buildTraditionalCsvRows = (records) => {
+  const normalizedRecords = Array.isArray(records) ? records : [];
+  const headers = CSV_COLUMNS.map((column) => escapeCsvValue(column.label)).join(',');
+  const rows = normalizedRecords.map((record) =>
+    CSV_COLUMNS.map((column) => escapeCsvValue(record?.[column.key])).join(',')
+  );
+  return `${headers}\n${rows.join('\n')}${rows.length ? '\n' : ''}`;
 };
 
 

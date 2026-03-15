@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Button from '@mui/material/Button';
-import { Alert, FormControl, Input, InputLabel, Stack } from '@mui/material';
+import { Alert, FormControl, FormHelperText, Input, InputLabel, Stack } from '@mui/material';
 import './main.css';
 import '../TestManager/TestManager.css';
 
@@ -15,6 +15,7 @@ import {
 } from '../../utilities/presets';
 import { SINGLE_LIGHT_LABEL, normalizeLightColorForStimulus } from '../../utilities/resultsCsv';
 
+const FIXED_REWARD_TYPE = 'Water';
 
 const DEFAULT_PRESET_FORM = {
   id: '',
@@ -28,7 +29,7 @@ const DEFAULT_PRESET_FORM = {
   RewaStimTime: '',
   StimTimeOn: '',
   cooldown: '',
-  rewardType: 'Water',
+  rewardType: FIXED_REWARD_TYPE,
   interactionType: 'Lever',
   stimulusType: 'Light',
   lightColor: SINGLE_LIGHT_LABEL,
@@ -112,12 +113,14 @@ const PresetManager = () => {
       const result = await upsertUserPreset({
         ...form,
         id: shouldReusePresetId ? form.id : undefined,
+        rewardType: FIXED_REWARD_TYPE,
         lightColor: normalizeLightColorForStimulus(form.stimulusType),
       });
 
       setSavedPresets(result.presets);
       setForm({
         ...result.preset,
+        rewardType: FIXED_REWARD_TYPE,
         lightColor: normalizeLightColorForStimulus(result.preset.stimulusType),
       });
       setFeedback({
@@ -137,6 +140,7 @@ const PresetManager = () => {
   const handlePresetLoad = (preset) => {
     setForm({
       ...preset,
+      rewardType: FIXED_REWARD_TYPE,
       lightColor: normalizeLightColorForStimulus(preset.stimulusType),
     });
     setFeedback({
@@ -316,11 +320,11 @@ const PresetManager = () => {
             <Select
               id="rewardType"
               value={form.rewardType}
-              onChange={(e) => updateFormField('rewardType', e.target.value)}
+              disabled
             >
-              <MenuItem value="Water">Water</MenuItem>
-              <MenuItem value="Food">Food</MenuItem>
+              <MenuItem value={FIXED_REWARD_TYPE}>{FIXED_REWARD_TYPE}</MenuItem>
             </Select>
+            <FormHelperText>Water is the only enabled reward type right now.</FormHelperText>
           </FormControl>
         </div>
 
