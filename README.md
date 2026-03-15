@@ -152,7 +152,55 @@ If you need to add or change behavior, these are the first places to look:
 
 ### Testing and debugging expectations
 
-Before changing core behavior, it helps to know how the project is usually validated:
+If you are not sure where to start, start with the one-command regression runner from the repository root:
+
+```bash
+python3 scripts/run_regression_suite.py
+```
+
+This is the easiest "run everything and show me the results" command in the project.
+
+What it does:
+
+- backend: runs the Python `unittest` suites in mock GPIO and mock OLED mode, so it checks auth, trial flow, timers, counts, presets, database behavior, GPIO abstraction, OLED updates, and error handling without needing the real box attached
+- frontend tests: runs the React/Jest smoke test, which checks that the app can still render the main UI shell and key entry links
+- frontend build: runs the production React build, which catches compile errors and import/configuration problems that might not show up in the smoke test alone
+
+What the results usually look like:
+
+- backend tests print many lines ending in `... ok` when each test passes
+- frontend Jest ends with `PASS` when the frontend smoke test succeeds
+- the regression runner ends with `Regression suite passed.` when all three steps succeeded
+
+Typical successful output looks roughly like this:
+
+```text
+=== Backend unittest suite ===
+...
+Ran 23 tests in 2.0s
+
+OK
+
+=== Frontend Jest smoke tests ===
+...
+PASS src/components/App/App.test.js
+
+=== Frontend production build ===
+...
+Compiled with warnings.
+
+Regression suite passed.
+```
+
+How to interpret the result:
+
+- `ok` or `OK` means the backend test checks passed
+- `PASS` means the frontend smoke test passed
+- `Compiled with warnings.` means the frontend build succeeded, but there are warnings to review later
+- `FAIL` means a test ran but one of its checks did not match the expected result
+- `ERROR` means something crashed during the test run
+
+Before changing core behavior, it also helps to know how the project is usually validated:
 
 - backend regression coverage lives in [backend/tests/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/tests)
 - frontend smoke coverage lives in [frontend/src/components/App/App.test.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/App/App.test.js)
