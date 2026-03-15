@@ -5,6 +5,30 @@ const AUTH_TOKEN_STORAGE_KEY = 'skinnerbox.authToken';
 const AUTH_USER_STORAGE_KEY = 'skinnerbox.authUser';
 export const AUTH_INVALID_EVENT_NAME = 'skinnerbox-auth-invalid';
 
+const getSessionStorage = () => window.sessionStorage;
+const getLegacyLocalStorage = () => window.localStorage;
+
+const migrateLegacyAuthStorageIfNeeded = () => {
+  const sessionStorage = getSessionStorage();
+  if (sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || sessionStorage.getItem(AUTH_USER_STORAGE_KEY)) {
+    return;
+  }
+
+  const legacyStorage = getLegacyLocalStorage();
+  const legacyToken = legacyStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  const legacyUser = legacyStorage.getItem(AUTH_USER_STORAGE_KEY);
+
+  if (legacyToken) {
+    sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, legacyToken);
+    legacyStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  }
+
+  if (legacyUser) {
+    sessionStorage.setItem(AUTH_USER_STORAGE_KEY, legacyUser);
+    legacyStorage.removeItem(AUTH_USER_STORAGE_KEY);
+  }
+};
+
 // Shared axios client so every request uses the same base URL and auth behavior.
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -44,10 +68,14 @@ const maybeDispatchAuthInvalid = (normalizedError) => {
   }
 };
 
-export const getStoredAuthToken = () => localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || '';
+export const getStoredAuthToken = () => {
+  migrateLegacyAuthStorageIfNeeded();
+  return getSessionStorage().getItem(AUTH_TOKEN_STORAGE_KEY) || '';
+};
 
 export const getStoredAuthUser = () => {
-  const rawUser = localStorage.getItem(AUTH_USER_STORAGE_KEY);
+  migrateLegacyAuthStorageIfNeeded();
+  const rawUser = getSessionStorage().getItem(AUTH_USER_STORAGE_KEY);
   if (!rawUser) {
     return null;
   }
@@ -61,13 +89,18 @@ export const getStoredAuthUser = () => {
 };
 
 export const storeAuthSession = ({ token, user }) => {
-  localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
-  localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
+  const sessionStorage = getSessionStorage();
+  sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+  sessionStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
+  getLegacyLocalStorage().removeItem(AUTH_TOKEN_STORAGE_KEY);
+  getLegacyLocalStorage().removeItem(AUTH_USER_STORAGE_KEY);
 };
 
 export const clearAuthSession = () => {
-  localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-  localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+  getSessionStorage().removeItem(AUTH_TOKEN_STORAGE_KEY);
+  getSessionStorage().removeItem(AUTH_USER_STORAGE_KEY);
+  getLegacyLocalStorage().removeItem(AUTH_TOKEN_STORAGE_KEY);
+  getLegacyLocalStorage().removeItem(AUTH_USER_STORAGE_KEY);
 };
 
 const normalizeApiError = (error, fallbackCode, fallbackMessage) => {

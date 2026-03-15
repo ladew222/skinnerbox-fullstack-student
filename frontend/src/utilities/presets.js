@@ -2,10 +2,9 @@ import {
   deletePreset as deletePresetApi,
   getPresets as getPresetsApi,
   savePreset as savePresetApi,
+  getStoredAuthUser,
 } from './api';
 
-
-const AUTH_USER_STORAGE_KEY = 'skinnerbox.authUser';
 const LEGACY_PRESET_STORAGE_KEY = 'userPresets';
 const LEGACY_PRESET_STORAGE_PREFIX = 'skinnerbox.userPresets';
 const PRESET_MIGRATION_PREFIX = 'skinnerbox.presetMigration';
@@ -31,12 +30,7 @@ const dispatchPresetUpdate = () => {
 
 const getCurrentUserEmail = () => {
   try {
-    const rawUser = localStorage.getItem(AUTH_USER_STORAGE_KEY);
-    if (!rawUser) {
-      return '';
-    }
-
-    const parsedUser = JSON.parse(rawUser);
+    const parsedUser = getStoredAuthUser();
     return String(parsedUser?.email || '').trim().toLowerCase();
   } catch (error) {
     return '';
@@ -102,7 +96,7 @@ const normalizePreset = (preset) => {
     stimulusType,
     lightColor: isTonePreset
       ? 'N/A'
-      : String(preset?.lightColor || 'Red').trim() || 'Red',
+      : String(preset?.lightColor || 'Box Light').trim() || 'Box Light',
     endChimeEnabled: normalizeBoolean(preset?.endChimeEnabled, false),
     endChimePattern: String(preset?.endChimePattern || DEFAULT_END_CHIME_PATTERN).trim()
       || DEFAULT_END_CHIME_PATTERN,

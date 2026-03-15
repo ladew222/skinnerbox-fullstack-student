@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getCounts, setBlueLight, setOrangeLight, setRGBLight } from '../../utilities/api';
+import { getCounts, setBlueLight } from '../../utilities/api';
 import './IoTestingGrid.css';
 
 const IoTestingGrid = () => {
@@ -19,30 +19,12 @@ const IoTestingGrid = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleBlue = async (action) => {
+  const handleStimulusLight = async (action) => {
     try {
       const result = await setBlueLight(action);
-      setMessage(`Blue LED turned ${result.blue}`);
+      setMessage(`Stimulus light turned ${result.blue}`);
     } catch (error) {
-      setMessage("Failed to control blue LED");
-    }
-  };
-
-  const handleOrange = async (action) => {
-    try {
-      const result = await setOrangeLight(action);
-      setMessage(`Orange LED turned ${result.orange}`);
-    } catch (error) {
-      setMessage("Failed to control orange LED");
-    }
-  };
-
-  const handleRGB = async (red, green, blue) => {
-    try {
-      const result = await setRGBLight(red, green, blue);
-      setMessage(`RGB LED set to R:${result.rgb.red} G:${result.rgb.green} B:${result.rgb.blue}`);
-    } catch (error) {
-      setMessage("Failed to control RGB LED");
+      setMessage('Failed to control the stimulus light');
     }
   };
 
@@ -54,17 +36,10 @@ const IoTestingGrid = () => {
         <p>Lever Presses: {counts.lever_press_count}</p>
         <p>Nose Pokes: {counts.nose_poke_count}</p>
       </div>
+      <p>The trial box uses one fixed stimulus light, so the I/O test only needs one light control.</p>
       <div className="button-group">
-        <button className='bluelight-button' onClick={() => handleBlue('on')}>Blue LED On</button>
-        <button className='bluelight-button' onClick={() => handleBlue('off')}>Blue LED Off</button>
-        <button className='orangelight-button' onClick={() => handleOrange('on')}>Orange LED On</button>
-        <button className='orangelight-button' onClick={() => handleOrange('off')}>Orange LED Off</button>
-      </div>
-      <div className="button-group">
-        <button className='redlight-button' onClick={() => handleRGB('on', 'off', 'off')}>RGB Red On</button>
-        <button className='greenlight-button' onClick={() => handleRGB('off', 'on', 'off')}>RGB Green On</button>
-        <button className='bluelight-button' onClick={() => handleRGB('off', 'off', 'on')}>RGB Blue On</button>
-        <button className='rgblight-button' onClick={() => handleRGB('off', 'off', 'off')}>RGB Off</button>
+        <button className='bluelight-button' onClick={() => handleStimulusLight('on')}>Stimulus Light On</button>
+        <button className='bluelight-button' onClick={() => handleStimulusLight('off')}>Stimulus Light Off</button>
       </div>
       {message && <p>{message}</p>}
     </div>

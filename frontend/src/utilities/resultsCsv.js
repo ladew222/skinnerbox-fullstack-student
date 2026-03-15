@@ -1,3 +1,12 @@
+export const SINGLE_LIGHT_LABEL = 'Box Light';
+
+
+export const normalizeLightColorForStimulus = (stimulusType) => {
+  const normalizedType = (stimulusType || '').trim().toLowerCase();
+  return normalizedType === 'tone' ? 'N/A' : SINGLE_LIGHT_LABEL;
+};
+
+
 const CSV_COLUMNS = [
   { key: 'exportedAt', label: 'exported_at' },
   { key: 'testName', label: 'test_name' },
@@ -43,15 +52,10 @@ const escapeCsvValue = (value) => {
 };
 
 
-export const buildStimulusSummary = (stimulusType, lightColor) => {
+export const buildStimulusSummary = (stimulusType) => {
   const normalizedType = (stimulusType || '').trim().toLowerCase();
   if (normalizedType === 'tone') {
     return 'Tone';
-  }
-
-  const normalizedColor = (lightColor || '').trim();
-  if (normalizedColor && normalizedColor.toLowerCase() !== 'n/a') {
-    return `Light (${normalizedColor})`;
   }
   return 'Light';
 };

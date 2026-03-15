@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from "react";
 import "./TestManager.css";
-import { runTest, stopTest, finishTest, getCounts, setRGBLight, primePump, getTestInformation, getTestStatus } from "../../utilities/api";
+import { runTest, stopTest, finishTest, getCounts, primePump, getTestInformation, getTestStatus } from "../../utilities/api";
 import { DEFAULT_END_CHIME_PATTERN, PRESET_STORAGE_EVENT, loadUserPresets, upsertUserPreset } from "../../utilities/presets";
-import { buildStimulusSummary, buildTraditionalCsv, formatSecondsForDisplay } from "../../utilities/resultsCsv";
+import {
+  buildStimulusSummary,
+  buildTraditionalCsv,
+  formatSecondsForDisplay,
+  normalizeLightColorForStimulus,
+  SINGLE_LIGHT_LABEL,
+} from "../../utilities/resultsCsv";
+import { buildTestSettingsText, parseTestSettingsText } from "../../utilities/testSettingsFile";
 import { Alert, FormControl, Input, InputLabel, Snackbar } from '@mui/material';
 import { validationFunctions } from "../../validation/test_manager";
 import ButtonGroup from '@mui/material/ButtonGroup';
@@ -11,6 +18,24 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormHelperText from '@mui/material/FormHelperText';
 import Button from '@mui/material/Button';
+
+const DEFAULT_COOLDOWN_SECONDS = "0";
+const DEFAULT_FORM_SNAPSHOT = {
+  testName: "",
+  subjectID: "",
+  trialDuration: "",
+  goalForTrial: "",
+  goalForTest: "",
+  RewaStimTime: "",
+  StimTimeOn: "",
+  cooldown: DEFAULT_COOLDOWN_SECONDS,
+  rewardType: "Water",
+  interactionType: "Lever",
+  stimulusType: "Light",
+  lightColor: SINGLE_LIGHT_LABEL,
+  endChimeEnabled: false,
+  endChimePattern: DEFAULT_END_CHIME_PATTERN,
+};
 
 
 const TestManager = () => {
@@ -24,11 +49,10 @@ const TestManager = () => {
   const [goalForTest, setGoalForTest] = useState("");
   const [RewaStimTime, setRewaStimTime] = useState("");
   const [StimTimeOn, setStimTimeOn] = useState("");
-  const [cooldown, setCooldown] = useState("");
+  const [cooldown, setCooldown] = useState(DEFAULT_COOLDOWN_SECONDS);
   const [rewardType, setRewardType] = useState("Water");
   const [interactionType, setInteractionType] = useState("Lever");
   const [stimulusType, setStimulusType] = useState("Light");
-  const [lightColor, setLightColor] = useState("Red");
   const [endChimeEnabled, setEndChimeEnabled] = useState(false);
   const [endChimePattern, setEndChimePattern] = useState(DEFAULT_END_CHIME_PATTERN);
   const [userPresets, setUserPresets] = useState([]);
@@ -42,7 +66,7 @@ const TestManager = () => {
   const [nosePokeCount, setNosePokeCount] = useState(0);
   const [lightOn, setLightOn] = useState(false);
 
-  const [originalSettings, setOriginalSettings] = useState(null);
+  const [originalSettings] = useState(DEFAULT_FORM_SNAPSHOT);
   const [uploadedFile, setUploadedFile] = useState(null);
 
   const [rewardCount, setRewardCount] = useState(0);
@@ -51,7 +75,6 @@ const TestManager = () => {
   const [pumpPrimeMessage, setPumpPrimeMessage] = useState("");
   const [presetSaveMessage, setPresetSaveMessage] = useState("");
 
-  const [message, setMessage] = useState("");
   const [uiError, setUiError] = useState({
     open: false,
     code: "",
@@ -99,7 +122,7 @@ const TestManager = () => {
     setRewardCount(Number(counts.reward_count || 0));
   };
 
-  const effectiveLightColor = stimulusType === "Light" ? lightColor : "N/A";
+  const effectiveLightColor = normalizeLightColorForStimulus(stimulusType);
   const stimulusSummary = buildStimulusSummary(stimulusType, effectiveLightColor);
   const chimeSummary = endChimeEnabled ? endChimePattern : "Disabled";
   const remainingTimeSeconds = configuredDurationSeconds > 0
@@ -107,33 +130,21 @@ const TestManager = () => {
     : 0;
   const appliedPresetName = selectedPreset?.name || "None";
 
-  const refreshPresets = async (showError = false) => {
-    try {
-      setUserPresets(await loadUserPresets());
-    } catch (error) {
-      if (showError) {
-        showUiError(error, "Unable to load saved presets.");
-      }
-    }
-  };
-
-
   useEffect(() => {
-    setOriginalSettings({
-      testName,
-      trialDuration,
-      goalForTrial,
-      goalForTest,
-      RewaStimTime,
-      StimTimeOn,
-      cooldown,
-      rewardType,
-      interactionType,
-      stimulusType,
-      lightColor,
-      endChimeEnabled,
-      endChimePattern,
-    });
+    let isMounted = true;
+
+    const refreshPresets = async (showError = false) => {
+      try {
+        const presets = await loadUserPresets();
+        if (isMounted) {
+          setUserPresets(presets);
+        }
+      } catch (error) {
+        if (showError && isMounted) {
+          showUiError(error, "Unable to load saved presets.");
+        }
+      }
+    };
 
     refreshPresets();
 
@@ -145,6 +156,7 @@ const TestManager = () => {
     window.addEventListener('storage', handlePresetStorageUpdate);
 
     return () => {
+      isMounted = false;
       window.removeEventListener(PRESET_STORAGE_EVENT, handlePresetStorageUpdate);
       window.removeEventListener('storage', handlePresetStorageUpdate);
     };
@@ -153,6 +165,7 @@ const TestManager = () => {
   const hasChanged = () => {
     return JSON.stringify(originalSettings) !== JSON.stringify({
       testName,
+      subjectID,
       trialDuration,
       goalForTrial,
       goalForTest,
@@ -162,7 +175,7 @@ const TestManager = () => {
       rewardType,
       interactionType,
       stimulusType,
-      lightColor,
+      lightColor: effectiveLightColor,
       endChimeEnabled,
       endChimePattern,
     });
@@ -177,21 +190,22 @@ const TestManager = () => {
       return;
     }
 
-    // const testSettings = `Test Name: ${testName}\nTrial Duration: ${trialDuration} seconds\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
-    
-    const testSettings = `Preset: ${appliedPresetName}
-    Test Name: ${testName}
-    Subject Identification: ${subjectID}
-    Trial Duration: ${trialDuration} minutes
-    Goal for Trial: ${goalForTrial}
-    Goal for Test: ${goalForTest}
-    Time Between Reward and New Stimulus: ${RewaStimTime}
-    Time Stimulus Active: ${StimTimeOn}
-    Cooldown: ${cooldown} seconds
-    Reward Type: ${rewardType}
-    Interaction Type: ${interactionType}
-    Stimulus Type: ${stimulusType}
-    Light Color: ${effectiveLightColor}`;
+    const testSettings = buildTestSettingsText({
+      appliedPresetName,
+      testName,
+      subjectID,
+      trialDuration,
+      goalForTrial,
+      goalForTest,
+      RewaStimTime,
+      StimTimeOn,
+      cooldown,
+      rewardType,
+      interactionType,
+      stimulusType,
+      endChimeEnabled,
+      endChimePattern,
+    });
 
     const blob = new Blob([testSettings], { type: "text/plain" });
     const a = document.createElement("a");
@@ -202,15 +216,6 @@ const TestManager = () => {
     document.body.removeChild(a);
   };
 
-  const validateFileFormat = (text) => {
-    const lines = text.split("\n");
-    const expectedKeys = [
-      "Test Name", "Trial Duration", "Goal", "Cooldown",
-      "Reward Type", "Interaction Type", "Stimulus Type", "Light Color"
-    ];
-    return lines.length === expectedKeys.length && lines.every((line, index) => line.startsWith(expectedKeys[index] + ": "));
-  };
-
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -218,31 +223,30 @@ const TestManager = () => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const fileText = e.target.result;
-      if (!validateFileFormat(fileText)) {
+      try {
+        const parsedSettings = parseTestSettingsText(fileText);
+        setUploadedFile(file);
+        setPresetName(parsedSettings.presetName || "");
+        setTestName(parsedSettings.testName || "");
+        setSubjectID(parsedSettings.subjectID || "");
+        setTrialDuration(parsedSettings.trialDuration || "");
+        setGoalForTrial(parsedSettings.goalForTrial || "");
+        setGoalForTest(parsedSettings.goalForTest || "");
+        setRewaStimTime(parsedSettings.RewaStimTime || "");
+        setStimTimeOn(parsedSettings.StimTimeOn || "");
+        setCooldown(parsedSettings.cooldown || DEFAULT_COOLDOWN_SECONDS);
+        setRewardType(parsedSettings.rewardType || "Water");
+        setInteractionType(parsedSettings.interactionType || "Lever");
+        setStimulusType(parsedSettings.stimulusType || "Light");
+        setEndChimeEnabled(Boolean(parsedSettings.endChimeEnabled));
+        setEndChimePattern(parsedSettings.endChimePattern || DEFAULT_END_CHIME_PATTERN);
+        setPresetSaveMessage("");
+      } catch (error) {
         showUiError(
-          { code: "INVALID_FILE_FORMAT", message: "Please upload a properly formatted test settings file." },
+          { code: "INVALID_FILE_FORMAT", message: error.message || "Please upload a properly formatted test settings file." },
         );
         event.target.value = "";
-        return;
       }
-
-      setUploadedFile(file);
-      const lines = fileText.split("\n");
-      const values = lines.map((line) => line.split(": ")[1]);
-
-      // TODO: TASK, the handleFileUpload to reflect the changes to UI
-      setTestName(values[0] || "");
-      setSubjectID(values[1] || "")
-      setTrialDuration(values[1] ? values[1].replace(" minutes", "") : "");
-      setGoalForTrial(values[2] || "");
-      setGoalForTest(values[3] || "");
-      setRewaStimTime(values[4] || "");
-      setStimTimeOn(values[5] || "");
-      setCooldown(values[6] ? values[6].replace(" seconds", "") : "");
-      setRewardType(values[7] || "Water");
-      setInteractionType(values[8] || "Lever");
-      setStimulusType(values[9] || "Light");
-      setLightColor(values[10] || "Red");
     };
     reader.readAsText(file);
   };
@@ -255,11 +259,13 @@ const TestManager = () => {
     setGoalForTest("");
     setRewaStimTime("");
     setStimTimeOn("");
-    setCooldown("");
+    setCooldown(DEFAULT_COOLDOWN_SECONDS);
     setRewardType("Water");
     setInteractionType("Lever");
     setStimulusType("Light");
-    setLightColor("Red");
+    setSubjectID("");
+    setEndChimeEnabled(false);
+    setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
     document.querySelector(".upload-button").value = "";
   };
 
@@ -521,16 +527,6 @@ const TestManager = () => {
     }
   };
 
-  const handleRGB = async (red, green, blue) => {
-    try {
-      const result = await setRGBLight(red, green, blue);
-      setMessage(`RGB LED set to R:${result.rgb.red} G:${result.rgb.green} B:${result.rgb.blue}`);
-    } catch (error) {
-      setMessage("Failed to control RGB LED");
-      showUiError(error, "Unable to control the RGB LED.");
-    }
-  };
-
   const handlePrimePump = async () => {
     const parsedSeconds = Number(pumpPrimeSeconds);
     if (!Number.isFinite(parsedSeconds) || parsedSeconds <= 0) {
@@ -569,11 +565,10 @@ const handlePreset = (event) => {
             setGoalForTest("");
             setRewaStimTime("");
             setStimTimeOn("");
-            setCooldown("");
+            setCooldown(DEFAULT_COOLDOWN_SECONDS);
             setRewardType("Water");
             setInteractionType("Lever");
             setStimulusType("Light");
-            setLightColor("Red");
             setEndChimeEnabled(false);
             setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
             setPresetSaveMessage("");
@@ -598,11 +593,6 @@ const handlePreset = (event) => {
         setRewardType(userPreset.rewardType || "Water");
         setInteractionType(userPreset.interactionType || "Lever");
         setStimulusType(userPreset.stimulusType || "Light");
-        setLightColor(
-          userPreset.stimulusType === "Tone"
-            ? "Red"
-            : (userPreset.lightColor || "Red")
-        );
         setEndChimeEnabled(Boolean(userPreset.endChimeEnabled));
         setEndChimePattern(userPreset.endChimePattern || DEFAULT_END_CHIME_PATTERN);
         setPresetSaveMessage(`Preset "${userPreset.name}" loaded into the test form.`);
@@ -738,7 +728,11 @@ const handlePreset = (event) => {
                 placeholder="Enter Goal"
                 required
                 value={goalForTrial}
-                onChange={(e) => setGoalForTrial(e.target.value)}
+                onChange={(e) => {
+                  const { value, error } = validationFunctions.testTrialGoal(e.target.value);
+                  setGoalForTrial(value);
+                  setTrialGoalError(error);
+                }}
               />
               <FormHelperText>
                 {trialGoalError}
@@ -754,7 +748,11 @@ const handlePreset = (event) => {
                 placeholder="Enter Goal"
                 required
                 value={goalForTest}
-                onChange={(e) => setGoalForTest(e.target.value)}
+                onChange={(e) => {
+                  const { value, error } = validationFunctions.testTrialGoal(e.target.value);
+                  setGoalForTest(value);
+                  setTestGoalError(error);
+                }}
                 />
                 <FormHelperText>
                   {testGoalError}
@@ -770,7 +768,11 @@ const handlePreset = (event) => {
                 placeholder="Enter Time (s)"
                 required
                 value={RewaStimTime}
-                onChange={(e) => setRewaStimTime(e.target.value)}
+                onChange={(e) => {
+                  const { value, error } = validationFunctions.testTrialGoal(e.target.value);
+                  setRewaStimTime(value);
+                  setRewaStimTimeError(error);
+                }}
                 />
                 <FormHelperText>
                   {RewaStimTimeError}
@@ -786,7 +788,11 @@ const handlePreset = (event) => {
                 placeholder="Enter Time (s)"
                 required
                 value={StimTimeOn}
-                onChange={(e) => setStimTimeOn(e.target.value)}
+                onChange={(e) => {
+                  const { value, error } = validationFunctions.testTrialGoal(e.target.value);
+                  setStimTimeOn(value);
+                  setStimTimeOnError(error);
+                }}
                 />
                 <FormHelperText>
                   {StimTimeOnError}
@@ -802,10 +808,10 @@ const handlePreset = (event) => {
            */}
           <div className="input-group">
              <FormControl fullWidth error={Boolean(coolDownError)}>
-              <InputLabel htmlFor="coolDown">Cooldown(Do Not Not To Fill Out):</InputLabel>
+              <InputLabel htmlFor="coolDown">Cooldown (fixed to 0s):</InputLabel>
               <Input
                 id="txtCooldown"
-                placeholder="Enter Cooldown"
+                placeholder="0"
                 inputProps={{ readOnly: true }}
                 min = "0"
                 value={cooldown}
@@ -880,20 +886,8 @@ const handlePreset = (event) => {
           </div> */}
         
           {stimulusType === "Light" ? (
-            <div className="input-group">
-              <FormControl fullWidth>
-                <InputLabel id="lightColor">Light Color:</InputLabel>
-                  <Select
-                    id="selectLightColor"
-                    value={lightColor}
-                    onChange = {(e) => setLightColor(e.target.value)}
-                  >
-                    <MenuItem value={"Red"}>Red</MenuItem>
-                    <MenuItem value={"Green"}>Green</MenuItem>
-                    <MenuItem value={"Blue"}>Blue</MenuItem>
-                    <MenuItem value={"Yellow"}>Yellow</MenuItem>
-                  </Select>
-              </FormControl>
+            <div className="stimulus-note">
+              Light stimulus selected. The box uses one fixed stimulus light, so there is no color choice to configure.
             </div>
           ) : (
             <div className="stimulus-note">
@@ -989,15 +983,6 @@ const handlePreset = (event) => {
             <p>Light Status: {lightOn ? "ON" : "OFF"}</p>
 
             <div className="button-group">
-              <button className='redlight-button' onClick={() => handleRGB('on', 'off', 'off')}>RGB Red On</button>
-              <button className='greenlight-button' onClick={() => handleRGB('off', 'on', 'off')}>RGB Green On</button>
-              <button className='bluelight-button' onClick={() => handleRGB('off', 'off', 'on')}>RGB Blue On</button>
-              <button className='rgblight-button' onClick={() => handleRGB('off', 'off', 'off')}>RGB Off</button>
-
-  
-              {message && <p>{message}</p>}
-
-
               {testRunning && <button className="stop-button" onClick={handleStopTest}>Stop Test</button>}
               {testPaused && (
                 <>

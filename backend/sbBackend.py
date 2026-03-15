@@ -76,7 +76,7 @@ class TestConfiguration:
             reward_type=_coerce_text(payload.get("rewardType"), "rewardType", default="Water"),
             interaction_type=_coerce_text(payload.get("interactionType"), "interactionType", default="Lever"),
             stimulus_type=_coerce_text(payload.get("stimulusType"), "stimulusType", default="Light"),
-            light_color=_coerce_text(payload.get("lightColor"), "lightColor", default="Blue"),
+            light_color=_coerce_text(payload.get("lightColor"), "lightColor", default="Box Light"),
             end_chime_enabled=_coerce_bool(
                 payload.get("endChimeEnabled"),
                 "endChimeEnabled",
@@ -291,7 +291,7 @@ class SQLiteTestRepository:
                 reward_type TEXT DEFAULT 'Water',
                 interaction_type TEXT DEFAULT 'Lever',
                 stimulus_type TEXT DEFAULT 'Light',
-                light_color TEXT DEFAULT 'Blue',
+                light_color TEXT DEFAULT 'Box Light',
                 end_chime_enabled INTEGER DEFAULT 0,
                 end_chime_pattern TEXT DEFAULT '',
                 created_at TEXT,
@@ -315,7 +315,7 @@ class SQLiteTestRepository:
             "reward_type": "TEXT DEFAULT 'Water'",
             "interaction_type": "TEXT DEFAULT 'Lever'",
             "stimulus_type": "TEXT DEFAULT 'Light'",
-            "light_color": "TEXT DEFAULT 'Blue'",
+            "light_color": "TEXT DEFAULT 'Box Light'",
             "end_chime_enabled": "INTEGER DEFAULT 0",
             "end_chime_pattern": "TEXT DEFAULT ''",
             "created_at": "TEXT",
@@ -829,7 +829,7 @@ class SQLiteTestRepository:
             "rewardType": row["reward_type"] or "Water",
             "interactionType": row["interaction_type"] or "Lever",
             "stimulusType": row["stimulus_type"] or "Light",
-            "lightColor": row["light_color"] or "Blue",
+            "lightColor": row["light_color"] or "Box Light",
             "endChimeEnabled": bool(row["end_chime_enabled"] or 0),
             "endChimePattern": row["end_chime_pattern"] or DEFAULT_END_CHIME_PATTERN,
             "stimulusDescription": _describe_stimulus(
@@ -2111,9 +2111,6 @@ def _describe_stimulus(stimulus_type: str, light_color: str) -> str:
     if normalized_type == "tone":
         return "Tone"
 
-    normalized_color = light_color.strip()
-    if normalized_color and normalized_color.lower() != "n/a":
-        return f"Light ({normalized_color})"
     return "Light"
 
 

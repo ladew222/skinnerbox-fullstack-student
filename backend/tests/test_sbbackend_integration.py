@@ -115,7 +115,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["leverPressCount"], 3)
         self.assertEqual(results[0]["rewardCount"], 3)
         self.assertEqual(results[0]["stimulusType"], "Light")
-        self.assertEqual(results[0]["stimulusDescription"], "Light (Blue)")
+        self.assertEqual(results[0]["stimulusDescription"], "Light")
         self.assertTrue(results[0]["complete"])
 
     def test_backend_timer_finishes_test_without_frontend_timekeeping(self):
@@ -396,15 +396,15 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
 
     def test_presets_can_be_saved_listed_updated_and_deleted_per_user(self):
         payload = {
-            "id": "lever-blue-baseline",
-            "name": "Lever Blue Baseline",
+            "id": "lever-light-baseline",
+            "name": "Lever Light Baseline",
             "description": "Saved preset for quick operator startup.",
             **self._base_payload(
                 testName="Preset Trial",
                 subjectID=9,
                 goalForTest=4,
                 stimulusType="Light",
-                lightColor="Blue",
+                lightColor="Box Light",
             ),
         }
 
@@ -412,14 +412,14 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertEqual(save_response.status_code, 200)
         saved_payload = save_response.get_json()
         self.assertFalse(saved_payload["replaced"])
-        self.assertEqual(saved_payload["preset"]["name"], "Lever Blue Baseline")
+        self.assertEqual(saved_payload["preset"]["name"], "Lever Light Baseline")
         self.assertEqual(saved_payload["preset"]["testName"], "Preset Trial")
 
         list_response = self.client.get("/api/presets", headers=self.auth_headers)
         self.assertEqual(list_response.status_code, 200)
         presets = list_response.get_json()["presets"]
         self.assertEqual(len(presets), 1)
-        self.assertEqual(presets[0]["stimulusDescription"], "Light (Blue)")
+        self.assertEqual(presets[0]["stimulusDescription"], "Light")
 
         update_response = self.client.post(
             "/api/presets",
@@ -504,7 +504,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
             "rewardType": "Water",
             "interactionType": "Lever",
             "stimulusType": "Light",
-            "lightColor": "Blue",
+            "lightColor": "Box Light",
             "leverPress": 0,
             "nosePoke": 0,
         }

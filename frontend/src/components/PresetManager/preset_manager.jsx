@@ -13,6 +13,7 @@ import {
   loadUserPresets,
   upsertUserPreset,
 } from '../../utilities/presets';
+import { SINGLE_LIGHT_LABEL, normalizeLightColorForStimulus } from '../../utilities/resultsCsv';
 
 
 const DEFAULT_PRESET_FORM = {
@@ -30,7 +31,7 @@ const DEFAULT_PRESET_FORM = {
   rewardType: 'Water',
   interactionType: 'Lever',
   stimulusType: 'Light',
-  lightColor: 'Red',
+  lightColor: SINGLE_LIGHT_LABEL,
   endChimeEnabled: false,
   endChimePattern: DEFAULT_END_CHIME_PATTERN,
 };
@@ -78,8 +79,8 @@ const PresetManager = () => {
       ...currentForm,
       [fieldName]: value,
       lightColor:
-        fieldName === 'stimulusType' && value === 'Tone'
-          ? 'Red'
+        fieldName === 'stimulusType'
+          ? normalizeLightColorForStimulus(value)
           : currentForm.lightColor,
     }));
   };
@@ -111,13 +112,13 @@ const PresetManager = () => {
       const result = await upsertUserPreset({
         ...form,
         id: shouldReusePresetId ? form.id : undefined,
-        lightColor: form.stimulusType === 'Tone' ? 'N/A' : form.lightColor,
+        lightColor: normalizeLightColorForStimulus(form.stimulusType),
       });
 
       setSavedPresets(result.presets);
       setForm({
         ...result.preset,
-        lightColor: result.preset.stimulusType === 'Tone' ? 'Red' : result.preset.lightColor,
+        lightColor: normalizeLightColorForStimulus(result.preset.stimulusType),
       });
       setFeedback({
         severity: 'success',
@@ -136,7 +137,7 @@ const PresetManager = () => {
   const handlePresetLoad = (preset) => {
     setForm({
       ...preset,
-      lightColor: preset.stimulusType === 'Tone' ? 'Red' : preset.lightColor,
+      lightColor: normalizeLightColorForStimulus(preset.stimulusType),
     });
     setFeedback({
       severity: 'success',
@@ -354,20 +355,8 @@ const PresetManager = () => {
         </div>
 
         {form.stimulusType === 'Light' ? (
-          <div className="input-group">
-            <FormControl fullWidth>
-              <InputLabel id="lightColorLabel">Light Color:</InputLabel>
-              <Select
-                id="lightColor"
-                value={form.lightColor}
-                onChange={(e) => updateFormField('lightColor', e.target.value)}
-              >
-                <MenuItem value="Red">Red</MenuItem>
-                <MenuItem value="Green">Green</MenuItem>
-                <MenuItem value="Blue">Blue</MenuItem>
-                <MenuItem value="Yellow">Yellow</MenuItem>
-              </Select>
-            </FormControl>
+          <div className="stimulus-note">
+            Light stimulus selected. The box uses one fixed stimulus light, so there is no color choice to save in this preset.
           </div>
         ) : (
           <div className="stimulus-note">
@@ -429,7 +418,6 @@ const PresetManager = () => {
                     <p>{preset.description || 'No description provided.'}</p>
                     <p>
                       {preset.interactionType} / {preset.stimulusType}
-                      {preset.stimulusType === 'Light' ? ` (${preset.lightColor})` : ''}
                     </p>
                     <p>
                       End chime: {preset.endChimeEnabled ? preset.endChimePattern : 'Disabled'}
