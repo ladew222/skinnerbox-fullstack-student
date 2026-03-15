@@ -26,7 +26,13 @@ Default environment values assume:
 - validation admin email: `admin@example.com`
 - validation admin password: `AdminPass123`
 
-You can change the operator email/password and the trial parameters directly in the Postman environment.
+If your backend is not running on port `5000`, open the `SkinnerBox Local` environment and change `baseUrl` to match the real backend URL, for example:
+
+- `http://localhost:5001`
+- `http://192.168.1.50:5000`
+- `http://192.168.1.50:5001`
+
+You can change the operator email/password and the trial parameters directly in the Postman environment as well.
 
 The current Postman trial payload also includes:
 

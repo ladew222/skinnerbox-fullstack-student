@@ -167,6 +167,14 @@ pip install -r requirements.txt
 GPIO_MODE=mock OLED_MODE=mock FLASK_APP=sbBackend.py flask run --host=0.0.0.0 --port=5000
 ```
 
+If port `5000` is already in use on your computer, choose another backend port such as `5001`:
+
+```bash
+cd backend
+source .venv/bin/activate
+GPIO_MODE=mock OLED_MODE=mock FLASK_APP=sbBackend.py flask run --host=0.0.0.0 --port=5001
+```
+
 Create or reset the local admin account:
 
 ```bash
@@ -188,14 +196,22 @@ npm install
 npm start
 ```
 
+If the backend is not on `5000`, restart the frontend with an explicit backend URL so the ports match:
+
+```bash
+cd frontend
+REACT_APP_BACKEND_URL=http://localhost:5001 npm start
+```
+
 Open:
 
 - frontend: [http://localhost:3000](http://localhost:3000)
-- backend: [http://localhost:5000](http://localhost:5000)
+- backend: [http://localhost:5000](http://localhost:5000) by default, or your chosen backend port such as [http://localhost:5001](http://localhost:5001)
 
 Notes:
 
 - in native frontend development, `package.json` proxies `/api/*` to `http://localhost:5000`
+- if you run the backend on another port, `REACT_APP_BACKEND_URL` must match that port when you start the frontend
 - no physical hardware is needed when `GPIO_MODE=mock`
 - no physical OLED hardware is needed when `OLED_MODE=mock`
 
@@ -211,6 +227,14 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.pi.txt
 GPIO_MODE=auto OLED_MODE=auto ./run_backend.sh
+```
+
+`run_backend.sh` defaults to port `5000`. If you need another backend port on the Pi, override it when you start the backend:
+
+```bash
+cd backend
+source .venv/bin/activate
+FLASK_RUN_PORT=5001 GPIO_MODE=auto OLED_MODE=auto ./run_backend.sh
 ```
 
 Example Pi run with two mirrored OLEDs:
@@ -244,6 +268,67 @@ If the frontend is running on another machine instead of the Pi, set the backend
 ```bash
 cd frontend
 REACT_APP_BACKEND_URL=http://<pi-ip>:5000 npm start
+```
+
+If the Pi backend is using a non-default port, include that port in the frontend URL:
+
+```bash
+cd frontend
+REACT_APP_BACKEND_URL=http://<pi-ip>:5001 npm start
+```
+
+## Changing Ports
+
+The default local setup is:
+
+- frontend dev server: `3000`
+- backend Flask server: `5000`
+
+If you need different ports, all clients must agree on the backend port.
+
+Backend:
+
+- direct Flask run on a computer: change `--port=5000` to your chosen port
+- `run_backend.sh` on the Pi: set `FLASK_RUN_PORT=<port>`
+
+Frontend:
+
+- if the backend stays on `5000`, `npm start` is enough because CRA proxies to `http://localhost:5000`
+- if the backend uses another port, start the frontend with `REACT_APP_BACKEND_URL=http://localhost:<port> npm start`
+- if the frontend is on another machine, use `REACT_APP_BACKEND_URL=http://<backend-host>:<port> npm start`
+
+Postman:
+
+- import [SkinnerBox.local.postman_environment.json](/Users/egweinberg/Documents/skinnerbox-fullstack-student/postman/SkinnerBox.local.postman_environment.json)
+- select the `SkinnerBox Local` environment
+- set `baseUrl` to the same backend URL and port, for example `http://localhost:5001` or `http://192.168.1.50:5000`
+
+Examples:
+
+- backend on `5001` locally:
+
+```bash
+cd backend
+source .venv/bin/activate
+GPIO_MODE=mock OLED_MODE=mock FLASK_APP=sbBackend.py flask run --host=0.0.0.0 --port=5001
+```
+
+```bash
+cd frontend
+REACT_APP_BACKEND_URL=http://localhost:5001 npm start
+```
+
+- Pi backend on `5001`, frontend on another computer:
+
+```bash
+cd backend
+source .venv/bin/activate
+FLASK_RUN_PORT=5001 GPIO_MODE=auto OLED_MODE=auto ./run_backend.sh
+```
+
+```bash
+cd frontend
+REACT_APP_BACKEND_URL=http://<pi-ip>:5001 npm start
 ```
 
 ## Basic Workflow
@@ -413,6 +498,8 @@ Backend health:
 ```bash
 curl http://localhost:5000/
 ```
+
+If you changed the backend port, use that port in the health-check URL instead, for example `curl http://localhost:5001/`.
 
 Expected response:
 
