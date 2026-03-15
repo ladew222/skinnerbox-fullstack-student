@@ -47,4 +47,52 @@ describe('trial form validation', () => {
     expect(result.isValid).toBe(false);
     expect(result.errors.endChimePattern).toMatch(/required/i);
   });
+
+  test('normalizes imported stimulus values back to the supported stimulus options', () => {
+    const toneResult = validateTrialForm({
+      testName: 'Tone Training',
+      subjectID: '7',
+      trialDuration: '1',
+      goalForTrial: '1',
+      goalForTest: '3',
+      RewaStimTime: '0',
+      StimTimeOn: '1',
+      cooldown: '0',
+      stimulusType: 'tone',
+      endChimeEnabled: false,
+      endChimePattern: '',
+    });
+
+    const combinedResult = validateTrialForm({
+      testName: 'Combined Training',
+      subjectID: '9',
+      trialDuration: '1',
+      goalForTrial: '1',
+      goalForTest: '3',
+      RewaStimTime: '0',
+      StimTimeOn: '1',
+      cooldown: '0',
+      stimulusType: 'light and tone',
+      endChimeEnabled: false,
+      endChimePattern: '',
+    });
+
+    const unknownResult = validateTrialForm({
+      testName: 'Fallback Training',
+      subjectID: '8',
+      trialDuration: '1',
+      goalForTrial: '1',
+      goalForTest: '3',
+      RewaStimTime: '0',
+      StimTimeOn: '1',
+      cooldown: '0',
+      stimulusType: 'laser',
+      endChimeEnabled: false,
+      endChimePattern: '',
+    });
+
+    expect(toneResult.normalizedValues.stimulusType).toBe('Tone');
+    expect(combinedResult.normalizedValues.stimulusType).toBe('Light + Tone');
+    expect(unknownResult.normalizedValues.stimulusType).toBe('Light');
+  });
 });

@@ -18,7 +18,7 @@ const ResultsList = () => {
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [testData, setTestData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [deleteBusyId, setDeleteBusyId] = useState("");
+  const [deleteBusyIds, setDeleteBusyIds] = useState([]);
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -111,6 +111,22 @@ const ResultsList = () => {
     return "Unknown user";
   };
 
+  const removeResultsFromState = (resultIds) => {
+    const normalizedIds = resultIds.map((resultId) => String(resultId));
+
+    setTestData((currentTests) =>
+      currentTests.filter((test) => !normalizedIds.includes(String(test.id)))
+    );
+    setSelectedTestIds((currentSelectedIds) =>
+      currentSelectedIds.filter((selectedId) => !normalizedIds.includes(selectedId))
+    );
+    setSelectedTest((currentSelectedTest) =>
+      currentSelectedTest && normalizedIds.includes(String(currentSelectedTest.id))
+        ? null
+        : currentSelectedTest
+    );
+  };
+
   const handleDeleteResult = async (event, resultId) => {
     event.stopPropagation();
 
@@ -121,26 +137,58 @@ const ResultsList = () => {
     }
 
     try {
-      setDeleteBusyId(String(resultId));
+      setDeleteBusyIds([String(resultId)]);
       setErrorMessage("");
       setFeedbackMessage("");
       const response = await deleteResult(resultId);
-      setTestData((currentTests) =>
-        currentTests.filter((test) => String(test.id) !== String(resultId))
-      );
-      setSelectedTestIds((currentSelectedIds) =>
-        currentSelectedIds.filter((selectedId) => selectedId !== String(resultId))
-      );
-      setSelectedTest((currentSelectedTest) =>
-        currentSelectedTest && String(currentSelectedTest.id) === String(resultId)
-          ? null
-          : currentSelectedTest
-      );
+      removeResultsFromState([resultId]);
       setFeedbackMessage(response.message || "Saved trial deleted successfully.");
     } catch (error) {
       setErrorMessage(error?.message || "Unable to delete the selected saved trial.");
     } finally {
-      setDeleteBusyId("");
+      setDeleteBusyIds([]);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (!selectedTestIds.length) {
+      return;
+    }
+
+    const selectedTests = testData.filter((test) => selectedTestIds.includes(String(test.id)));
+    const trialCount = selectedTests.length;
+    if (!window.confirm(`Delete ${trialCount} selected trial${trialCount === 1 ? "" : "s"}? This cannot be undone.`)) {
+      return;
+    }
+
+    const idsToDelete = selectedTests.map((test) => String(test.id));
+    const deletedIds = [];
+
+    try {
+      setDeleteBusyIds(idsToDelete);
+      setErrorMessage("");
+      setFeedbackMessage("");
+
+      for (const resultId of idsToDelete) {
+        await deleteResult(resultId);
+        deletedIds.push(resultId);
+      }
+
+      removeResultsFromState(deletedIds);
+      setFeedbackMessage(
+        `${deletedIds.length} saved trial${deletedIds.length === 1 ? "" : "s"} deleted successfully.`
+      );
+    } catch (error) {
+      if (deletedIds.length) {
+        removeResultsFromState(deletedIds);
+      }
+      setErrorMessage(
+        deletedIds.length
+          ? `Deleted ${deletedIds.length} saved trial${deletedIds.length === 1 ? "" : "s"}, but one or more deletions failed.`
+          : (error?.message || "Unable to delete the selected saved trials.")
+      );
+    } finally {
+      setDeleteBusyIds([]);
     }
   };
 
@@ -234,6 +282,16 @@ const ResultsList = () => {
           >
             Download Selected CSV ({selectedTestIds.length})
           </button>
+          {isAdmin && (
+            <button
+              type="button"
+              className="results-toolbar-button danger"
+              onClick={handleDeleteSelected}
+              disabled={!selectedTestIds.length || deleteBusyIds.length > 0}
+            >
+              {deleteBusyIds.length > 0 ? "Deleting..." : `Delete Selected (${selectedTestIds.length})`}
+            </button>
+          )}
         </div>
         {loading ? (
           <p>Loading...</p>
@@ -259,9 +317,9 @@ const ResultsList = () => {
                     type="button"
                     className="delete-trial-button"
                     onClick={(event) => handleDeleteResult(event, test.id)}
-                    disabled={deleteBusyId === String(test.id)}
+                    disabled={deleteBusyIds.includes(String(test.id))}
                   >
-                    {deleteBusyId === String(test.id) ? "Deleting..." : "Delete"}
+                    {deleteBusyIds.includes(String(test.id)) ? "Deleting..." : "Delete"}
                   </button>
                 )}
               </li>
@@ -302,9 +360,9 @@ const ResultsList = () => {
             <button
               className="delete-trial-button details-delete-button"
               onClick={(event) => handleDeleteResult(event, selectedTest.id)}
-              disabled={deleteBusyId === String(selectedTest.id)}
+              disabled={deleteBusyIds.includes(String(selectedTest.id))}
             >
-              {deleteBusyId === String(selectedTest.id) ? "Deleting..." : "Delete Trial"}
+              {deleteBusyIds.includes(String(selectedTest.id)) ? "Deleting..." : "Delete Trial"}
             </button>
           )}
         </div>

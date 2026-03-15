@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import sqlite3
+import threading
 import tempfile
 import time
 import unittest
@@ -37,6 +38,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         sbBackend.hardware.stop_all()
         sbBackend.hardware.clear_error_state()
         sbBackend.hardware.last_chime_pattern = ()
+        sbBackend.hardware.startup_ip_address = ""
         sbBackend.hardware.startup_banner_deadline = time.monotonic() - 1
         sbBackend.hardware.status_display.clear()
 
@@ -220,6 +222,64 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["stimulusType"], "Tone")
         self.assertEqual(results[0]["stimulusDescription"], "Tone")
 
+    def test_combined_stimulus_is_reflected_in_saved_results(self):
+        payload = self._base_payload(
+            testName="Combined Stimulus Simulation",
+            goalForTest=1,
+            stimulusType="Light + Tone",
+            lightColor="Box Light",
+        )
+
+        configure_response = self.client.post("/api/test/information", json=payload, headers=self.auth_headers)
+        self.assertEqual(configure_response.status_code, 200)
+
+        run_response = self.client.post("/api/test/run", json=payload, headers=self.auth_headers)
+        self.assertEqual(run_response.status_code, 200)
+
+        lever_response = self.client.post("/api/input/lever", headers=self.auth_headers)
+        self.assertEqual(lever_response.status_code, 200)
+
+        status = self._wait_for_status(lambda current: current["testFinished"] is True)
+        self.assertTrue(status["testFinished"])
+
+        results = self.client.get("/api/results", headers=self.auth_headers).get_json()
+        self.assertEqual(results[0]["name"], "Combined Stimulus Simulation")
+        self.assertEqual(results[0]["stimulusType"], "Light + Tone")
+        self.assertEqual(results[0]["stimulusDescription"], "Light + Tone")
+
+    def test_combined_stimulus_activates_light_and_tone_outputs(self):
+        original_set_blue = sbBackend.hardware.set_blue
+        original_buzzer_play = sbBackend.hardware.buzzer.play
+        observed_outputs = {
+            "light": False,
+            "tone": False,
+        }
+
+        def recording_set_blue(enabled):
+            if enabled:
+                observed_outputs["light"] = True
+            return original_set_blue(enabled)
+
+        def recording_buzzer_play(frequency_hz):
+            observed_outputs["tone"] = True
+            return original_buzzer_play(frequency_hz)
+
+        sbBackend.hardware.set_blue = recording_set_blue
+        sbBackend.hardware.buzzer.play = recording_buzzer_play
+        try:
+            sbBackend.hardware.play_stimulus(
+                "Light + Tone",
+                "Box Light",
+                0.01,
+                threading.Event(),
+            )
+        finally:
+            sbBackend.hardware.set_blue = original_set_blue
+            sbBackend.hardware.buzzer.play = original_buzzer_play
+
+        self.assertTrue(observed_outputs["light"])
+        self.assertTrue(observed_outputs["tone"])
+
     def test_oled_shows_waiting_status_after_configuration(self):
         payload = self._base_payload(
             testName="OLED Waiting Trial",
@@ -231,7 +291,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             sbBackend.hardware.status_display.last_lines,
-            ("SkinnerBox", "READY", "OLED Waiting Trial", "Subj 12", "Press Start"),
+            ("SkinnerBox", "READY", "OLED Waiting Trial", "Subj 12", "IP unavailable"),
         )
 
     def test_invalid_goal_relationship_is_rejected_by_backend_validation(self):
@@ -247,6 +307,19 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         error_payload = response.get_json()["error"]
         self.assertEqual(error_payload["code"], "INVALID_TEST_CONFIGURATION")
         self.assertIn("goalForTest", error_payload["message"])
+
+    def test_invalid_stimulus_type_is_rejected_by_backend_validation(self):
+        payload = self._base_payload(
+            testName="Invalid Stimulus Trial",
+            stimulusType="Laser",
+        )
+
+        response = self.client.post("/api/test/information", json=payload, headers=self.auth_headers)
+
+        self.assertEqual(response.status_code, 400)
+        error_payload = response.get_json()["error"]
+        self.assertEqual(error_payload["code"], "INVALID_TEST_CONFIGURATION")
+        self.assertIn("stimulusType", error_payload["message"])
 
     def test_hardware_gpio_mapping_matches_current_box_wiring(self):
         self.assertEqual(sbBackend.SkinnerHardware.LEVER_INPUT_GPIO, 23)
@@ -266,6 +339,20 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertEqual(
             sbBackend.hardware.status_display.last_lines,
             ("SkinnerBox", "READY", "IP Address", "192.168.1.158", "Press Start"),
+        )
+
+    def test_oled_shows_ip_address_on_idle_ready_screen_after_startup_window(self):
+        sbBackend.hardware.startup_ip_address = "192.168.1.158"
+        sbBackend.hardware.startup_banner_deadline = time.monotonic() - 1
+
+        with sbBackend.session_manager.lock:
+            sbBackend.session_manager.active_test = None
+            sbBackend.session_manager._reset_runtime_state()
+            sbBackend.session_manager._refresh_status_display_locked()
+
+        self.assertEqual(
+            sbBackend.hardware.status_display.last_lines,
+            ("SkinnerBox", "READY", "Waiting for test", "IP 192.168.1.158"),
         )
 
     def test_oled_shows_remaining_time_and_lever_count_while_running(self):

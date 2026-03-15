@@ -1,4 +1,8 @@
-import { SINGLE_LIGHT_LABEL, normalizeLightColorForStimulus } from './resultsCsv';
+import {
+  SINGLE_LIGHT_LABEL,
+  normalizeLightColorForStimulus,
+  normalizeStimulusType,
+} from './resultsCsv';
 
 const DEFAULT_END_CHIME_PATTERN = '523:0.12,659:0.12,784:0.24';
 
@@ -60,7 +64,8 @@ export const buildTestSettingsText = ({
   endChimeEnabled = false,
   endChimePattern = DEFAULT_END_CHIME_PATTERN,
 }) => {
-  const resolvedLightColor = normalizeLightColorForStimulus(stimulusType);
+  const resolvedStimulusType = normalizeStimulusType(stimulusType);
+  const resolvedLightColor = normalizeLightColorForStimulus(resolvedStimulusType);
 
   return [
     `Preset: ${appliedPresetName || 'None'}`,
@@ -74,7 +79,7 @@ export const buildTestSettingsText = ({
     `Cooldown: ${cooldown || '0'} seconds`,
     `Reward Type: ${rewardType}`,
     `Interaction Type: ${interactionType}`,
-    `Stimulus Type: ${stimulusType}`,
+    `Stimulus Type: ${resolvedStimulusType}`,
     `Stimulus Light: ${resolvedLightColor}`,
     `End Chime: ${endChimeEnabled ? 'Enabled' : 'Disabled'}`,
     `End Chime Pattern: ${endChimePattern || DEFAULT_END_CHIME_PATTERN}`,
@@ -95,7 +100,9 @@ export const parseTestSettingsText = (text) => {
     throw new Error('The uploaded file does not contain the required test name and trial duration fields.');
   }
 
-  const stimulusType = getFirstDefined(entries, ['stimulus type']) || 'Light';
+  const stimulusType = normalizeStimulusType(
+    getFirstDefined(entries, ['stimulus type']) || 'Light'
+  );
 
   return {
     presetName: getFirstDefined(entries, ['preset']),

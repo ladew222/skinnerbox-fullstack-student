@@ -4,6 +4,7 @@ import {
   savePreset as savePresetApi,
   getStoredAuthUser,
 } from './api';
+import { normalizeStimulusType } from './resultsCsv';
 
 const LEGACY_PRESET_STORAGE_KEY = 'userPresets';
 const LEGACY_PRESET_STORAGE_PREFIX = 'skinnerbox.userPresets';
@@ -76,8 +77,8 @@ const normalizeBoolean = (value, fallback = false) => {
 
 const normalizePreset = (preset) => {
   const presetName = String(preset?.name || '').trim();
-  const stimulusType = String(preset?.stimulusType || 'Light').trim() || 'Light';
-  const isTonePreset = stimulusType.toLowerCase() === 'tone';
+  const stimulusType = normalizeStimulusType(preset?.stimulusType);
+  const isTonePreset = stimulusType === 'Tone';
 
   return {
     id: String(preset?.id || slugify(presetName)),

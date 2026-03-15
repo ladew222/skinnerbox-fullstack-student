@@ -61,3 +61,35 @@ test('parses the older legacy settings file labels for backward compatibility', 
   expect(parsed.stimulusType).toBe('Light');
   expect(parsed.lightColor).toBe(SINGLE_LIGHT_LABEL);
 });
+
+
+test('normalizes tone stimulus text files to the supported tone option', () => {
+  const toneFileText = [
+    'Test Name: Tone Trial',
+    'Trial Duration: 5 minutes',
+    'Goal for Trial: 1',
+    'Goal for Test: 3',
+    'Stimulus Type: tone',
+  ].join('\n');
+
+  const parsed = parseTestSettingsText(toneFileText);
+
+  expect(parsed.stimulusType).toBe('Tone');
+  expect(parsed.lightColor).toBe('N/A');
+});
+
+
+test('normalizes combined stimulus text files to the supported combined option', () => {
+  const combinedFileText = [
+    'Test Name: Combined Trial',
+    'Trial Duration: 5 minutes',
+    'Goal for Trial: 1',
+    'Goal for Test: 3',
+    'Stimulus Type: light and tone',
+  ].join('\n');
+
+  const parsed = parseTestSettingsText(combinedFileText);
+
+  expect(parsed.stimulusType).toBe('Light + Tone');
+  expect(parsed.lightColor).toBe(SINGLE_LIGHT_LABEL);
+});

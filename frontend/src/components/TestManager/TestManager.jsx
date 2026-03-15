@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "./TestManager.css";
 import { runTest, stopTest, finishTest, getCounts, getTestInformation, getTestStatus } from "../../utilities/api";
 import { DEFAULT_END_CHIME_PATTERN, PRESET_STORAGE_EVENT, loadUserPresets, upsertUserPreset } from "../../utilities/presets";
@@ -7,9 +7,11 @@ import {
   buildTraditionalCsv,
   formatSecondsForDisplay,
   normalizeLightColorForStimulus,
+  normalizeStimulusType,
   SINGLE_LIGHT_LABEL,
 } from "../../utilities/resultsCsv";
 import { buildTestSettingsText, parseTestSettingsText } from "../../utilities/testSettingsFile";
+import { playBrowserCompletionChime, primeBrowserAudio } from "../../utilities/browserAudio";
 import { Alert, FormControl, Input, InputLabel, Snackbar } from '@mui/material';
 import { validateTrialForm, validationFunctions } from "../../validation/test_manager";
 import MenuItem from '@mui/material/MenuItem';
@@ -59,7 +61,7 @@ const FIELD_HELP_TEXT = {
   interactionType:
     "This tells the backend what counts as one valid response: just a lever press, just a poke, or a required sequence of both.",
   stimulusType:
-    "Choose whether each trial cycle begins with the box light or the passive buzzer tone.",
+    "Choose whether each trial cycle begins with the box light, the passive buzzer tone, or both at the same time.",
   endChimeEnabled:
     "Turn this on if you want the passive buzzer to play one short custom pattern after the trial finishes.",
   endChimePattern:
@@ -118,6 +120,7 @@ const TestManager = () => {
   const [coolDownError, setCoolDownError] = useState('');
   const [subjectIDError, setSubjectIDError] = useState('');
   const [endChimePatternError, setEndChimePatternError] = useState('');
+  const previousFinishedRef = useRef(false);
 
   const selectedPreset = userPresets.find((preset) => preset.id === presetValue) || null;
 
@@ -189,6 +192,16 @@ const TestManager = () => {
       window.removeEventListener('storage', handlePresetStorageUpdate);
     };
   }, []); // Empty dependency array = run once on component mount
+
+  useEffect(() => {
+    if (testFinished && !previousFinishedRef.current) {
+      playBrowserCompletionChime().catch(() => {
+        // Ignore browser-audio errors so test completion UI still updates normally.
+      });
+    }
+
+    previousFinishedRef.current = testFinished;
+  }, [testFinished]);
 
   const buildCurrentFormSnapshot = (overrides = {}) => ({
     testName,
@@ -313,7 +326,7 @@ const TestManager = () => {
         setCooldown(validation.normalizedValues.cooldown || DEFAULT_COOLDOWN_SECONDS);
         setRewardType(FIXED_REWARD_TYPE);
         setInteractionType(parsedSettings.interactionType || "Lever");
-        setStimulusType(parsedSettings.stimulusType || "Light");
+        setStimulusType(normalizeStimulusType(parsedSettings.stimulusType));
         setEndChimeEnabled(Boolean(parsedSettings.endChimeEnabled));
         setEndChimePattern(validation.normalizedValues.endChimePattern || DEFAULT_END_CHIME_PATTERN);
         syncValidationErrors(validation.errors);
@@ -467,6 +480,8 @@ const TestManager = () => {
     };
 
     try {
+      await primeBrowserAudio();
+
       // Save test information to the backend first so the DB row exists before the run begins.
       console.log("Saving test configuration...");
       await getTestInformation(testSettings);
@@ -661,7 +676,7 @@ const handlePreset = (event) => {
         setCooldown(validation.normalizedValues.cooldown || DEFAULT_COOLDOWN_SECONDS);
         setRewardType(FIXED_REWARD_TYPE);
         setInteractionType(userPreset.interactionType || "Lever");
-        setStimulusType(userPreset.stimulusType || "Light");
+        setStimulusType(normalizeStimulusType(userPreset.stimulusType));
         setEndChimeEnabled(Boolean(userPreset.endChimeEnabled));
         setEndChimePattern(validation.normalizedValues.endChimePattern || DEFAULT_END_CHIME_PATTERN);
         syncValidationErrors(validation.errors);
@@ -971,10 +986,11 @@ const handlePreset = (event) => {
                     <Select
                       id="selectStimulusType"
                       value={stimulusType}
-                      onChange = {(e) => setStimulusType(e.target.value)}
+                      onChange = {(e) => setStimulusType(normalizeStimulusType(e.target.value))}
                     >
                       <MenuItem value={"Light"}>Light</MenuItem>
                       <MenuItem value={"Tone"}>Tone</MenuItem>
+                      <MenuItem value={"Light + Tone"}>Light + Tone</MenuItem>
                     </Select>
                     <FormHelperText>{FIELD_HELP_TEXT.stimulusType}</FormHelperText>
                 </FormControl>
@@ -985,9 +1001,13 @@ const handlePreset = (event) => {
               <div className="stimulus-note">
                 Light stimulus selected. The backend will use the single box light on each cycle, so there is no separate color option to configure.
               </div>
-            ) : (
+            ) : stimulusType === "Tone" ? (
               <div className="stimulus-note">
                 Tone stimulus selected. The backend will use the passive buzzer on each cycle instead of the trial light.
+              </div>
+            ) : (
+              <div className="stimulus-note">
+                Light + Tone selected. The backend will turn on the box light and play the passive buzzer together on each stimulus cycle.
               </div>
             )}
           </div>
@@ -1090,6 +1110,7 @@ const handlePreset = (event) => {
             <p>Stimulus: {stimulusSummary}</p>
             <p>End Chime: {chimeSummary}</p>
             <p>Light Status: {lightOn ? "ON" : "OFF"}</p>
+            <p>Browser Alert: This page will play a short completion chime when the run finishes.</p>
 
             <div className="button-group">
               {testRunning && <button className="stop-button" onClick={handleStopTest}>Stop Test</button>}

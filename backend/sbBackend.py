@@ -64,6 +64,11 @@ class TestConfiguration:
         if not isinstance(payload, dict):
             raise ConfigurationError("Request body must be a JSON object.")
 
+        stimulus_type = _normalize_stimulus_type(
+            payload.get("stimulusType"),
+            "stimulusType",
+            default="Light",
+        )
         configuration = cls(
             test_id=_coerce_int(payload.get("testID"), "testID", default=_default_test_id()),
             test_name=_coerce_text(payload.get("testName"), "testName", default="Untitled Test"),
@@ -76,8 +81,13 @@ class TestConfiguration:
             cooldown_seconds=_coerce_int(payload.get("cooldown"), "cooldown", default=0),
             reward_type=_coerce_text(payload.get("rewardType"), "rewardType", default="Water"),
             interaction_type=_coerce_text(payload.get("interactionType"), "interactionType", default="Lever"),
-            stimulus_type=_coerce_text(payload.get("stimulusType"), "stimulusType", default="Light"),
-            light_color=_coerce_text(payload.get("lightColor"), "lightColor", default="Box Light"),
+            stimulus_type=stimulus_type,
+            light_color=_normalize_light_color_for_stimulus(
+                stimulus_type,
+                payload.get("lightColor"),
+                "lightColor",
+                default="Box Light",
+            ),
             end_chime_enabled=_coerce_bool(
                 payload.get("endChimeEnabled"),
                 "endChimeEnabled",
@@ -113,6 +123,8 @@ class TestConfiguration:
             raise ConfigurationError("StimTimeOn cannot be negative.")
         if self.cooldown_seconds < 0:
             raise ConfigurationError("cooldown cannot be negative.")
+        if self.stimulus_type not in {"Light", "Tone", "Light + Tone"}:
+            raise ConfigurationError("stimulusType must be Light, Tone, or Light + Tone.")
 
     def to_response_payload(self) -> dict[str, object]:
         """Return the normalized configuration using the frontend's expected keys."""
@@ -1163,7 +1175,7 @@ class SkinnerHardware:
         duration_seconds: float,
         stop_event: threading.Event,
     ) -> None:
-        """Play one stimulus cycle using either the tone or the requested light."""
+        """Play one stimulus cycle using the configured light, tone, or both."""
         try:
             duration_seconds = max(duration_seconds, 0)
             stimulus_type = stimulus_type.lower()
@@ -1172,6 +1184,14 @@ class SkinnerHardware:
                 self.buzzer.play(self.STIMULUS_TONE_FREQUENCY_HZ)
                 self._sleep(duration_seconds, stop_event)
                 self.buzzer.stop()
+                return
+
+            if stimulus_type == "light + tone":
+                self.set_blue(True)
+                self.buzzer.play(self.STIMULUS_TONE_FREQUENCY_HZ)
+                self._sleep(duration_seconds, stop_event)
+                self.buzzer.stop()
+                self.set_blue(False)
                 return
 
             self.set_blue(True)
@@ -1335,7 +1355,9 @@ class SkinnerHardware:
                 lines.append(f"Reward {reward_count}")
         elif subject_id is not None:
             lines.append(f"Subj {subject_id}")
-            lines.append("Press Start")
+            lines.append(self._format_ready_ip_line())
+        else:
+            lines.append(self._format_ready_ip_line())
 
         self._render_status_lines(lines)
 
@@ -1396,6 +1418,13 @@ class SkinnerHardware:
         if len(normalized) <= 21:
             return normalized
         return normalized[:18] + "..."
+
+    def _format_ready_ip_line(self) -> str:
+        """Render a short IP summary for the standby READY screen."""
+
+        return self._truncate_line(
+            f"IP {self.startup_ip_address}" if self.startup_ip_address else "IP unavailable"
+        )
 
     def _error_blink_loop(self) -> None:
         """Blink the box error LED until the current fault is cleared."""
@@ -2282,6 +2311,33 @@ def _coerce_text(value, field_name: str, *, default: str) -> str:
     return value.strip() or default
 
 
+def _normalize_stimulus_type(value, field_name: str, *, default: str) -> str:
+    """Accept only the supported stimulus modes and return a canonical label."""
+
+    normalized = _coerce_text(value, field_name, default=default).strip().lower()
+    if normalized == "tone":
+        return "Tone"
+    if normalized in {"light + tone", "light+tone", "light and tone", "combined"}:
+        return "Light + Tone"
+    if normalized == "light":
+        return "Light"
+    raise ConfigurationError(f"{field_name} must be Light, Tone, or Light + Tone.")
+
+
+def _normalize_light_color_for_stimulus(
+    stimulus_type: str,
+    value,
+    field_name: str,
+    *,
+    default: str,
+) -> str:
+    """Keep stored light labels in sync with the chosen stimulus mode."""
+
+    if stimulus_type == "Tone":
+        return "N/A"
+    return _coerce_text(value, field_name, default=default) or "Box Light"
+
+
 def _coerce_bool(value, field_name: str, *, default: bool) -> bool:
     """Convert checkbox/select values into a strict boolean."""
 
@@ -2374,6 +2430,8 @@ def _describe_stimulus(stimulus_type: str, light_color: str) -> str:
     normalized_type = stimulus_type.strip().lower()
     if normalized_type == "tone":
         return "Tone"
+    if normalized_type == "light + tone":
+        return "Light + Tone"
 
     return "Light"
 

@@ -13,7 +13,11 @@ import {
   loadUserPresets,
   upsertUserPreset,
 } from '../../utilities/presets';
-import { SINGLE_LIGHT_LABEL, normalizeLightColorForStimulus } from '../../utilities/resultsCsv';
+import {
+  SINGLE_LIGHT_LABEL,
+  normalizeLightColorForStimulus,
+  normalizeStimulusType,
+} from '../../utilities/resultsCsv';
 
 const FIXED_REWARD_TYPE = 'Water';
 
@@ -76,12 +80,16 @@ const PresetManager = () => {
   }, []);
 
   const updateFormField = (fieldName, value) => {
+    const resolvedValue = fieldName === 'stimulusType'
+      ? normalizeStimulusType(value)
+      : value;
+
     setForm((currentForm) => ({
       ...currentForm,
-      [fieldName]: value,
+      [fieldName]: resolvedValue,
       lightColor:
         fieldName === 'stimulusType'
-          ? normalizeLightColorForStimulus(value)
+          ? normalizeLightColorForStimulus(resolvedValue)
           : currentForm.lightColor,
     }));
   };
@@ -121,6 +129,7 @@ const PresetManager = () => {
       setForm({
         ...result.preset,
         rewardType: FIXED_REWARD_TYPE,
+        stimulusType: normalizeStimulusType(result.preset.stimulusType),
         lightColor: normalizeLightColorForStimulus(result.preset.stimulusType),
       });
       setFeedback({
@@ -141,6 +150,7 @@ const PresetManager = () => {
     setForm({
       ...preset,
       rewardType: FIXED_REWARD_TYPE,
+      stimulusType: normalizeStimulusType(preset.stimulusType),
       lightColor: normalizeLightColorForStimulus(preset.stimulusType),
     });
     setFeedback({
@@ -354,7 +364,11 @@ const PresetManager = () => {
             >
               <MenuItem value="Light">Light</MenuItem>
               <MenuItem value="Tone">Tone</MenuItem>
+              <MenuItem value="Light + Tone">Light + Tone</MenuItem>
             </Select>
+            <FormHelperText>
+              Choose whether the saved preset uses the box light, the buzzer tone, or both together.
+            </FormHelperText>
           </FormControl>
         </div>
 
@@ -362,9 +376,13 @@ const PresetManager = () => {
           <div className="stimulus-note">
             Light stimulus selected. The box uses one fixed stimulus light, so there is no color choice to save in this preset.
           </div>
-        ) : (
+        ) : form.stimulusType === 'Tone' ? (
           <div className="stimulus-note">
             Tone stimulus selected. Light color does not apply to this preset.
+          </div>
+        ) : (
+          <div className="stimulus-note">
+            Light + Tone selected. This preset will use the box light and the passive buzzer together.
           </div>
         )}
 

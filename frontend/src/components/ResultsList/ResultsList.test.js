@@ -83,7 +83,7 @@ describe('ResultsList', () => {
 
     expect(await screen.findByText('Admin Trial')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
 
     await waitFor(() => {
       expect(deleteResult).toHaveBeenCalledWith('trial-1');
@@ -131,5 +131,54 @@ describe('ResultsList', () => {
 
     expect(window.URL.createObjectURL).toHaveBeenCalledTimes(1);
     expect(clickSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('lets an admin delete multiple selected trials at once', async () => {
+    useAuth.mockReturnValue({ isAdmin: true });
+    getResults.mockResolvedValue([
+      {
+        id: 'trial-1',
+        name: 'Trial One',
+        updatedAt: '2026-03-15T12:34:00Z',
+        createdAt: '2026-03-15T12:00:00Z',
+        conductedBy: {
+          id: 7,
+          email: 'operator@example.com',
+          displayName: 'Operator User',
+        },
+      },
+      {
+        id: 'trial-2',
+        name: 'Trial Two',
+        updatedAt: '2026-03-15T13:34:00Z',
+        createdAt: '2026-03-15T13:00:00Z',
+        conductedBy: {
+          id: 8,
+          email: 'assistant@example.com',
+          displayName: 'Assistant User',
+        },
+      },
+    ]);
+    deleteResult.mockResolvedValue({ message: 'Saved trial deleted successfully.' });
+
+    render(<ResultsList />);
+
+    expect(await screen.findByText('Trial One')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText(/select trial one/i));
+    fireEvent.click(screen.getByLabelText(/select trial two/i));
+    fireEvent.click(screen.getByRole('button', { name: /delete selected \(2\)/i }));
+
+    await waitFor(() => {
+      expect(deleteResult).toHaveBeenCalledWith('trial-1');
+      expect(deleteResult).toHaveBeenCalledWith('trial-2');
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Trial One')).not.toBeInTheDocument();
+      expect(screen.queryByText('Trial Two')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/2 saved trials deleted successfully/i)).toBeInTheDocument();
   });
 });

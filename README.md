@@ -533,21 +533,110 @@ Frontend:
 ```bash
 cd frontend
 npm install
-npm start
+./run_frontend.sh
 ```
+
+`run_frontend.sh` builds the React app with the current backend URL and then serves the built files with a small Node/Express server that works well under `systemd`.
 
 If the frontend is running on another machine instead of the Pi, set the backend URL explicitly:
 
 ```bash
 cd frontend
-REACT_APP_BACKEND_URL=http://<pi-ip>:5000 npm start
+REACT_APP_BACKEND_URL=http://<pi-ip>:5000 ./run_frontend.sh
 ```
 
 If the Pi backend is using a non-default port, include that port in the frontend URL:
 
 ```bash
 cd frontend
-REACT_APP_BACKEND_URL=http://<pi-ip>:5001 npm start
+REACT_APP_BACKEND_URL=http://<pi-ip>:5001 ./run_frontend.sh
+```
+
+If you already built the frontend and do not want to rebuild on every service start, disable the automatic build step:
+
+```bash
+cd frontend
+FRONTEND_BUILD_ON_START=0 ./run_frontend.sh
+```
+
+### Boot services on Ubuntu / Raspberry Pi
+
+The updated launchers are designed for `systemd`:
+
+- [backend/run_backend.sh](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/run_backend.sh) activates the virtual environment, forces a single Flask process without the reloader, and writes logs to [logs/backend.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/backend.log) and [logs/backend.error.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/backend.error.log).
+- [frontend/run_frontend.sh](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/run_frontend.sh) builds the frontend with the chosen backend URL, serves the built files through [frontend/server.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/server.js), and writes logs to [logs/frontend.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/frontend.log) and [logs/frontend.error.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/frontend.error.log).
+
+Ready-to-copy unit files are included here:
+
+- [deploy/systemd/skinnerbox-backend.service](/Users/egweinberg/Documents/skinnerbox-fullstack-student/deploy/systemd/skinnerbox-backend.service)
+- [deploy/systemd/skinnerbox-frontend.service](/Users/egweinberg/Documents/skinnerbox-fullstack-student/deploy/systemd/skinnerbox-frontend.service)
+
+Example backend service:
+
+```ini
+[Unit]
+Description=SkinnerBox backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/skinnerbox-fullstack-student/backend
+Environment=GPIO_MODE=auto
+Environment=OLED_MODE=auto
+Environment=FLASK_RUN_PORT=5000
+ExecStart=/bin/bash /home/pi/skinnerbox-fullstack-student/backend/run_backend.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Example frontend service:
+
+```ini
+[Unit]
+Description=SkinnerBox frontend
+After=network-online.target skinnerbox-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/skinnerbox-fullstack-student/frontend
+Environment=BACKEND_HOST=localhost
+Environment=BACKEND_PORT=5000
+Environment=FRONTEND_PORT=3000
+Environment=FRONTEND_BUILD_ON_START=1
+ExecStart=/bin/bash /home/pi/skinnerbox-fullstack-student/frontend/run_frontend.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Update `User=` and the `/home/pi/...` paths if your Pi uses a different account or repository location.
+
+After copying those files into `/etc/systemd/system`, run:
+
+```bash
+sudo cp deploy/systemd/skinnerbox-backend.service /etc/systemd/system/
+sudo cp deploy/systemd/skinnerbox-frontend.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable skinnerbox-backend.service skinnerbox-frontend.service
+sudo systemctl start skinnerbox-backend.service skinnerbox-frontend.service
+```
+
+Useful service checks:
+
+```bash
+sudo systemctl status skinnerbox-backend.service
+sudo systemctl status skinnerbox-frontend.service
+tail -f logs/backend.log logs/backend.error.log
+tail -f logs/frontend.log logs/frontend.error.log
 ```
 
 ## Changing Ports
@@ -566,9 +655,10 @@ Backend:
 
 Frontend:
 
-- if the backend stays on `5000`, `npm start` is enough because CRA proxies to `http://localhost:5000`
-- if the backend uses another port, start the frontend with `REACT_APP_BACKEND_URL=http://localhost:<port> npm start`
-- if the frontend is on another machine, use `REACT_APP_BACKEND_URL=http://<backend-host>:<port> npm start`
+- if the backend stays on `5000`, `./run_frontend.sh` defaults to `http://localhost:5000`
+- if the backend uses another port, start the frontend with `REACT_APP_BACKEND_URL=http://localhost:<port> ./run_frontend.sh`
+- if the frontend is on another machine, use `REACT_APP_BACKEND_URL=http://<backend-host>:<port> ./run_frontend.sh`
+- if you want the frontend service itself on another port, set `FRONTEND_PORT=<port>`
 
 Postman:
 
@@ -588,7 +678,7 @@ GPIO_MODE=mock OLED_MODE=mock FLASK_APP=sbBackend.py flask run --host=0.0.0.0 --
 
 ```bash
 cd frontend
-REACT_APP_BACKEND_URL=http://localhost:5001 npm start
+REACT_APP_BACKEND_URL=http://localhost:5001 ./run_frontend.sh
 ```
 
 - Pi backend on `5001`, frontend on another computer:
@@ -601,7 +691,7 @@ FLASK_RUN_PORT=5001 GPIO_MODE=auto OLED_MODE=auto ./run_backend.sh
 
 ```bash
 cd frontend
-REACT_APP_BACKEND_URL=http://<pi-ip>:5001 npm start
+REACT_APP_BACKEND_URL=http://<pi-ip>:5001 ./run_frontend.sh
 ```
 
 ## Basic Workflow

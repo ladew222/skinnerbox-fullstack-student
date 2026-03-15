@@ -1,9 +1,22 @@
 export const SINGLE_LIGHT_LABEL = 'Box Light';
 
 
+export const normalizeStimulusType = (stimulusType) => {
+  const normalizedType = String(stimulusType || '').trim().toLowerCase();
+  if (
+    normalizedType === 'light + tone'
+    || normalizedType === 'light+tone'
+    || normalizedType === 'light and tone'
+    || normalizedType === 'combined'
+  ) {
+    return 'Light + Tone';
+  }
+  return normalizedType === 'tone' ? 'Tone' : 'Light';
+};
+
+
 export const normalizeLightColorForStimulus = (stimulusType) => {
-  const normalizedType = (stimulusType || '').trim().toLowerCase();
-  return normalizedType === 'tone' ? 'N/A' : SINGLE_LIGHT_LABEL;
+  return normalizeStimulusType(stimulusType) === 'Tone' ? 'N/A' : SINGLE_LIGHT_LABEL;
 };
 
 
@@ -56,11 +69,7 @@ const escapeCsvValue = (value) => {
 
 
 export const buildStimulusSummary = (stimulusType) => {
-  const normalizedType = (stimulusType || '').trim().toLowerCase();
-  if (normalizedType === 'tone') {
-    return 'Tone';
-  }
-  return 'Light';
+  return normalizeStimulusType(stimulusType);
 };
 
 

@@ -35,13 +35,13 @@
 }
 
 .results-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 18px;
 }
 
 .results-toolbar-button {
-  flex: 1;
   border: 1px solid #c6cfda;
   background: white;
   color: #314255;
@@ -61,6 +61,12 @@
   color: white;
 }
 
+.results-toolbar-button.danger {
+  background: #b42318;
+  border-color: #b42318;
+  color: white;
+}
+
 .results-toolbar-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -71,9 +77,9 @@
   border-bottom: 1px solid #ddd;
   cursor: pointer;
   transition: background-color 0.3s ease-in-out;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
 }
 
@@ -92,29 +98,35 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  align-items: flex-start;
+  text-align: left;
 }
 
 .test-item-name {
   font-weight: 600;
+  display: block;
 }
 
 .test-item-date {
   color: #666;
   font-size: 0.85rem;
+  display: block;
 }
 
 .test-item-operator {
   color: #526173;
   font-size: 0.85rem;
+  display: block;
 }
 
 .delete-trial-button {
   border: none;
   background: #c62828;
   color: white;
-  padding: 6px 10px;
-  border-radius: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
   cursor: pointer;
+  justify-self: end;
 }
 
 .delete-trial-button:disabled {
@@ -174,6 +186,6 @@
   }
 
   .results-toolbar {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 }

@@ -1,3 +1,5 @@
+import { normalizeStimulusType } from '../utilities/resultsCsv';
+
 const DISALLOWED_NAME_CHARACTERS = /[<>[\]{}\\`^;|]/;
 const WHOLE_NUMBER_PATTERN = /^\d+$/;
 const DECIMAL_PATTERN = /^(?:\d+|\d+\.\d*|\d*\.\d+)$/;
@@ -196,6 +198,7 @@ export const validateTrialForm = (values) => {
       "Stimulus time",
     ).value,
     cooldown: validateNonNegativeInteger(values.cooldown, "Cooldown").value,
+    stimulusType: normalizeStimulusType(values.stimulusType),
     endChimePattern: validateEndChimePattern(
       values.endChimePattern,
       Boolean(values.endChimeEnabled),
