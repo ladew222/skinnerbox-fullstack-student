@@ -72,6 +72,89 @@ frontend/
   package.json                                React scripts and dependencies
 ```
 
+## Developer Guide
+
+### Mental model
+
+When you are changing this codebase, the most important rule is:
+
+- the backend owns test truth
+- the frontend renders backend state and sends user intent
+
+That means timer logic, counters, start/stop/finish state, persistence, hardware actions, and authenticated access checks belong in the backend. The React app should not invent its own version of those values.
+
+### Typical request flow
+
+For most product changes, the path through the system looks like this:
+
+```text
+Browser route
+  -> App.js
+  -> ProtectedRoute/AuthContext
+  -> page component (Trial, Results, Admin, IoTesting)
+  -> feature component (TestManager, ResultsList, AdminPanel, PresetManager)
+  -> frontend/src/utilities/api.js
+  -> Flask route in backend/sbBackend.py
+  -> service/repository/hardware classes
+  -> SQLite and optional GPIO/OLED hardware
+```
+
+### Frontend structure
+
+The frontend entry point is [frontend/src/components/App/App.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/App/App.js). It sets up routes and wraps protected areas of the UI.
+
+Main frontend modules:
+
+- [frontend/src/context/AuthContext.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/context/AuthContext.jsx): stores the signed-in user, token lifecycle, and auth helpers
+- [frontend/src/components/Auth/ProtectedRoute.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/Auth/ProtectedRoute.jsx): blocks unauthenticated access to protected pages
+- [frontend/src/utilities/api.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/api.js): shared HTTP layer, bearer-token wiring, and normalized error handling
+- [frontend/src/components/TestManager/TestManager.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/TestManager/TestManager.jsx): main trial setup form, run controls, live counts, time remaining, pump priming, and CSV export
+- [frontend/src/components/ResultsList/ResultsList.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/ResultsList/ResultsList.jsx): loads saved runs and exports them
+- [frontend/src/components/PresetManager/preset_manager.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/PresetManager/preset_manager.jsx): per-user preset browsing and editing
+- [frontend/src/components/Admin/AdminPanel.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/Admin/AdminPanel.jsx): approve or disable users
+- [frontend/src/components/IoTestingGrid/IoTestingGrid.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/IoTestingGrid/IoTestingGrid.jsx): live I/O visibility during hardware checks
+- [frontend/src/utilities/presets.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/presets.js): preset payload shaping and migration from older local/browser data
+- [frontend/src/utilities/resultsCsv.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/resultsCsv.js): shared CSV formatting for live and saved results
+
+### Backend structure
+
+The backend entry point is [backend/sbBackend.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/sbBackend.py). It contains the Flask app, route definitions, and the main service objects that coordinate the experiment lifecycle.
+
+Main backend modules:
+
+- [backend/sbBackend.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/sbBackend.py): Flask routes plus the core classes below
+- `TestConfiguration`: validates and normalizes incoming trial settings
+- `SQLiteTestRepository`: owns SQLite reads, writes, and schema upgrades for test data
+- `SkinnerHardware`: maps high-level actions like pump, stimulus, buzzer, status LEDs, and OLED updates to the adapters
+- `TestSessionManager`: owns configure/start/pause/resume/finish behavior, timer state, counts, pump priming rules, end chime logic, and status payloads
+- [backend/auth.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/auth.py): user accounts, password checks, bearer tokens, admin approvals, and auth persistence
+- [backend/shared_errors.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/shared_errors.py): predictable API error types and payload shapes for frontend consumption
+- [backend/gpio_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/gpio_adapter.py): auto/mock/real GPIO abstraction for laptop vs Raspberry Pi
+- [backend/display_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/display_adapter.py): auto/mock/real OLED abstraction
+- [backend/reset_admin.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/reset_admin.py): local bootstrap for admin access
+- [backend/tests/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/tests): backend integration and hardware-abstraction regression coverage
+
+### Where to make common changes
+
+If you need to add or change behavior, these are the first places to look:
+
+- add a new API endpoint: [backend/sbBackend.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/sbBackend.py) and [frontend/src/utilities/api.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/api.js)
+- add a new trial setting: [frontend/src/components/TestManager/TestManager.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/TestManager/TestManager.jsx), [frontend/src/utilities/presets.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/presets.js), [backend/sbBackend.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/sbBackend.py), and the results/CSV utilities if it should be persisted or exported
+- change authentication behavior: [backend/auth.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/auth.py), [backend/sbBackend.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/sbBackend.py), [frontend/src/context/AuthContext.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/context/AuthContext.jsx), and [frontend/src/components/Auth/ProtectedRoute.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/Auth/ProtectedRoute.jsx)
+- change GPIO pins or box indicators: [backend/sbBackend.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/sbBackend.py) and [backend/gpio_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/gpio_adapter.py)
+- change OLED content: [backend/display_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/display_adapter.py) and the display-update helpers in [backend/sbBackend.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/sbBackend.py)
+- change result export format: [frontend/src/utilities/resultsCsv.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/resultsCsv.js) and [frontend/src/components/ResultsList/ResultsList.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/ResultsList/ResultsList.jsx)
+- change preset storage rules: [frontend/src/utilities/presets.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/presets.js), [frontend/src/components/PresetManager/preset_manager.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/PresetManager/preset_manager.jsx), and preset routes in [backend/sbBackend.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/sbBackend.py)
+
+### Testing and debugging expectations
+
+Before changing core behavior, it helps to know how the project is usually validated:
+
+- backend regression coverage lives in [backend/tests/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/tests)
+- frontend smoke coverage lives in [frontend/src/components/App/App.test.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/App/App.test.js)
+- end-to-end API smoke flows live in the Postman assets under [postman/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/postman)
+- the quickest combined validation path is [scripts/run_regression_suite.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/scripts/run_regression_suite.py)
+
 ## GPIO Modes
 
 The backend uses [gpio_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/gpio_adapter.py).
