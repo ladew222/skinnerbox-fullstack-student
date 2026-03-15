@@ -159,6 +159,49 @@ Before changing core behavior, it helps to know how the project is usually valid
 - end-to-end API smoke flows live in the Postman assets under [postman/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/postman)
 - the quickest combined validation path is [scripts/run_regression_suite.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/scripts/run_regression_suite.py)
 
+### What the current automated tests actually do
+
+For beginners, it helps to think of the tests as small stories. Each one sets up a situation, performs an action, and checks that the app responds the way a real user or device would expect.
+
+[backend/tests/test_auth_integration.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/tests/test_auth_integration.py) checks the login and approval rules:
+
+- `test_protected_results_route_requires_authentication`: proves that someone cannot fetch saved results unless they send a valid token.
+- `test_registered_user_must_be_approved_before_login`: walks through the full approval flow. A user registers, gets blocked while still pending, an admin approves them, and then the user can log in successfully.
+- `test_logout_revokes_the_current_bearer_token`: proves that logging out really invalidates the token instead of just hiding the UI.
+- `test_upsert_admin_creates_an_approved_admin_account`: verifies that the local admin bootstrap path creates an admin who is already approved and ready to use.
+
+[backend/tests/test_gpio_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/tests/test_gpio_adapter.py) checks how the app decides between fake laptop hardware and real Raspberry Pi hardware:
+
+- `test_auto_mode_uses_mock_when_not_on_raspberry_pi`: proves that `GPIO_MODE=auto` stays safe on a normal computer.
+- `test_auto_mode_uses_real_when_raspberry_pi_is_detected`: proves that `auto` switches to real GPIO on a detected Pi.
+- `test_explicit_mock_override_is_respected`: proves that forcing `mock` wins even if the code thinks it is on a Pi.
+- `test_explicit_real_override_is_respected`: proves that forcing `real` wins even if the detector says it is not on a Pi.
+- `test_invalid_mode_falls_back_to_auto_detection`: proves that a bad mode string does not crash the app and instead falls back to safe detection logic.
+
+[backend/tests/test_gpio_scripts.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/tests/test_gpio_scripts.py) checks the standalone helper scripts:
+
+- `test_run_pump_uses_shared_gpio_adapter`: proves that the pump helper script uses the same shared mock/real abstraction as the main backend instead of talking directly to raw GPIO code.
+- `test_gpiotest_builds_mock_devices_without_real_gpio`: proves that the GPIO test helper can create fake buttons and lights on a laptop, which is important for safe development without the physical box.
+
+[backend/tests/test_sbbackend_integration.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/tests/test_sbbackend_integration.py) is the main backend behavior suite. It checks the actual experiment flow through the Flask API:
+
+- `test_simulated_lever_presses_are_reported_by_counts_endpoint`: starts a test, sends fake lever presses, and proves that live counts and saved results match what happened.
+- `test_backend_timer_finishes_test_without_frontend_timekeeping`: proves that the backend can end a test by time alone even if the frontend is not doing any timer logic.
+- `test_finish_endpoint_marks_a_paused_test_complete_in_database`: proves that a paused test can be manually finished and that the database reflects that final state correctly.
+- `test_tone_stimulus_is_reflected_in_saved_results`: proves that when a run uses a tone instead of a light, the saved result records the correct stimulus type.
+- `test_oled_shows_waiting_status_after_configuration`: proves that after a test is configured but not started yet, the OLED shows the expected ready screen.
+- `test_oled_shows_remaining_time_and_lever_count_while_running`: proves that during a running test, the OLED updates with the remaining time and current lever count.
+- `test_running_indicator_turns_off_and_end_chime_runs_when_enabled`: proves that the running LED turns off at the end and that the configured end chime pattern is actually used and saved.
+- `test_runtime_error_blinks_error_led_until_next_successful_configuration`: simulates a hardware failure and proves that the backend reports the error, stops the run, and turns on the error indicators until the system is reconfigured successfully.
+- `test_pump_prime_endpoint_runs_before_a_test`: proves that the priming endpoint can run the pump by itself before an experiment begins.
+- `test_pump_prime_endpoint_is_blocked_while_test_is_running`: proves that the pump cannot be primed in the middle of an active test, which protects the experiment flow.
+- `test_repository_migrates_legacy_active_test_schema`: proves that older SQLite database layouts are upgraded instead of breaking when the app starts.
+- `test_presets_can_be_saved_listed_updated_and_deleted_per_user`: proves that authenticated users can manage their own presets and that one user's preset data is handled like real saved account data rather than temporary browser-only state.
+
+[frontend/src/components/App/App.test.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/App/App.test.js) is a frontend smoke test:
+
+- `renders the home page and primary navigation`: proves that the React app can render the home route and that key entry-point links like login and register are visible. It is a quick "does the app boot at all?" check rather than a full browser workflow test.
+
 ## GPIO Modes
 
 The backend uses [gpio_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/gpio_adapter.py).
