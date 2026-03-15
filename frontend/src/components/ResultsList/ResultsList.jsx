@@ -1,13 +1,29 @@
 import React, { useState, useEffect } from "react";
 import "./ResultsList.css";
-import { deleteResult, getResults } from "../../utilities/api";
+import { deleteResult, deleteResults, getResults } from "../../utilities/api";
 import { useAuth } from "../../context/AuthContext";
+import { BarChart } from "@mui/x-charts/BarChart";
+import { PieChart } from "@mui/x-charts/PieChart";
 import {
+  buildEventTimelineCsv,
   buildStimulusSummary,
   buildTraditionalCsv,
   buildTraditionalCsvRows,
   formatSecondsForDisplay,
 } from "../../utilities/resultsCsv";
+
+const formatAverageValue = (value) => Number(value || 0).toFixed(1);
+
+const formatSummaryCount = (count, singularLabel, pluralLabel = `${singularLabel}s`) =>
+  `${count} ${count === 1 ? singularLabel : pluralLabel}`;
+
+const truncateChartLabel = (value, maxLength = 16) => {
+  const normalizedValue = String(value || "");
+  if (normalizedValue.length <= maxLength) {
+    return normalizedValue;
+  }
+  return `${normalizedValue.slice(0, maxLength - 1)}…`;
+};
 
 const ResultsList = () => {
   const { isAdmin } = useAuth();
@@ -41,6 +57,73 @@ const ResultsList = () => {
   );
   const allVisibleSelected = Boolean(filteredTests.length)
     && filteredTests.every((test) => selectedTestIds.includes(String(test.id)));
+  const summaryTests = selectedTestIds.length
+    ? testData.filter((test) => selectedTestIds.includes(String(test.id)))
+    : filteredTests;
+  const completedSummaryCount = summaryTests.filter((test) => Boolean(test.complete)).length;
+  const incompleteSummaryCount = Math.max(summaryTests.length - completedSummaryCount, 0);
+  const completionRate = summaryTests.length
+    ? Math.round((completedSummaryCount / summaryTests.length) * 100)
+    : 0;
+  const averageLeverPresses = summaryTests.length
+    ? summaryTests.reduce((total, test) => total + Number(test.leverPressCount || 0), 0) / summaryTests.length
+    : 0;
+  const averageNosePokes = summaryTests.length
+    ? summaryTests.reduce((total, test) => total + Number(test.nosePokeCount || 0), 0) / summaryTests.length
+    : 0;
+  const averageRewards = summaryTests.length
+    ? summaryTests.reduce((total, test) => total + Number(test.rewardCount || 0), 0) / summaryTests.length
+    : 0;
+  const maxAverageMetric = Math.max(averageLeverPresses, averageNosePokes, averageRewards, 1);
+  const averageMetricRows = [
+    {
+      label: "Lever Presses",
+      value: averageLeverPresses,
+      toneClassName: "lever",
+    },
+    {
+      label: "Nose Pokes",
+      value: averageNosePokes,
+      toneClassName: "nose",
+    },
+    {
+      label: "Rewards",
+      value: averageRewards,
+      toneClassName: "reward",
+    },
+  ];
+  const interactionsByTrial = summaryTests
+    .map((test) => ({
+      id: test.id,
+      name: test.name,
+      value: test.totalPresses !== null && test.totalPresses !== undefined
+        ? Number(test.totalPresses)
+        : Number(test.leverPressCount || 0) + Number(test.nosePokeCount || 0),
+    }))
+    .sort((left, right) => right.value - left.value)
+    .slice(0, 6);
+  const stimulusSummaryMap = summaryTests.reduce((summaryMap, test) => {
+    const label = test.stimulusDescription || buildStimulusSummary(test.stimulusType, test.lightColor);
+    summaryMap.set(label, (summaryMap.get(label) || 0) + 1);
+    return summaryMap;
+  }, new Map());
+  const stimulusSummaryRows = Array.from(stimulusSummaryMap.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((left, right) => right.value - left.value);
+  const summaryScopeLabel = selectedTestIds.length
+    ? `Showing ${formatSummaryCount(summaryTests.length, "selected trial")} in the charts below.`
+    : `Showing ${formatSummaryCount(summaryTests.length, "visible trial")} based on the current search.`;
+  const completionPieData = [
+    { id: "complete", value: completedSummaryCount, label: "Complete", color: "#0f74bd" },
+    { id: "incomplete", value: incompleteSummaryCount, label: "Incomplete", color: "#d0d9e6" },
+  ].filter((item) => item.value > 0);
+  const averageResponseChartData = averageMetricRows.map((row) => row.value);
+  const averageResponseChartLabels = averageMetricRows.map((row) => row.label);
+  const interactionsChartData = interactionsByTrial.map((trial) => trial.value);
+  const interactionsChartLabels = interactionsByTrial.map((trial) => truncateChartLabel(trial.name));
+  const selectedComparisonTests = selectedTestIds.length
+    ? testData.filter((test) => selectedTestIds.includes(String(test.id)))
+    : [];
 
   const buildCsvRecord = (test) => ({
     exportedAt: new Date().toISOString(),
@@ -111,6 +194,14 @@ const ResultsList = () => {
     return "Unknown user";
   };
 
+  const formatSubjectId = (test) => {
+    const subjectId = test?.subjectId;
+    if (subjectId === null || subjectId === undefined || subjectId === '') {
+      return 'Not tracked';
+    }
+    return subjectId;
+  };
+
   const removeResultsFromState = (resultIds) => {
     const normalizedIds = resultIds.map((resultId) => String(resultId));
 
@@ -162,31 +253,43 @@ const ResultsList = () => {
     }
 
     const idsToDelete = selectedTests.map((test) => String(test.id));
-    const deletedIds = [];
 
     try {
       setDeleteBusyIds(idsToDelete);
       setErrorMessage("");
       setFeedbackMessage("");
+      const response = await deleteResults(idsToDelete);
+      const deletedIds = Array.isArray(response?.deletedIds) ? response.deletedIds : [];
+      const missingIds = Array.isArray(response?.missingIds) ? response.missingIds : [];
+      const failedIds = Array.isArray(response?.failedIds) ? response.failedIds : [];
 
-      for (const resultId of idsToDelete) {
-        await deleteResult(resultId);
-        deletedIds.push(resultId);
-      }
-
-      removeResultsFromState(deletedIds);
-      setFeedbackMessage(
-        `${deletedIds.length} saved trial${deletedIds.length === 1 ? "" : "s"} deleted successfully.`
-      );
-    } catch (error) {
       if (deletedIds.length) {
         removeResultsFromState(deletedIds);
       }
-      setErrorMessage(
-        deletedIds.length
-          ? `Deleted ${deletedIds.length} saved trial${deletedIds.length === 1 ? "" : "s"}, but one or more deletions failed.`
-          : (error?.message || "Unable to delete the selected saved trials.")
-      );
+
+      if (failedIds.length && missingIds.length) {
+        setFeedbackMessage(
+          `Deleted ${deletedIds.length} saved trial${deletedIds.length === 1 ? "" : "s"}. `
+          + `${missingIds.length} were already missing and ${failedIds.length} could not be deleted.`
+        );
+      } else if (failedIds.length) {
+        setFeedbackMessage(
+          `Deleted ${deletedIds.length} saved trial${deletedIds.length === 1 ? "" : "s"}. `
+          + `${failedIds.length} could not be deleted and remain in the list.`
+        );
+      } else if (missingIds.length) {
+        setFeedbackMessage(
+          `Deleted ${deletedIds.length} saved trial${deletedIds.length === 1 ? "" : "s"}. `
+          + `${missingIds.length} could not be found anymore and were skipped.`
+        );
+      } else {
+        setFeedbackMessage(
+          response?.message
+            || `${deletedIds.length} saved trial${deletedIds.length === 1 ? "" : "s"} deleted successfully.`
+        );
+      }
+    } catch (error) {
+      setErrorMessage(error?.message || "Unable to delete the selected saved trials.");
     } finally {
       setDeleteBusyIds([]);
     }
@@ -202,6 +305,29 @@ const ResultsList = () => {
     const link = document.createElement("a");
     link.href = url;
     link.download = `${selectedTest.name.replace(/\s+/g, "_")}_saved_result.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadTimeline = () => {
+    if (!selectedTest) {
+      return;
+    }
+
+    const csvData = buildEventTimelineCsv({
+      testName: selectedTest.name,
+      subjectId: selectedTest.subjectId ?? "",
+      conductedByDisplayName: selectedTest.conductedBy?.displayName ?? "",
+      conductedByEmail: selectedTest.conductedBy?.email ?? "",
+      events: selectedTest.eventTimeline || [],
+    });
+    const blob = new Blob([csvData], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${selectedTest.name.replace(/\s+/g, "_")}_timeline.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -330,43 +456,292 @@ const ResultsList = () => {
         {errorMessage && <p className="error-message">{errorMessage}</p>}
       </div>
 
-      {selectedTest && (
-        <div className="test-details">
-          <button className="close-button" onClick={() => setSelectedTest(null)}>X</button>
-          <h2>{selectedTest.name} Summary</h2>
-          <div className="test-summary">
-            <p><strong>Saved:</strong> {formatTrialDate(selectedTest)}</p>
-            <p><strong>Conducted By:</strong> {formatConductedBy(selectedTest)}</p>
-            <p><strong>Status:</strong> {selectedTest.complete ? "Complete" : selectedTest.status}</p>
-            <p><strong>Goal For Trial:</strong> {selectedTest.goalForTrial}</p>
-            <p><strong>Goal For Test:</strong> {selectedTest.goalForTest}</p>
-            <p><strong>Lever Presses:</strong> {selectedTest.leverPressCount}</p>
-            <p><strong>Nose Pokes:</strong> {selectedTest.nosePokeCount}</p>
-            <p><strong>Total Interactions:</strong> {selectedTest.totalPresses}</p>
-            <p><strong>Rewards Given:</strong> {selectedTest.rewardCount}</p>
-            <p><strong>Configured Duration:</strong> {formatSecondsForDisplay(selectedTest.configuredDurationSeconds)}</p>
-            <p><strong>Elapsed Time:</strong> {formatSecondsForDisplay(selectedTest.elapsedTimeSeconds)}</p>
-            <p><strong>Time Remaining:</strong> {formatSecondsForDisplay(selectedTest.remainingTimeSeconds)}</p>
-            <p><strong>Reward Type:</strong> {selectedTest.rewardType}</p>
-            <p><strong>Stimulus:</strong> {selectedTest.stimulusDescription || buildStimulusSummary(selectedTest.stimulusType, selectedTest.lightColor)}</p>
-            <p><strong>Interaction Type:</strong> {selectedTest.interactionType}</p>
-            <p><strong>End Chime:</strong> {selectedTest.endChimeEnabled ? 'Enabled' : 'Disabled'}</p>
-            {selectedTest.endChimeEnabled && (
-              <p><strong>End Chime Pattern:</strong> {selectedTest.endChimePattern}</p>
+      <div className="results-main-column">
+        <section className="results-analytics" aria-label="Results Snapshot">
+          <div className="results-analytics-header">
+            <div>
+              <h2>Results Snapshot</h2>
+              <p>{summaryScopeLabel}</p>
+            </div>
+            <div className="results-analytics-badge">
+              {summaryTests.length ? `${completionRate}% complete` : 'No trials yet'}
+            </div>
+          </div>
+
+          {summaryTests.length ? (
+            <div className="results-analytics-grid">
+              <div className="chart-card">
+                <h3>Completion Overview</h3>
+                <PieChart
+                  height={220}
+                  skipAnimation
+                  hideLegend
+                  margin={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  series={[
+                    {
+                      innerRadius: 42,
+                      outerRadius: 82,
+                      paddingAngle: 2,
+                      cornerRadius: 4,
+                      data: completionPieData.length
+                        ? completionPieData
+                        : [{ id: "empty", value: 1, label: "No data", color: "#d0d9e6" }],
+                      arcLabel: (item) => (item.value > 0 && summaryTests.length ? `${item.value}` : ""),
+                    },
+                  ]}
+                />
+                <div className="chart-stat-row">
+                  <div>
+                    <strong>{completedSummaryCount}</strong>
+                    <span>Complete</span>
+                  </div>
+                  <div>
+                    <strong>{incompleteSummaryCount}</strong>
+                    <span>Incomplete</span>
+                  </div>
+                  <div>
+                    <strong>{summaryTests.length}</strong>
+                    <span>Total</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="chart-card">
+                <h3>Average Response Profile</h3>
+                <BarChart
+                  height={240}
+                  skipAnimation
+                  borderRadius={6}
+                  xAxis={[
+                    {
+                      scaleType: "band",
+                      data: averageResponseChartLabels,
+                      tickLabelStyle: {
+                        angle: -20,
+                        textAnchor: "end",
+                        fontSize: 11,
+                      },
+                    },
+                  ]}
+                  yAxis={[{ min: 0, max: Math.max(maxAverageMetric, 1) + 1 }]}
+                  series={[
+                    {
+                      data: averageResponseChartData,
+                      color: "#0f74bd",
+                      valueFormatter: (value) => formatAverageValue(value),
+                    },
+                  ]}
+                  margin={{ top: 10, bottom: 50, left: 36, right: 12 }}
+                />
+              </div>
+
+              <div className="chart-card chart-card-wide">
+                <h3>Interactions By Trial</h3>
+                <BarChart
+                  height={260}
+                  skipAnimation
+                  borderRadius={6}
+                  xAxis={[
+                    {
+                      scaleType: "band",
+                      data: interactionsChartLabels,
+                      tickLabelStyle: {
+                        angle: -18,
+                        textAnchor: "end",
+                        fontSize: 11,
+                      },
+                    },
+                  ]}
+                  series={[
+                    {
+                      data: interactionsChartData,
+                      color: "#2851a3",
+                      valueFormatter: (value) => `${value ?? 0} interactions`,
+                    },
+                  ]}
+                  margin={{ top: 10, bottom: 54, left: 40, right: 12 }}
+                />
+              </div>
+
+              <div className="chart-card">
+                <h3>Stimulus Mix</h3>
+                <PieChart
+                  height={240}
+                  skipAnimation
+                  hideLegend
+                  margin={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  series={[
+                    {
+                      innerRadius: 36,
+                      outerRadius: 86,
+                      paddingAngle: 3,
+                      cornerRadius: 4,
+                      data: stimulusSummaryRows.map((row, index) => ({
+                        id: row.label,
+                        value: row.value,
+                        label: row.label,
+                        color: ["#7a2ee6", "#2851a3", "#0f74bd", "#5d8c1f"][index % 4],
+                      })),
+                      arcLabel: (item) => (item.value > 0 ? `${item.value}` : ""),
+                    },
+                  ]}
+                />
+                <ul className="chart-legend-list">
+                  {stimulusSummaryRows.map((row, index) => (
+                    <li key={row.label}>
+                      <span
+                        className="chart-legend-swatch"
+                        style={{ backgroundColor: ["#7a2ee6", "#2851a3", "#0f74bd", "#5d8c1f"][index % 4] }}
+                      />
+                      <span>{row.label}</span>
+                      <strong>{row.value}</strong>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <p className="results-empty-state">
+              Saved trials will appear here with quick charts once results are available.
+            </p>
+          )}
+        </section>
+
+        {selectedComparisonTests.length > 0 && (
+          <section className="results-comparison-panel" aria-label="Selected Trial Comparison">
+            <div className="results-comparison-header">
+              <h3>Selected Trial Comparison</h3>
+              <p>
+                Checked trials stay in this comparison view so you can compare saved sessions side by side while still opening one detailed record below.
+              </p>
+            </div>
+            <div className="comparison-table-wrapper">
+              <table className="comparison-table">
+                <thead>
+                  <tr>
+                    <th>Trial</th>
+                    <th>Subject</th>
+                    <th>Saved</th>
+                    <th>Stimulus</th>
+                    <th>Lever</th>
+                    <th>Nose</th>
+                    <th>Rewards</th>
+                    <th>Elapsed</th>
+                    <th>Operator</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedComparisonTests.map((test) => (
+                    <tr key={test.id}>
+                      <td>{test.name}</td>
+                      <td>{formatSubjectId(test)}</td>
+                      <td>{formatTrialDate(test)}</td>
+                      <td>{test.stimulusDescription || buildStimulusSummary(test.stimulusType, test.lightColor)}</td>
+                      <td>{test.leverPressCount ?? 0}</td>
+                      <td>{test.nosePokeCount ?? 0}</td>
+                      <td>{test.rewardCount ?? 0}</td>
+                      <td>{formatSecondsForDisplay(test.elapsedTimeSeconds)}</td>
+                      <td>{formatConductedBy(test)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {selectedTest && (
+          <div className="test-details">
+            <button className="close-button" onClick={() => setSelectedTest(null)}>X</button>
+            <h2>{selectedTest.name} Summary</h2>
+            <div className="test-summary">
+              <p><strong>Saved:</strong> {formatTrialDate(selectedTest)}</p>
+              <p><strong>Subject ID:</strong> {formatSubjectId(selectedTest)}</p>
+              <p><strong>Conducted By:</strong> {formatConductedBy(selectedTest)}</p>
+              <p><strong>Status:</strong> {selectedTest.complete ? "Complete" : selectedTest.status}</p>
+              <p><strong>Goal For Trial:</strong> {selectedTest.goalForTrial}</p>
+              <p><strong>Goal For Test:</strong> {selectedTest.goalForTest}</p>
+              <p><strong>Lever Presses:</strong> {selectedTest.leverPressCount}</p>
+              <p><strong>Nose Pokes:</strong> {selectedTest.nosePokeCount}</p>
+              <p><strong>Total Interactions:</strong> {selectedTest.totalPresses}</p>
+              <p><strong>Rewards Given:</strong> {selectedTest.rewardCount}</p>
+              <p><strong>Configured Duration:</strong> {formatSecondsForDisplay(selectedTest.configuredDurationSeconds)}</p>
+              <p><strong>Elapsed Time:</strong> {formatSecondsForDisplay(selectedTest.elapsedTimeSeconds)}</p>
+              <p><strong>Time Remaining:</strong> {formatSecondsForDisplay(selectedTest.remainingTimeSeconds)}</p>
+              <p><strong>Reward Type:</strong> {selectedTest.rewardType}</p>
+              <p><strong>Stimulus:</strong> {selectedTest.stimulusDescription || buildStimulusSummary(selectedTest.stimulusType, selectedTest.lightColor)}</p>
+              <p><strong>Interaction Type:</strong> {selectedTest.interactionType}</p>
+              <p><strong>End Chime:</strong> {selectedTest.endChimeEnabled ? 'Enabled' : 'Disabled'}</p>
+              <p><strong>Event Count:</strong> {selectedTest.eventCount || 0}</p>
+              {selectedTest.endChimeEnabled && (
+                <p><strong>End Chime Pattern:</strong> {selectedTest.endChimePattern}</p>
+              )}
+            </div>
+            {selectedTest.notes?.length ? (
+              <div className="results-notes-panel">
+                <h3>Operator Notes</h3>
+                <ul>
+                  {selectedTest.notes.map((note) => (
+                    <li key={note.id}>
+                      <strong>{formatSecondsForDisplay(note.elapsedSeconds)}</strong>
+                      <span>{note.detailText}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {selectedTest.eventTimeline?.length ? (
+              <div className="results-timeline-panel">
+                <h3>Event Timeline</h3>
+                <ul>
+                  {selectedTest.eventTimeline.map((event) => (
+                    <li key={event.id}>
+                      <div className="results-timeline-item-meta">
+                        <strong>{event.label}</strong>
+                        <span>{formatSecondsForDisplay(event.elapsedSeconds)}</span>
+                      </div>
+                      {event.detailText && <p>{event.detailText}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <div className="results-detail-actions">
+              <button className="download-button" onClick={handleDownload}>Download Data</button>
+              <button
+                className="download-button"
+                onClick={handleDownloadTimeline}
+                disabled={!selectedTest.eventTimeline?.length}
+              >
+                Download Timeline
+              </button>
+            </div>
+            {isAdmin && (
+              <button
+                className="delete-trial-button details-delete-button"
+                onClick={(event) => handleDeleteResult(event, selectedTest.id)}
+                disabled={deleteBusyIds.includes(String(selectedTest.id))}
+              >
+                {deleteBusyIds.includes(String(selectedTest.id)) ? "Deleting..." : "Delete Trial"}
+              </button>
             )}
           </div>
-          <button className="download-button" onClick={handleDownload}>Download Data</button>
-          {isAdmin && (
-            <button
-              className="delete-trial-button details-delete-button"
-              onClick={(event) => handleDeleteResult(event, selectedTest.id)}
-              disabled={deleteBusyIds.includes(String(selectedTest.id))}
-            >
-              {deleteBusyIds.includes(String(selectedTest.id)) ? "Deleting..." : "Delete Trial"}
-            </button>
-          )}
-        </div>
-      )}
+        )}
+        {!selectedTest && summaryTests.length > 0 && (
+          <div className="results-placeholder-card">
+            <h3>Select a trial to inspect its detailed counts, notes, and event timeline.</h3>
+            <p>
+              The charts above summarize the current result set, and the detailed panel opens when you click any saved trial on the left.
+            </p>
+          </div>
+        )}
+        {!selectedTest && !summaryTests.length && !loading && (
+          <div className="results-placeholder-card">
+            <h3>No saved trials yet.</h3>
+            <p>Run a test first, then return here to review CSV exports, notes, timelines, and summary charts.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

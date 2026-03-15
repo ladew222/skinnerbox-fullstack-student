@@ -211,6 +211,8 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         run_response = self.client.post("/api/test/run", json=payload, headers=self.auth_headers)
         self.assertEqual(run_response.status_code, 200)
 
+        self._wait_for_condition(lambda: sbBackend.session_manager.stimulus_active is False)
+
         lever_response = self.client.post("/api/input/lever", headers=self.auth_headers)
         self.assertEqual(lever_response.status_code, 200)
 
@@ -398,6 +400,8 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertEqual(run_response.status_code, 200)
         self.assertTrue(sbBackend.hardware.running_on)
 
+        self._wait_for_condition(lambda: sbBackend.session_manager.stimulus_active is False)
+
         lever_response = self.client.post("/api/input/lever", headers=self.auth_headers)
         self.assertEqual(lever_response.status_code, 200)
 
@@ -567,6 +571,162 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         final_results_response = self.client.get("/api/results", headers=self.auth_headers)
         self.assertEqual(final_results_response.status_code, 200)
         self.assertEqual(final_results_response.get_json(), [])
+
+    def test_saved_results_can_be_deleted_in_one_admin_batch_request(self):
+        first_payload = self._base_payload(
+            testName="Admin Batch Delete One",
+            goalForTest=1,
+        )
+        second_payload = self._base_payload(
+            testName="Admin Batch Delete Two",
+            goalForTest=1,
+            testID=2000000002000,
+        )
+
+        for payload in (first_payload, second_payload):
+            configure_response = self.client.post(
+                "/api/test/information",
+                json=payload,
+                headers=self.auth_headers,
+            )
+            self.assertEqual(configure_response.status_code, 200)
+
+            run_response = self.client.post("/api/test/run", json=payload, headers=self.auth_headers)
+            self.assertEqual(run_response.status_code, 200)
+            self._wait_for_condition(lambda: sbBackend.session_manager.stimulus_active is False)
+
+            interaction_endpoint = "/api/input/lever"
+            if payload["interactionType"] == "Poke":
+                interaction_endpoint = "/api/input/nosepoke"
+
+            interaction_response = self.client.post(interaction_endpoint, headers=self.auth_headers)
+            self.assertEqual(interaction_response.status_code, 200)
+            self._wait_for_status(lambda current: current["testFinished"] is True)
+
+        results = self.client.get("/api/results", headers=self.auth_headers).get_json()
+        result_ids = [result["id"] for result in results[:2]]
+        self.assertEqual(len(result_ids), 2)
+
+        batch_delete_response = self.client.post(
+            "/api/results/delete-batch",
+            json={"resultIds": result_ids},
+            headers=self.admin_headers,
+        )
+        self.assertEqual(batch_delete_response.status_code, 200)
+        payload = batch_delete_response.get_json()
+        self.assertEqual(payload["deletedCount"], 2)
+        self.assertEqual(sorted(payload["deletedIds"]), sorted([str(result_id) for result_id in result_ids]))
+        self.assertEqual(payload["missingIds"], [])
+
+    def test_saved_results_include_event_timeline_and_operator_notes(self):
+        payload = self._base_payload(
+            testName="Timeline Trial",
+            goalForTest=1,
+        )
+
+        configure_response = self.client.post(
+            "/api/test/information",
+            json=payload,
+            headers=self.auth_headers,
+        )
+        self.assertEqual(configure_response.status_code, 200)
+
+        run_response = self.client.post("/api/test/run", json=payload, headers=self.auth_headers)
+        self.assertEqual(run_response.status_code, 200)
+
+        note_response = self.client.post(
+            "/api/test/note",
+            json={"noteText": "Animal hesitated before first response."},
+            headers=self.auth_headers,
+        )
+        self.assertEqual(note_response.status_code, 200)
+
+        lever_response = self.client.post("/api/input/lever", headers=self.auth_headers)
+        self.assertEqual(lever_response.status_code, 200)
+
+        self._wait_for_status(lambda current: current["testFinished"] is True)
+
+        results = self.client.get("/api/results", headers=self.auth_headers).get_json()
+        self.assertEqual(results[0]["name"], "Timeline Trial")
+        self.assertGreater(results[0]["eventCount"], 0)
+        self.assertTrue(results[0]["eventTimeline"])
+        self.assertEqual(results[0]["notes"][0]["detailText"], "Animal hesitated before first response.")
+        event_types = [event["type"] for event in results[0]["eventTimeline"]]
+        self.assertIn("configured", event_types)
+        self.assertIn("started", event_types)
+        self.assertIn("note", event_types)
+        self.assertIn("lever_press", event_types)
+        self.assertIn("reward_delivered", event_types)
+        self.assertIn("finished", event_types)
+
+    def test_subject_tracking_can_be_left_blank(self):
+        payload = self._base_payload(
+            testName="No Subject Trial",
+            subjectID="",
+            goalForTest=1,
+        )
+
+        configure_response = self.client.post(
+            "/api/test/information",
+            json=payload,
+            headers=self.auth_headers,
+        )
+        self.assertEqual(configure_response.status_code, 200)
+        self.assertIsNone(
+            configure_response.get_json()["received_configuration"]["subjectID"]
+        )
+
+        run_response = self.client.post("/api/test/run", json=payload, headers=self.auth_headers)
+        self.assertEqual(run_response.status_code, 200)
+
+        self._wait_for_condition(lambda: sbBackend.session_manager.stimulus_active is False)
+
+        lever_response = self.client.post("/api/input/lever", headers=self.auth_headers)
+        self.assertEqual(lever_response.status_code, 200)
+
+        self._wait_for_status(lambda current: current["testFinished"] is True)
+
+        results = self.client.get("/api/results", headers=self.auth_headers).get_json()
+        self.assertEqual(results[0]["name"], "No Subject Trial")
+        self.assertIsNone(results[0]["subjectId"])
+        self.assertEqual(
+            results[0]["eventTimeline"][0]["detailText"],
+            "No Subject Trial prepared without subject tracking.",
+        )
+
+    def test_maintenance_status_reports_latest_pump_calibration(self):
+        initial_status_response = self.client.get(
+            "/api/maintenance/status",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(initial_status_response.status_code, 200)
+        self.assertIsNone(initial_status_response.get_json()["latestPumpCalibration"])
+
+        calibration_response = self.client.post(
+            "/api/maintenance/pump-calibration",
+            json={
+                "durationSeconds": 2,
+                "measuredVolumeMl": 1.5,
+                "noteText": "Measured after replacing the water line.",
+            },
+            headers=self.auth_headers,
+        )
+        self.assertEqual(calibration_response.status_code, 200)
+        calibration_payload = calibration_response.get_json()["calibration"]
+        self.assertAlmostEqual(calibration_payload["derivedRateMlPerSecond"], 0.75, places=4)
+        self.assertEqual(calibration_payload["createdBy"]["displayName"], "Operator User")
+
+        status_response = self.client.get(
+            "/api/maintenance/status",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(status_response.status_code, 200)
+        status_payload = status_response.get_json()
+        self.assertEqual(status_payload["gpioMode"], "mock")
+        self.assertEqual(
+            status_payload["latestPumpCalibration"]["noteText"],
+            "Measured after replacing the water line.",
+        )
 
     def test_repository_migrates_legacy_active_test_schema(self):
         legacy_database_path = Path(self.temp_dir.name) / "legacy-testdatabase.db"

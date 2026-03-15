@@ -285,6 +285,30 @@ export const testBuzzer = async () => {
   }
 };
 
+export const getMaintenanceStatus = async () => {
+  try {
+    const response = await apiClient.get('/api/maintenance/status');
+    return response.data;
+  } catch (error) {
+    console.error('Error loading maintenance status:', error);
+    rethrowNormalizedError(error, 'MAINTENANCE_STATUS_ERROR', 'Unable to load the maintenance status.');
+  }
+};
+
+export const savePumpCalibration = async ({ durationSeconds, measuredVolumeMl, noteText }) => {
+  try {
+    const response = await apiClient.post('/api/maintenance/pump-calibration', {
+      durationSeconds,
+      measuredVolumeMl,
+      noteText,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error saving pump calibration:', error);
+    rethrowNormalizedError(error, 'CALIBRATION_SAVE_ERROR', 'Unable to save the pump calibration.');
+  }
+};
+
 // Test Management
 export const runTest = async (testSettings) => {
   try {
@@ -316,6 +340,16 @@ export const finishTest = async () => {
   }
 };
 
+export const addTestNote = async (noteText) => {
+  try {
+    const response = await apiClient.post('/api/test/note', { noteText });
+    return response.data;
+  } catch (error) {
+    console.error('Error saving trial note:', error);
+    rethrowNormalizedError(error, 'NOTE_SAVE_ERROR', 'Unable to save the operator note.');
+  }
+};
+
 export const getResults = async () => {
   try {
     const response = await apiClient.get('/api/results');
@@ -333,6 +367,91 @@ export const deleteResult = async (resultId) => {
   } catch (error) {
     console.error('Error deleting saved result:', error);
     rethrowNormalizedError(error, 'RESULT_DELETE_ERROR', 'Unable to delete the selected saved trial.');
+  }
+};
+
+const deleteResultsIndividually = async (resultIds) => {
+  const normalizedIds = [...new Set(
+    (Array.isArray(resultIds) ? resultIds : [])
+      .map((resultId) => String(resultId || '').trim())
+      .filter(Boolean)
+  )];
+
+  const settledResults = await Promise.all(
+    normalizedIds.map(async (resultId) => {
+      try {
+        await apiClient.delete(`/api/results/${encodeURIComponent(resultId)}`);
+        return { resultId, outcome: 'deleted' };
+      } catch (error) {
+        const normalizedError = normalizeApiError(
+          error,
+          'RESULT_DELETE_ERROR',
+          'Unable to delete the selected saved trial.'
+        );
+        maybeDispatchAuthInvalid(normalizedError);
+
+        if (normalizedError.status === 404 || normalizedError.code === 'RESULT_NOT_FOUND') {
+          return { resultId, outcome: 'missing' };
+        }
+
+        return {
+          resultId,
+          outcome: 'failed',
+          error: normalizedError,
+        };
+      }
+    })
+  );
+
+  const deletedIds = settledResults
+    .filter((result) => result.outcome === 'deleted')
+    .map((result) => result.resultId);
+  const missingIds = settledResults
+    .filter((result) => result.outcome === 'missing')
+    .map((result) => result.resultId);
+  const failedIds = settledResults
+    .filter((result) => result.outcome === 'failed')
+    .map((result) => result.resultId);
+  const firstFailure = settledResults.find((result) => result.outcome === 'failed');
+
+  if (!deletedIds.length && !missingIds.length && firstFailure?.error) {
+    throw firstFailure.error;
+  }
+
+  return {
+    message: (
+      `Deleted ${deletedIds.length} saved trial${deletedIds.length === 1 ? '' : 's'}`
+      + (missingIds.length ? `. ${missingIds.length} already missing.` : '')
+      + (failedIds.length ? ` ${failedIds.length} could not be deleted.` : '')
+    ),
+    deletedIds,
+    missingIds,
+    failedIds,
+    deletedCount: deletedIds.length,
+    fallbackUsed: true,
+  };
+};
+
+export const deleteResults = async (resultIds) => {
+  try {
+    const response = await apiClient.post('/api/results/delete-batch', {
+      resultIds,
+    });
+    return response.data;
+  } catch (error) {
+    const normalizedError = normalizeApiError(
+      error,
+      'RESULT_BATCH_DELETE_ERROR',
+      'Unable to delete the selected saved trials.'
+    );
+    console.error('Error deleting saved results:', error);
+
+    if (AUTH_FAILURE_CODES.has(normalizedError.code)) {
+      maybeDispatchAuthInvalid(normalizedError);
+      throw normalizedError;
+    }
+
+    return deleteResultsIndividually(resultIds);
   }
 };
 

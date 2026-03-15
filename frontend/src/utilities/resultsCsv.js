@@ -54,6 +54,21 @@ const CSV_COLUMNS = [
   { key: 'updatedAt', label: 'updated_at' },
 ];
 
+const EVENT_TIMELINE_COLUMNS = [
+  { key: 'exportedAt', label: 'exported_at' },
+  { key: 'testName', label: 'test_name' },
+  { key: 'subjectId', label: 'subject_id' },
+  { key: 'conductedByDisplayName', label: 'conducted_by_display_name' },
+  { key: 'conductedByEmail', label: 'conducted_by_email' },
+  { key: 'eventIndex', label: 'event_index' },
+  { key: 'eventType', label: 'event_type' },
+  { key: 'eventLabel', label: 'event_label' },
+  { key: 'detailText', label: 'detail_text' },
+  { key: 'detailValue', label: 'detail_value' },
+  { key: 'occurredAt', label: 'occurred_at' },
+  { key: 'elapsedSeconds', label: 'elapsed_seconds' },
+];
+
 
 const escapeCsvValue = (value) => {
   if (value === null || value === undefined) {
@@ -85,6 +100,39 @@ export const buildTraditionalCsvRows = (records) => {
   const headers = CSV_COLUMNS.map((column) => escapeCsvValue(column.label)).join(',');
   const rows = normalizedRecords.map((record) =>
     CSV_COLUMNS.map((column) => escapeCsvValue(record?.[column.key])).join(',')
+  );
+  return `${headers}\n${rows.join('\n')}${rows.length ? '\n' : ''}`;
+};
+
+
+export const buildEventTimelineCsv = ({
+  exportedAt = new Date().toISOString(),
+  testName = '',
+  subjectId = '',
+  conductedByDisplayName = '',
+  conductedByEmail = '',
+  events = [],
+}) => {
+  const headers = EVENT_TIMELINE_COLUMNS.map((column) => escapeCsvValue(column.label)).join(',');
+  const normalizedEvents = Array.isArray(events) ? events : [];
+  const rows = normalizedEvents.map((event, index) =>
+    EVENT_TIMELINE_COLUMNS.map((column) => {
+      const record = {
+        exportedAt,
+        testName,
+        subjectId,
+        conductedByDisplayName,
+        conductedByEmail,
+        eventIndex: index + 1,
+        eventType: event?.type || '',
+        eventLabel: event?.label || '',
+        detailText: event?.detailText || '',
+        detailValue: event?.detailValue ?? '',
+        occurredAt: event?.occurredAt || '',
+        elapsedSeconds: event?.elapsedSeconds ?? '',
+      };
+      return escapeCsvValue(record[column.key]);
+    }).join(',')
   );
   return `${headers}\n${rows.join('\n')}${rows.length ? '\n' : ''}`;
 };

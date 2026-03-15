@@ -37,7 +37,7 @@ class TestConfiguration:
     test_id: int
     # Human-facing metadata shown in the frontend and exported results.
     test_name: str
-    subject_id: int
+    subject_id: int | None
     # Duration is stored in minutes because that is how the frontend collects it.
     trial_duration_minutes: float
     # Number of valid interactions required before a reward is delivered.
@@ -72,7 +72,7 @@ class TestConfiguration:
         configuration = cls(
             test_id=_coerce_int(payload.get("testID"), "testID", default=_default_test_id()),
             test_name=_coerce_text(payload.get("testName"), "testName", default="Untitled Test"),
-            subject_id=_coerce_int(payload.get("subjectID"), "subjectID", default=0),
+            subject_id=_coerce_optional_int(payload.get("subjectID"), "subjectID"),
             trial_duration_minutes=_coerce_float(payload.get("trialDuration"), "trialDuration", default=0.0),
             goal_for_trial=_coerce_int(payload.get("goalForTrial"), "goalForTrial", default=1),
             goal_for_test=_coerce_int(payload.get("goalForTest"), "goalForTest", default=1),
@@ -107,8 +107,8 @@ class TestConfiguration:
 
         if not self.test_name.strip():
             raise ConfigurationError("testName is required.")
-        if self.subject_id <= 0:
-            raise ConfigurationError("subjectID must be greater than 0.")
+        if self.subject_id is not None and self.subject_id <= 0:
+            raise ConfigurationError("subjectID must be greater than 0 when subject tracking is enabled.")
         if self.trial_duration_minutes <= 0:
             raise ConfigurationError("trialDuration must be greater than 0.")
         if self.goal_for_trial <= 0:
@@ -187,7 +187,7 @@ class PresetConfiguration:
     description: str
     # Default test values copied into the Trial form when a preset is chosen.
     test_name: str
-    subject_id: int
+    subject_id: int | None
     trial_duration_minutes: float
     goal_for_trial: int
     goal_for_test: int
@@ -370,6 +370,32 @@ class SQLiteTestRepository:
                 PRIMARY KEY (user_id, preset_id)
             )
         """
+        create_events_table_sql = """
+            CREATE TABLE IF NOT EXISTS test_events (
+                event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                test_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                event_label TEXT DEFAULT '',
+                detail_text TEXT DEFAULT '',
+                detail_value REAL,
+                occurred_at TEXT,
+                elapsed_seconds REAL DEFAULT 0
+            )
+        """
+        create_maintenance_table_sql = """
+            CREATE TABLE IF NOT EXISTS maintenance_records (
+                record_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                record_type TEXT NOT NULL,
+                duration_seconds REAL DEFAULT 0,
+                measured_volume_ml REAL DEFAULT 0,
+                derived_rate_ml_per_second REAL DEFAULT 0,
+                note_text TEXT DEFAULT '',
+                created_by_user_id INTEGER,
+                created_by_email TEXT DEFAULT '',
+                created_by_display_name TEXT DEFAULT '',
+                created_at TEXT
+            )
+        """
         expected_preset_columns = {
             "user_id": "INTEGER NOT NULL DEFAULT 0",
             "preset_id": "TEXT NOT NULL DEFAULT ''",
@@ -392,11 +418,35 @@ class SQLiteTestRepository:
             "created_at": "TEXT",
             "updated_at": "TEXT",
         }
+        expected_event_columns = {
+            "event_id": "INTEGER",
+            "test_id": "INTEGER NOT NULL DEFAULT 0",
+            "event_type": "TEXT NOT NULL DEFAULT ''",
+            "event_label": "TEXT DEFAULT ''",
+            "detail_text": "TEXT DEFAULT ''",
+            "detail_value": "REAL",
+            "occurred_at": "TEXT",
+            "elapsed_seconds": "REAL DEFAULT 0",
+        }
+        expected_maintenance_columns = {
+            "record_id": "INTEGER",
+            "record_type": "TEXT NOT NULL DEFAULT ''",
+            "duration_seconds": "REAL DEFAULT 0",
+            "measured_volume_ml": "REAL DEFAULT 0",
+            "derived_rate_ml_per_second": "REAL DEFAULT 0",
+            "note_text": "TEXT DEFAULT ''",
+            "created_by_user_id": "INTEGER",
+            "created_by_email": "TEXT DEFAULT ''",
+            "created_by_display_name": "TEXT DEFAULT ''",
+            "created_at": "TEXT",
+        }
 
         try:
             with self.connect() as connection:
                 connection.execute(create_table_sql)
                 connection.execute(create_presets_table_sql)
+                connection.execute(create_events_table_sql)
+                connection.execute(create_maintenance_table_sql)
                 existing_columns = {
                     row["name"]
                     for row in connection.execute("PRAGMA table_info(Active_Test)")
@@ -419,10 +469,44 @@ class SQLiteTestRepository:
                         f'ALTER TABLE user_presets ADD COLUMN "{column_name}" {column_type}'
                     )
 
+                existing_event_columns = {
+                    row["name"]
+                    for row in connection.execute("PRAGMA table_info(test_events)")
+                }
+                for column_name, column_type in expected_event_columns.items():
+                    if column_name in existing_event_columns:
+                        continue
+                    connection.execute(
+                        f'ALTER TABLE test_events ADD COLUMN "{column_name}" {column_type}'
+                    )
+
+                existing_maintenance_columns = {
+                    row["name"]
+                    for row in connection.execute("PRAGMA table_info(maintenance_records)")
+                }
+                for column_name, column_type in expected_maintenance_columns.items():
+                    if column_name in existing_maintenance_columns:
+                        continue
+                    connection.execute(
+                        f'ALTER TABLE maintenance_records ADD COLUMN "{column_name}" {column_type}'
+                    )
+
                 connection.execute(
                     """
                     CREATE UNIQUE INDEX IF NOT EXISTS idx_user_presets_user_name
                     ON user_presets(user_id, name COLLATE NOCASE)
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_test_events_test_id
+                    ON test_events(test_id, elapsed_seconds, event_id)
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_maintenance_records_type
+                    ON maintenance_records(record_type, created_at DESC, record_id DESC)
                     """
                 )
                 connection.commit()
@@ -643,6 +727,27 @@ class SQLiteTestRepository:
                     ORDER BY COALESCE(updated_at, created_at) DESC, testID DESC
                     """
                 ).fetchall()
+                result_ids = [row["testID"] for row in rows]
+                event_rows = []
+                if result_ids:
+                    placeholders = ", ".join("?" for _ in result_ids)
+                    event_rows = connection.execute(
+                        f"""
+                        SELECT
+                            event_id,
+                            test_id,
+                            event_type,
+                            event_label,
+                            detail_text,
+                            detail_value,
+                            occurred_at,
+                            elapsed_seconds
+                        FROM test_events
+                        WHERE test_id IN ({placeholders})
+                        ORDER BY test_id ASC, elapsed_seconds ASC, event_id ASC
+                        """,
+                        tuple(result_ids),
+                    ).fetchall()
         except ApiError:
             raise
         except sqlite3.Error as error:
@@ -653,7 +758,26 @@ class SQLiteTestRepository:
                 details={"reason": str(error)},
             ) from error
 
-        return [self._row_to_result(row) for row in rows]
+        events_by_test_id: dict[int, list[dict[str, object]]] = {}
+        for event_row in event_rows:
+            events_by_test_id.setdefault(event_row["test_id"], []).append(
+                self._row_to_event(event_row)
+            )
+
+        results = []
+        for row in rows:
+            result = self._row_to_result(row)
+            event_timeline = events_by_test_id.get(row["testID"], [])
+            result["eventTimeline"] = event_timeline
+            result["notes"] = [
+                event
+                for event in event_timeline
+                if event["type"] == "note"
+            ]
+            result["eventCount"] = len(event_timeline)
+            results.append(result)
+
+        return results
 
     def delete_result(self, result_id: str) -> None:
         """Delete one saved test run by its stable test identifier."""
@@ -669,6 +793,13 @@ class SQLiteTestRepository:
 
         try:
             with self.connect() as connection:
+                connection.execute(
+                    """
+                    DELETE FROM test_events
+                    WHERE CAST(test_id AS TEXT) = ?
+                    """,
+                    (normalized_result_id,),
+                )
                 cursor = connection.execute(
                     """
                     DELETE FROM Active_Test
@@ -694,6 +825,301 @@ class SQLiteTestRepository:
                 status=404,
                 details={"resultId": normalized_result_id},
             )
+
+    def delete_results(self, result_ids: list[str]) -> dict[str, object]:
+        """Delete multiple saved test runs in one transaction for more reliable bulk cleanup."""
+
+        normalized_ids: list[str] = []
+        seen_ids: set[str] = set()
+        for result_id in result_ids:
+            normalized_result_id = str(result_id or "").strip()
+            if not normalized_result_id or normalized_result_id in seen_ids:
+                continue
+            normalized_ids.append(normalized_result_id)
+            seen_ids.add(normalized_result_id)
+
+        if not normalized_ids:
+            raise ApiError(
+                code="RESULT_IDS_REQUIRED",
+                message="Select at least one saved trial to delete.",
+                status=400,
+            )
+
+        placeholders = ", ".join("?" for _ in normalized_ids)
+
+        try:
+            with self.connect() as connection:
+                existing_rows = connection.execute(
+                    f"""
+                    SELECT CAST(testID AS TEXT) AS result_id
+                    FROM Active_Test
+                    WHERE CAST(testID AS TEXT) IN ({placeholders})
+                    """,
+                    tuple(normalized_ids),
+                ).fetchall()
+                existing_ids = [row["result_id"] for row in existing_rows]
+                if existing_ids:
+                    existing_placeholders = ", ".join("?" for _ in existing_ids)
+                    connection.execute(
+                        f"""
+                        DELETE FROM test_events
+                        WHERE CAST(test_id AS TEXT) IN ({existing_placeholders})
+                        """,
+                        tuple(existing_ids),
+                    )
+                    connection.execute(
+                        f"""
+                        DELETE FROM Active_Test
+                        WHERE CAST(testID AS TEXT) IN ({existing_placeholders})
+                        """,
+                        tuple(existing_ids),
+                    )
+                connection.commit()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="RESULT_BATCH_DELETE_ERROR",
+                message="Unable to delete the selected saved trials.",
+                status=500,
+                details={"reason": str(error), "resultIds": normalized_ids},
+            ) from error
+
+        deleted_ids = [result_id for result_id in normalized_ids if result_id in existing_ids]
+        missing_ids = [result_id for result_id in normalized_ids if result_id not in existing_ids]
+
+        return {
+            "deletedIds": deleted_ids,
+            "missingIds": missing_ids,
+            "deletedCount": len(deleted_ids),
+        }
+
+    def clear_test_events(self, test_id: int) -> None:
+        """Remove any previously saved event timeline for the selected test identifier."""
+
+        try:
+            with self.connect() as connection:
+                connection.execute(
+                    """
+                    DELETE FROM test_events
+                    WHERE test_id = ?
+                    """,
+                    (test_id,),
+                )
+                connection.commit()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="EVENT_LOG_CLEAR_ERROR",
+                message="Unable to reset the event timeline for this test.",
+                status=500,
+                details={"reason": str(error), "testID": test_id},
+            ) from error
+
+    def log_test_event(
+        self,
+        test_id: int,
+        event_type: str,
+        event_label: str,
+        *,
+        detail_text: str = "",
+        detail_value: float | None = None,
+        elapsed_seconds: float = 0,
+    ) -> dict[str, object]:
+        """Append one timestamped event to the saved timeline for a test."""
+
+        occurred_at = self._timestamp()
+        try:
+            with self.connect() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO test_events (
+                        test_id,
+                        event_type,
+                        event_label,
+                        detail_text,
+                        detail_value,
+                        occurred_at,
+                        elapsed_seconds
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        test_id,
+                        event_type,
+                        event_label,
+                        detail_text,
+                        detail_value,
+                        occurred_at,
+                        elapsed_seconds,
+                    ),
+                )
+                connection.commit()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="EVENT_LOG_WRITE_ERROR",
+                message="Unable to save a test timeline event.",
+                status=500,
+                details={"reason": str(error), "testID": test_id, "eventType": event_type},
+            ) from error
+
+        return {
+            "id": cursor.lastrowid,
+            "testId": test_id,
+            "type": event_type,
+            "label": event_label,
+            "detailText": detail_text,
+            "detailValue": detail_value,
+            "occurredAt": occurred_at,
+            "elapsedSeconds": round(float(elapsed_seconds or 0), 3),
+        }
+
+    def list_test_events(self, test_id: int) -> list[dict[str, object]]:
+        """Return the saved event timeline for one test."""
+
+        try:
+            with self.connect() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT
+                        event_id,
+                        test_id,
+                        event_type,
+                        event_label,
+                        detail_text,
+                        detail_value,
+                        occurred_at,
+                        elapsed_seconds
+                    FROM test_events
+                    WHERE test_id = ?
+                    ORDER BY elapsed_seconds ASC, event_id ASC
+                    """,
+                    (test_id,),
+                ).fetchall()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="EVENT_LOG_READ_ERROR",
+                message="Unable to load the saved event timeline.",
+                status=500,
+                details={"reason": str(error), "testID": test_id},
+            ) from error
+
+        return [self._row_to_event(row) for row in rows]
+
+    def save_pump_calibration(
+        self,
+        duration_seconds: float,
+        measured_volume_ml: float,
+        *,
+        note_text: str = "",
+        conducted_by: ConductedBySnapshot | None = None,
+    ) -> dict[str, object]:
+        """Persist one pump-calibration measurement for later maintenance review."""
+
+        derived_rate = measured_volume_ml / duration_seconds
+        created_at = self._timestamp()
+
+        try:
+            with self.connect() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO maintenance_records (
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "pump_calibration",
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate,
+                        note_text,
+                        conducted_by.user_id if conducted_by else None,
+                        conducted_by.email if conducted_by else "",
+                        conducted_by.display_name if conducted_by else "",
+                        created_at,
+                    ),
+                )
+                connection.commit()
+
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_id = ?
+                    """,
+                    (cursor.lastrowid,),
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="CALIBRATION_SAVE_ERROR",
+                message="Unable to save the pump calibration measurement.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        return self._row_to_maintenance_record(row)
+
+    def get_latest_pump_calibration(self) -> dict[str, object] | None:
+        """Return the most recent pump calibration record, if one exists."""
+
+        try:
+            with self.connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_type = 'pump_calibration'
+                    ORDER BY created_at DESC, record_id DESC
+                    LIMIT 1
+                    """
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="CALIBRATION_READ_ERROR",
+                message="Unable to load the latest pump calibration.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        if row is None:
+            return None
+        return self._row_to_maintenance_record(row)
 
     def list_presets(self, user_id: int) -> list[dict[str, object]]:
         """Return the saved presets for one authenticated user."""
@@ -903,7 +1329,7 @@ class SQLiteTestRepository:
         return {
             "id": row["testID"],
             "name": row["Name"] or f"Test {row['testID']}",
-            "subjectId": row["subjectID"],
+            "subjectId": _normalize_subject_identifier(row["subjectID"]),
             "status": row["testStatus"] or "configured",
             "complete": (row["testStatus"] or "").lower() == "finished",
             "goalForTrial": goal_for_trial,
@@ -940,6 +1366,40 @@ class SQLiteTestRepository:
         }
 
     @staticmethod
+    def _row_to_event(row: sqlite3.Row) -> dict[str, object]:
+        """Convert one saved timeline event into the frontend's event shape."""
+
+        return {
+            "id": row["event_id"],
+            "testId": row["test_id"],
+            "type": row["event_type"] or "",
+            "label": row["event_label"] or "",
+            "detailText": row["detail_text"] or "",
+            "detailValue": row["detail_value"],
+            "occurredAt": row["occurred_at"],
+            "elapsedSeconds": round(float(row["elapsed_seconds"] or 0), 3),
+        }
+
+    @staticmethod
+    def _row_to_maintenance_record(row: sqlite3.Row) -> dict[str, object]:
+        """Convert a maintenance database row into the frontend's expected shape."""
+
+        return {
+            "id": row["record_id"],
+            "recordType": row["record_type"] or "",
+            "durationSeconds": round(float(row["duration_seconds"] or 0), 3),
+            "measuredVolumeMl": round(float(row["measured_volume_ml"] or 0), 3),
+            "derivedRateMlPerSecond": round(float(row["derived_rate_ml_per_second"] or 0), 4),
+            "noteText": row["note_text"] or "",
+            "createdBy": {
+                "id": row["created_by_user_id"],
+                "email": row["created_by_email"] or "",
+                "displayName": row["created_by_display_name"] or "",
+            },
+            "createdAt": row["created_at"],
+        }
+
+    @staticmethod
     def _row_to_preset(row: sqlite3.Row) -> dict[str, object]:
         """Convert a preset database row into the frontend's preset shape."""
 
@@ -948,7 +1408,7 @@ class SQLiteTestRepository:
             "name": row["name"] or "",
             "description": row["description"] or "",
             "testName": row["test_name"] or "",
-            "subjectID": row["subject_id"] or 0,
+            "subjectID": _normalize_subject_identifier(row["subject_id"]),
             "trialDuration": row["trial_duration"] or 0,
             "goalForTrial": row["goal_for_trial"] or 0,
             "goalForTest": row["goal_for_test"] or 0,
@@ -1571,6 +2031,20 @@ class TestSessionManager:
                 "configured",
                 conducted_by,
             )
+            self.repository.clear_test_events(configuration.test_id)
+            configured_event = self.repository.log_test_event(
+                configuration.test_id,
+                "configured",
+                "Test configured",
+                detail_text=(
+                    f"{configuration.test_name} prepared for subject {configuration.subject_id}."
+                    if configuration.subject_id is not None
+                    else f"{configuration.test_name} prepared without subject tracking."
+                ),
+                elapsed_seconds=counts.get("elapsed_seconds", 0),
+            )
+            with self.lock:
+                self.current_event_timeline = [configured_event]
             self._refresh_status_display()
             return configuration
         except ApiError as error:
@@ -1607,6 +2081,7 @@ class TestSessionManager:
                 if current_user is not None:
                     self.active_conducted_by = ConductedBySnapshot.from_authenticated_user(current_user)
 
+                was_paused = self.test_paused
                 self.hardware.clear_error_state()
                 self.stop_event = threading.Event()
                 self.response_event = threading.Event()
@@ -1635,6 +2110,12 @@ class TestSessionManager:
                 active_conducted_by,
             )
             self.repository.update_counts(test_id, counts, status="running")
+            self._log_test_event(
+                "resumed" if was_paused else "started",
+                "Test resumed" if was_paused else "Test started",
+                detail_text=f"{active_test.test_name} is now running.",
+                elapsed_seconds=counts.get("elapsed_seconds", 0),
+            )
             if worker_thread is not None:
                 worker_thread.start()
             self._refresh_status_display()
@@ -1747,6 +2228,13 @@ class TestSessionManager:
                 "testPaused": self.test_paused,
                 "conductedBy": self._conducted_by_payload_locked(),
                 "error": self.last_error,
+                "eventTimeline": list(self.current_event_timeline),
+                "notes": [
+                    event
+                    for event in self.current_event_timeline
+                    if event["type"] == "note"
+                ],
+                "activeTestId": self.active_test.test_id if self.active_test else None,
             }
 
     def prime_pump(self, payload: dict | None = None) -> dict[str, object]:
@@ -1823,6 +2311,143 @@ class TestSessionManager:
             self._remember_error(api_error)
             raise api_error from error
 
+    def add_note(
+        self,
+        payload: dict | None = None,
+        current_user: AuthenticatedUser | None = None,
+    ) -> dict[str, object]:
+        """Store one operator note on the active trial timeline."""
+
+        payload = payload or {}
+        note_text = _coerce_text(payload.get("noteText"), "noteText", default="").strip()
+        if not note_text:
+            raise ApiError(
+                code="NOTE_TEXT_REQUIRED",
+                message="Enter a note before saving it to the active trial.",
+                status=400,
+            )
+        if len(note_text) > 500:
+            raise ApiError(
+                code="NOTE_TOO_LONG",
+                message="Trial notes must be 500 characters or fewer.",
+                status=400,
+            )
+
+        try:
+            with self.lock:
+                if self.active_test is None or self.test_finished:
+                    raise ApiError(
+                        code="NOTE_NOT_ALLOWED",
+                        message="Start or resume a trial before adding operator notes.",
+                        status=409,
+                    )
+                if not self.test_running and not self.test_paused:
+                    raise ApiError(
+                        code="NOTE_NOT_ALLOWED",
+                        message="Operator notes can only be added while a trial is running or paused.",
+                        status=409,
+                    )
+
+            note_event = self._log_test_event(
+                "note",
+                "Operator note",
+                detail_text=note_text,
+            )
+            return {
+                "message": "Operator note saved.",
+                "note": note_event,
+                "eventTimeline": self.get_status()["eventTimeline"],
+            }
+        except ApiError:
+            raise
+        except Exception as error:
+            api_error = ApiError(
+                code="NOTE_SAVE_ERROR",
+                message="Unable to save the operator note.",
+                status=500,
+                details={"reason": str(error)},
+            )
+            raise api_error from error
+
+    def save_pump_calibration(
+        self,
+        payload: dict | None = None,
+        current_user: AuthenticatedUser | None = None,
+    ) -> dict[str, object]:
+        """Store a pump calibration measurement from the maintenance page."""
+
+        payload = payload or {}
+        try:
+            with self.lock:
+                if self.test_running:
+                    raise ApiError(
+                        code="CALIBRATION_BLOCKED",
+                        message="Stop the current test before saving a pump calibration.",
+                        status=409,
+                        details={"testRunning": True},
+                    )
+
+            duration_seconds = _coerce_float(payload.get("durationSeconds"), "durationSeconds", default=0)
+            measured_volume_ml = _coerce_float(payload.get("measuredVolumeMl"), "measuredVolumeMl", default=0)
+            note_text = _coerce_text(payload.get("noteText"), "noteText", default="").strip()
+
+            if duration_seconds <= 0:
+                raise ApiError(
+                    code="CALIBRATION_DURATION_INVALID",
+                    message="Pump calibration duration must be greater than zero seconds.",
+                    status=400,
+                )
+            if measured_volume_ml <= 0:
+                raise ApiError(
+                    code="CALIBRATION_VOLUME_INVALID",
+                    message="Measured pump volume must be greater than zero milliliters.",
+                    status=400,
+                )
+
+            conducted_by = (
+                ConductedBySnapshot.from_authenticated_user(current_user)
+                if current_user is not None
+                else None
+            )
+            calibration = self.repository.save_pump_calibration(
+                duration_seconds,
+                measured_volume_ml,
+                note_text=note_text,
+                conducted_by=conducted_by,
+            )
+            return {
+                "message": "Pump calibration saved successfully.",
+                "calibration": calibration,
+            }
+        except ApiError:
+            raise
+        except Exception as error:
+            api_error = ApiError(
+                code="CALIBRATION_SAVE_ERROR",
+                message="Unable to save the pump calibration.",
+                status=500,
+                details={"reason": str(error)},
+            )
+            raise api_error from error
+
+    def get_maintenance_status(self) -> dict[str, object]:
+        """Return maintenance and calibration status for the Test I/O page."""
+
+        latest_calibration = self.repository.get_latest_pump_calibration()
+        with self.lock:
+            return {
+                "gpioMode": os.getenv("GPIO_MODE", "auto"),
+                "oledMode": os.getenv("OLED_MODE", "auto"),
+                "testRunning": self.test_running,
+                "testPaused": self.test_paused,
+                "testFinished": self.test_finished,
+                "programOk": self.hardware.program_ok,
+                "runningIndicatorOn": self.hardware.running_on,
+                "errorIndicatorBlinking": self.hardware.error_blinking,
+                "lightOn": self.hardware.light_on,
+                "latestPumpCalibration": latest_calibration,
+            }
+
     def on_lever_press(self) -> None:
         """Callback entry point for real or simulated lever presses."""
 
@@ -1870,8 +2495,22 @@ class TestSessionManager:
             test_id = active_test.test_id if active_test else None
             status = self._status_locked()
 
+        if test_id is not None:
+            self._log_test_event(
+                "lever_press" if interaction == "Lever" else "nose_poke",
+                "Lever press" if interaction == "Lever" else "Nose poke",
+                elapsed_seconds=counts.get("elapsed_seconds", 0),
+            )
+
         if reward_due:
             self.hardware.deliver_reward(reward_type, self.stop_event)
+            if test_id is not None:
+                self._log_test_event(
+                    "reward_delivered",
+                    "Reward delivered",
+                    detail_text=reward_type,
+                    elapsed_seconds=counts.get("elapsed_seconds", 0),
+                )
         self.repository.update_counts(test_id, counts, status=status)
         self._refresh_status_display()
 
@@ -1961,6 +2600,11 @@ class TestSessionManager:
         with self.lock:
             self.stimulus_active = True
             self.last_stimulus_started_at = time.time()
+        self._log_test_event(
+            "stimulus_on",
+            "Stimulus on",
+            detail_text=_describe_stimulus(active_test.stimulus_type, active_test.light_color),
+        )
         try:
             self.hardware.play_stimulus(
                 active_test.stimulus_type,
@@ -1971,6 +2615,11 @@ class TestSessionManager:
         finally:
             with self.lock:
                 self.stimulus_active = False
+            self._log_test_event(
+                "stimulus_off",
+                "Stimulus off",
+                detail_text=_describe_stimulus(active_test.stimulus_type, active_test.light_color),
+            )
 
     def _halt_worker(self, *, mark_paused: bool) -> None:
         """Stop the background loop, preserve counters, and optionally mark the test paused."""
@@ -1994,6 +2643,12 @@ class TestSessionManager:
         if worker_thread and worker_thread.is_alive() and worker_thread is not threading.current_thread():
             worker_thread.join(timeout=1)
         self.repository.update_counts(test_id, counts, status=status)
+        if mark_paused and test_id is not None and not self.test_finished:
+            self._log_test_event(
+                "paused",
+                "Test paused",
+                elapsed_seconds=counts.get("elapsed_seconds", 0),
+            )
         self._refresh_status_display()
 
     def _finish_test(self) -> None:
@@ -2019,6 +2674,12 @@ class TestSessionManager:
         self.repository.update_counts(test_id, counts, status="finished")
         with self.lock:
             self.test_finished = True
+        if test_id is not None:
+            self._log_test_event(
+                "finished",
+                "Test finished",
+                elapsed_seconds=counts.get("elapsed_seconds", 0),
+            )
         self._refresh_status_display()
 
         if active_test and active_test.end_chime_enabled:
@@ -2056,6 +2717,7 @@ class TestSessionManager:
         self.last_response_at = 0.0
         self.last_error = None
         self.active_conducted_by: ConductedBySnapshot | None = None
+        self.current_event_timeline: list[dict[str, object]] = []
 
     def _advance_sequence_locked(self, interaction: str, configured_interaction: str) -> bool:
         """Check whether the latest input completes the configured interaction pattern."""
@@ -2247,9 +2909,51 @@ class TestSessionManager:
             pass
         try:
             self.repository.update_counts(test_id, counts, status="error")
+            if test_id is not None:
+                self._log_test_event(
+                    "error",
+                    "Runtime error",
+                    detail_text=error.message,
+                    elapsed_seconds=counts.get("elapsed_seconds", 0),
+                )
         except ApiError:
             pass
         self._refresh_status_display()
+
+    def _log_test_event(
+        self,
+        event_type: str,
+        event_label: str,
+        *,
+        detail_text: str = "",
+        detail_value: float | None = None,
+        elapsed_seconds: float | None = None,
+    ) -> dict[str, object] | None:
+        """Append one event to the current in-memory timeline and SQLite record."""
+
+        with self.lock:
+            if self.active_test is None:
+                return None
+            test_id = self.active_test.test_id
+            resolved_elapsed_seconds = (
+                self._elapsed_seconds_locked()
+                if elapsed_seconds is None
+                else elapsed_seconds
+            )
+
+        event_payload = self.repository.log_test_event(
+            test_id,
+            event_type,
+            event_label,
+            detail_text=detail_text,
+            detail_value=detail_value,
+            elapsed_seconds=resolved_elapsed_seconds,
+        )
+
+        with self.lock:
+            self.current_event_timeline.append(event_payload)
+
+        return event_payload
 
 
 def _interaction_sequence(interaction_type: str) -> tuple[str, ...]:
@@ -2290,6 +2994,17 @@ def _coerce_int(value, field_name: str, *, default: int) -> int:
         raise ConfigurationError(f"{field_name} must be an integer.") from error
 
 
+def _coerce_optional_int(value, field_name: str) -> int | None:
+    """Convert an optional integer field and preserve a blank value as unset."""
+
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as error:
+        raise ConfigurationError(f"{field_name} must be an integer.") from error
+
+
 def _coerce_float(value, field_name: str, *, default: float) -> float:
     """Convert optional numeric request values to floats with a fallback default."""
 
@@ -2322,6 +3037,18 @@ def _normalize_stimulus_type(value, field_name: str, *, default: str) -> str:
     if normalized == "light":
         return "Light"
     raise ConfigurationError(f"{field_name} must be Light, Tone, or Light + Tone.")
+
+
+def _normalize_subject_identifier(value) -> int | None:
+    """Treat blank or legacy zero subject values as an intentionally untracked subject."""
+
+    if value in (None, "", 0, "0"):
+        return None
+    try:
+        normalized_value = int(value)
+    except (TypeError, ValueError):
+        return None
+    return normalized_value if normalized_value > 0 else None
 
 
 def _normalize_light_color_for_stimulus(
@@ -2692,6 +3419,14 @@ def get_results():
     return jsonify(repository.list_results()), 200
 
 
+@app.route("/api/maintenance/status", methods=["GET"])
+@require_authenticated_user()
+def get_maintenance_status():
+    """Return backend mode and calibration information for the Test I/O page."""
+
+    return jsonify(session_manager.get_maintenance_status()), 200
+
+
 @app.route("/api/results/<result_id>", methods=["DELETE"])
 @require_authenticated_user(admin_only=True)
 def delete_result(result_id: str):
@@ -2703,6 +3438,35 @@ def delete_result(result_id: str):
             {
                 "message": "Saved trial deleted successfully.",
                 "resultId": result_id,
+            }
+        ),
+        200,
+    )
+
+
+@app.route("/api/results/delete-batch", methods=["POST"])
+@require_authenticated_user(admin_only=True)
+def delete_results_batch():
+    """Delete multiple saved trial records in one request for admin cleanup workflows."""
+
+    payload = request.get_json(silent=True) or {}
+    result_ids = payload.get("resultIds")
+    if not isinstance(result_ids, list):
+        raise ApiError(
+            code="RESULT_IDS_REQUIRED",
+            message="A list of saved trial IDs is required for bulk deletion.",
+            status=400,
+        )
+
+    result = repository.delete_results(result_ids)
+    return (
+        jsonify(
+            {
+                "message": (
+                    f"Deleted {result['deletedCount']} saved trial"
+                    f"{'' if result['deletedCount'] == 1 else 's'}."
+                ),
+                **result,
             }
         ),
         200,
@@ -2762,6 +3526,18 @@ def test_buzzer():
     return jsonify(result), 200
 
 
+@app.route("/api/maintenance/pump-calibration", methods=["POST"])
+@require_authenticated_user()
+def save_pump_calibration():
+    """Save a measured pump calibration value from the maintenance page."""
+
+    result = session_manager.save_pump_calibration(
+        request.get_json(silent=True) or {},
+        current_user=g.current_user,
+    )
+    return jsonify(result), 200
+
+
 @app.route("/api/test/information", methods=["POST"])
 @require_authenticated_user()
 def get_information():
@@ -2806,6 +3582,18 @@ def finish_test():
 
     session_manager.finish_test()
     return jsonify({"message": "Test finished successfully!"}), 200
+
+
+@app.route("/api/test/note", methods=["POST"])
+@require_authenticated_user()
+def add_test_note():
+    """Attach an operator note to the active trial timeline."""
+
+    result = session_manager.add_note(
+        request.get_json(silent=True) or {},
+        current_user=g.current_user,
+    )
+    return jsonify(result), 200
 
 
 @app.route("/api/test/status", methods=["GET"])
