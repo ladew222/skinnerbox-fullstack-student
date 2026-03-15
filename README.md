@@ -202,6 +202,100 @@ For beginners, it helps to think of the tests as small stories. Each one sets up
 
 - `renders the home page and primary navigation`: proves that the React app can render the home route and that key entry-point links like login and register are visible. It is a quick "does the app boot at all?" check rather than a full browser workflow test.
 
+### How to run a test when you want to check one specific thing
+
+If you are a beginner, the easiest way to think about this is:
+
+- run the whole regression suite when you changed a lot
+- run one backend test file when you changed one backend area
+- run one exact test method when you want to check one specific behavior
+
+To run all backend tests:
+
+```bash
+cd backend
+source .venv/bin/activate
+PYTHONPYCACHEPREFIX=/tmp GPIO_MODE=mock OLED_MODE=mock .venv/bin/python -m unittest discover -s tests -v
+```
+
+To run one backend test file:
+
+```bash
+cd backend
+source .venv/bin/activate
+PYTHONPYCACHEPREFIX=/tmp GPIO_MODE=mock OLED_MODE=mock .venv/bin/python -m unittest tests.test_auth_integration -v
+```
+
+To run one exact backend test method:
+
+```bash
+cd backend
+source .venv/bin/activate
+PYTHONPYCACHEPREFIX=/tmp GPIO_MODE=mock OLED_MODE=mock .venv/bin/python -m unittest tests.test_sbbackend_integration.SkinnerBoxApiIntegrationTest.test_simulated_lever_presses_are_reported_by_counts_endpoint -v
+```
+
+To run the frontend smoke test:
+
+```bash
+cd frontend
+CI=true npm test -- --watch=false
+```
+
+To run the full project regression checks from the repository root:
+
+```bash
+python3 scripts/run_regression_suite.py
+```
+
+Here is the beginner-friendly shortcut for choosing which test to run:
+
+- if you changed login, approval, logout, or admin access rules: run `tests.test_auth_integration`
+- if you changed mock-vs-real GPIO selection: run `tests.test_gpio_adapter`
+- if you changed `run_pump.py` or `gpiotest.py`: run `tests.test_gpio_scripts`
+- if you changed test start/stop flow, timers, counts, presets, pump priming, OLED updates, results, or hardware behavior in the main backend: run `tests.test_sbbackend_integration`
+- if you changed app startup, routing, or whether the main UI renders: run the frontend smoke test in `App.test.js`
+
+Examples:
+
+- "I changed auth and want to confirm pending users still cannot log in":
+
+```bash
+cd backend
+source .venv/bin/activate
+PYTHONPYCACHEPREFIX=/tmp GPIO_MODE=mock OLED_MODE=mock .venv/bin/python -m unittest tests.test_auth_integration.AuthenticationIntegrationTest.test_registered_user_must_be_approved_before_login -v
+```
+
+- "I changed lever-count behavior and want to confirm simulated presses still work":
+
+```bash
+cd backend
+source .venv/bin/activate
+PYTHONPYCACHEPREFIX=/tmp GPIO_MODE=mock OLED_MODE=mock .venv/bin/python -m unittest tests.test_sbbackend_integration.SkinnerBoxApiIntegrationTest.test_simulated_lever_presses_are_reported_by_counts_endpoint -v
+```
+
+- "I changed OLED status lines and want to confirm the running screen still updates":
+
+```bash
+cd backend
+source .venv/bin/activate
+PYTHONPYCACHEPREFIX=/tmp GPIO_MODE=mock OLED_MODE=mock .venv/bin/python -m unittest tests.test_sbbackend_integration.SkinnerBoxApiIntegrationTest.test_oled_shows_remaining_time_and_lever_count_while_running -v
+```
+
+- "I changed the React app shell and want to make sure it still boots":
+
+```bash
+cd frontend
+CI=true npm test -- --watch=false
+```
+
+How to read the output:
+
+- `ok` means that test passed
+- `FAIL` means the test ran but one of its checks did not match the expected result
+- `ERROR` means the test crashed before it could finish, often because of an exception or missing setup
+
+When you are not sure which test matters most, run the full regression runner. It is slower, but it is the safest choice.
+
 ## GPIO Modes
 
 The backend uses [gpio_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/gpio_adapter.py).
