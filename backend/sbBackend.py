@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 import re
 import sqlite3
+import socket
 import threading
 import time
 
@@ -853,6 +854,7 @@ class SkinnerHardware:
     STIMULUS_TONE_FREQUENCY_HZ = 523.25
     END_CHIME_GAP_SECONDS = 0.05
     ERROR_BLINK_INTERVAL_SECONDS = 0.25
+    STARTUP_IP_DISPLAY_SECONDS = 10
 
     def __init__(self) -> None:
         # Input devices used to detect user interactions inside the box.
@@ -879,13 +881,29 @@ class SkinnerHardware:
         self.program_ok = False
         self.error_blinking = False
         self.last_chime_pattern: tuple[tuple[float, float], ...] = ()
+        self.startup_ip_address = self._detect_local_ip_address()
+        self.startup_banner_deadline = (
+            time.monotonic() + self.STARTUP_IP_DISPLAY_SECONDS
+        )
+        self._status_refresh_callback = None
 
         self._error_blink_stop = threading.Event()
         self._error_blink_thread: threading.Thread | None = None
+        self._startup_refresh_timer = threading.Timer(
+            self.STARTUP_IP_DISPLAY_SECONDS,
+            self._refresh_after_startup_banner,
+        )
+        self._startup_refresh_timer.daemon = True
+        self._startup_refresh_timer.start()
 
         self.set_running_indicator(False)
         self.clear_error_state()
         self.show_waiting_status()
+
+    def register_status_refresh(self, refresh_callback) -> None:
+        """Let the session manager re-render OLED state when the startup banner expires."""
+
+        self._status_refresh_callback = refresh_callback
 
     def register_callbacks(self, on_lever_press, on_nose_poke) -> None:
         """Attach backend callbacks to the physical or mocked button inputs."""
@@ -1163,6 +1181,23 @@ class SkinnerHardware:
     ) -> None:
         """Show a simple ready/paused/finished status on the OLED displays."""
 
+        if (
+            not paused
+            and not finished
+            and not test_name
+            and self._startup_banner_active()
+        ):
+            self._render_status_lines(
+                [
+                    "SkinnerBox",
+                    "READY",
+                    "IP Address",
+                    self.startup_ip_address or "Not available",
+                    "Press Start",
+                ]
+            )
+            return
+
         header = "PAUSED" if paused else "FINISHED" if finished else "READY"
         lines = ["SkinnerBox", header]
         if test_name:
@@ -1256,6 +1291,39 @@ class SkinnerHardware:
             pass
         self.error_blinking = False
 
+    def _refresh_after_startup_banner(self) -> None:
+        """Swap the initial IP-address banner out for the normal status view."""
+
+        refresh_callback = self._status_refresh_callback
+        if refresh_callback is not None:
+            refresh_callback()
+            return
+        self.show_waiting_status()
+
+    def _startup_banner_active(self) -> bool:
+        return time.monotonic() < self.startup_banner_deadline
+
+    @staticmethod
+    def _detect_local_ip_address() -> str:
+        """Best-effort lookup for the primary LAN IP shown during backend startup."""
+
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe_socket:
+                probe_socket.connect(("8.8.8.8", 80))
+                detected_ip = probe_socket.getsockname()[0]
+        except OSError:
+            detected_ip = ""
+
+        if detected_ip and not detected_ip.startswith("127."):
+            return detected_ip
+
+        try:
+            host_ip = socket.gethostbyname(socket.gethostname())
+        except OSError:
+            return ""
+
+        return "" if host_ip.startswith("127.") else host_ip
+
     @staticmethod
     def _sleep(duration_seconds: float, stop_event: threading.Event) -> None:
         """Sleep in short intervals so stop requests can interrupt long actions."""
@@ -1304,6 +1372,7 @@ class TestSessionManager:
         self.latencies: list[float] = []
         self._reset_runtime_state()
         self.hardware.register_callbacks(self.on_lever_press, self.on_nose_poke)
+        self.hardware.register_status_refresh(self._refresh_status_display)
         self._refresh_status_display()
 
     def configure_test(self, payload: dict) -> TestConfiguration:

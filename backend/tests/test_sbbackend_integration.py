@@ -22,6 +22,8 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.original_repository = sbBackend.repository
         self.original_session_repository = sbBackend.session_manager.repository
         self.original_auth_repository = sbBackend.auth_repository
+        self.original_startup_ip_address = sbBackend.hardware.startup_ip_address
+        self.original_startup_banner_deadline = sbBackend.hardware.startup_banner_deadline
 
         temp_repository = sbBackend.SQLiteTestRepository(
             Path(self.temp_dir.name) / "testdatabase.db"
@@ -35,6 +37,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         sbBackend.hardware.stop_all()
         sbBackend.hardware.clear_error_state()
         sbBackend.hardware.last_chime_pattern = ()
+        sbBackend.hardware.startup_banner_deadline = time.monotonic() - 1
         sbBackend.hardware.status_display.clear()
 
         with sbBackend.session_manager.lock:
@@ -78,6 +81,8 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         sbBackend.repository = self.original_repository
         sbBackend.session_manager.repository = self.original_session_repository
         sbBackend.auth_repository = self.original_auth_repository
+        sbBackend.hardware.startup_ip_address = self.original_startup_ip_address
+        sbBackend.hardware.startup_banner_deadline = self.original_startup_banner_deadline
         self.temp_dir.cleanup()
 
     def test_simulated_lever_presses_are_reported_by_counts_endpoint(self):
@@ -214,6 +219,22 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertEqual(
             sbBackend.hardware.status_display.last_lines,
             ("SkinnerBox", "READY", "OLED Waiting Trial", "Subj 12", "Press Start"),
+        )
+
+    def test_oled_shows_ip_address_during_startup_window(self):
+        sbBackend.hardware.startup_ip_address = "192.168.1.158"
+        sbBackend.hardware.startup_banner_deadline = (
+            time.monotonic() + sbBackend.hardware.STARTUP_IP_DISPLAY_SECONDS
+        )
+
+        with sbBackend.session_manager.lock:
+            sbBackend.session_manager.active_test = None
+            sbBackend.session_manager._reset_runtime_state()
+            sbBackend.session_manager._refresh_status_display_locked()
+
+        self.assertEqual(
+            sbBackend.hardware.status_display.last_lines,
+            ("SkinnerBox", "READY", "IP Address", "192.168.1.158", "Press Start"),
         )
 
     def test_oled_shows_remaining_time_and_lever_count_while_running(self):
