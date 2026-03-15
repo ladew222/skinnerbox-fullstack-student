@@ -1,23 +1,22 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import "./TestManager.css";
-import { runTest, stopTest, getCounts, setBlueLight, setOrangeLight, setRGBLight, getTestInformation, getTestStatus } from "../../utilities/api";
-import { FormControl, InputLabel, Input} from '@mui/material';
+import { runTest, stopTest, finishTest, getCounts, setRGBLight, primePump, getTestInformation, getTestStatus } from "../../utilities/api";
+import { DEFAULT_END_CHIME_PATTERN, PRESET_STORAGE_EVENT, loadUserPresets, upsertUserPreset } from "../../utilities/presets";
+import { buildStimulusSummary, buildTraditionalCsv, formatSecondsForDisplay } from "../../utilities/resultsCsv";
+import { Alert, FormControl, Input, InputLabel, Snackbar } from '@mui/material';
 import { validationFunctions } from "../../validation/test_manager";
 import ButtonGroup from '@mui/material/ButtonGroup';
-// CHANGE HISTORY: Originally added getAllPresets API import for backend preset loading
-// UPDATED: Removed getAllPresets import - now using localStorage directly instead of backend API
-// Reason: Backend preset endpoints (/preset/save, /preset/all) are not yet implemented in sbBackend.py
-// Using browser's localStorage as temporary solution until backend is ready
 
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormHelperText from '@mui/material/FormHelperText';
 import Button from '@mui/material/Button';
-import { PresentToAll } from "@mui/icons-material";
 
 
 const TestManager = () => {
   const [presetValue, setPresetValue] = useState("");
+  const [presetName, setPresetName] = useState("");
+  const [presetDescription, setPresetDescription] = useState("");
   const [subjectID, setSubjectID] = useState(""); 
   const [testName, setTestName] = useState("");
   const [trialDuration, setTrialDuration] = useState("");
@@ -30,13 +29,15 @@ const TestManager = () => {
   const [interactionType, setInteractionType] = useState("Lever");
   const [stimulusType, setStimulusType] = useState("Light");
   const [lightColor, setLightColor] = useState("Red");
+  const [endChimeEnabled, setEndChimeEnabled] = useState(false);
+  const [endChimePattern, setEndChimePattern] = useState(DEFAULT_END_CHIME_PATTERN);
   const [userPresets, setUserPresets] = useState([]);
   const [testRunning, setTestRunning] = useState(false);
   const [testPaused, setTestPaused] = useState(false);
   const [testFinished, setTestFinished] = useState(false);
   const [testResults, setTestResults] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(0);
-  const elapsedTimeRef = useRef(0);
+  const [configuredDurationSeconds, setConfiguredDurationSeconds] = useState(0);
   const [leverPressCount, setLeverPressCount] = useState(0);
   const [nosePokeCount, setNosePokeCount] = useState(0);
   const [lightOn, setLightOn] = useState(false);
@@ -44,10 +45,18 @@ const TestManager = () => {
   const [originalSettings, setOriginalSettings] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
 
-  const [lastRewardTime, setLastRewardTime] = useState(0);
   const [rewardCount, setRewardCount] = useState(0);
+  const [pumpPrimeSeconds, setPumpPrimeSeconds] = useState("1");
+  const [pumpPrimeBusy, setPumpPrimeBusy] = useState(false);
+  const [pumpPrimeMessage, setPumpPrimeMessage] = useState("");
+  const [presetSaveMessage, setPresetSaveMessage] = useState("");
 
   const [message, setMessage] = useState("");
+  const [uiError, setUiError] = useState({
+    open: false,
+    code: "",
+    message: "",
+  });
 
 
   const [testNameError, setTestNameError] = useState('');
@@ -58,39 +67,119 @@ const TestManager = () => {
   const [StimTimeOnError, setStimTimeOnError] = useState('');
   const [coolDownError, setCoolDownError] = useState('');
   const [subjectIDError, setSubjectIDError] = useState('');
-  const lastRewardedCount = useRef(-1);
+
+  const selectedPreset = userPresets.find((preset) => preset.id === presetValue) || null;
+
+  const showUiError = (error, fallbackMessage = "An unexpected error occurred.") => {
+    setUiError({
+      open: true,
+      code: error?.code || "UNEXPECTED_FRONTEND_ERROR",
+      message: error?.message || fallbackMessage,
+    });
+  };
+
+  const closeUiError = (_, reason) => {
+    if (reason === "clickaway") {
+      return;
+    }
+    setUiError((currentError) => ({ ...currentError, open: false }));
+  };
+
+  const applyCountsToUi = (counts) => {
+    if (!counts) {
+      return;
+    }
+
+    setTestResults(counts);
+    setLeverPressCount(Number(counts.lever_press_count || 0));
+    setNosePokeCount(Number(counts.nose_poke_count || 0));
+    setLightOn(Boolean(counts.light_on));
+    setElapsedTime(Number(counts.elapsed_seconds || 0));
+    setConfiguredDurationSeconds(Number(counts.configured_duration_seconds || 0));
+    setRewardCount(Number(counts.reward_count || 0));
+  };
+
+  const effectiveLightColor = stimulusType === "Light" ? lightColor : "N/A";
+  const stimulusSummary = buildStimulusSummary(stimulusType, effectiveLightColor);
+  const chimeSummary = endChimeEnabled ? endChimePattern : "Disabled";
+  const remainingTimeSeconds = configuredDurationSeconds > 0
+    ? Math.max(configuredDurationSeconds - elapsedTime, 0)
+    : 0;
+  const appliedPresetName = selectedPreset?.name || "None";
+
+  const refreshPresets = async (showError = false) => {
+    try {
+      setUserPresets(await loadUserPresets());
+    } catch (error) {
+      if (showError) {
+        showUiError(error, "Unable to load saved presets.");
+      }
+    }
+  };
 
 
   useEffect(() => {
-    setOriginalSettings({ testName, trialDuration, goalForTrial, goalForTest, RewaStimTime, StimTimeOn, cooldown, rewardType, interactionType, stimulusType, lightColor });
-  
-    try {
-        // Get presets from localStorage (defaults to empty array if not found)
-        const savedPresets = JSON.parse(localStorage.getItem('userPresets') || '[]');
-        // Update state with fetched presets - these will appear in preset dropdown
-        setUserPresets(savedPresets);
-        console.log('Loaded presets:', savedPresets); // CHANGE: Added debug log to verify preset loading
-    } catch (error) {
-        // Log error but don't block component rendering if preset loading fails
-        console.error("Error loading presets:", error);
-        setUserPresets([]); // Set to empty array on error to prevent crashes
-    }
+    setOriginalSettings({
+      testName,
+      trialDuration,
+      goalForTrial,
+      goalForTest,
+      RewaStimTime,
+      StimTimeOn,
+      cooldown,
+      rewardType,
+      interactionType,
+      stimulusType,
+      lightColor,
+      endChimeEnabled,
+      endChimePattern,
+    });
+
+    refreshPresets();
+
+    const handlePresetStorageUpdate = () => {
+      refreshPresets();
+    };
+
+    window.addEventListener(PRESET_STORAGE_EVENT, handlePresetStorageUpdate);
+    window.addEventListener('storage', handlePresetStorageUpdate);
+
+    return () => {
+      window.removeEventListener(PRESET_STORAGE_EVENT, handlePresetStorageUpdate);
+      window.removeEventListener('storage', handlePresetStorageUpdate);
+    };
   }, []); // Empty dependency array = run once on component mount
 
   const hasChanged = () => {
-    return JSON.stringify(originalSettings) !== JSON.stringify({ testName, trialDuration, goalForTrial, goalForTest, RewaStimTime, StimTimeOn, cooldown, rewardType, interactionType, stimulusType, lightColor });
+    return JSON.stringify(originalSettings) !== JSON.stringify({
+      testName,
+      trialDuration,
+      goalForTrial,
+      goalForTest,
+      RewaStimTime,
+      StimTimeOn,
+      cooldown,
+      rewardType,
+      interactionType,
+      stimulusType,
+      lightColor,
+      endChimeEnabled,
+      endChimePattern,
+    });
   };
 
 
   const handleSaveTest = () => {
     if (!testName || !trialDuration || !goalForTrial || !cooldown || !goalForTest || !RewaStimTime || !StimTimeOn) {
-      alert("Please fill in all required fields.");
+      showUiError(
+        { code: "VALIDATION_ERROR", message: "Please fill in all required fields before saving the test." },
+      );
       return;
     }
 
     // const testSettings = `Test Name: ${testName}\nTrial Duration: ${trialDuration} seconds\nGoal: ${goalForTrial}\nCooldown: ${cooldown} seconds\nReward Type: ${rewardType}\nInteraction Type: ${interactionType}\nStimulus Type: ${stimulusType}\nLight Color: ${lightColor}`;
     
-    const testSettings = `Preset: ${presetValue}
+    const testSettings = `Preset: ${appliedPresetName}
     Test Name: ${testName}
     Subject Identification: ${subjectID}
     Trial Duration: ${trialDuration} minutes
@@ -102,7 +191,7 @@ const TestManager = () => {
     Reward Type: ${rewardType}
     Interaction Type: ${interactionType}
     Stimulus Type: ${stimulusType}
-    Light Color: ${lightColor}`;
+    Light Color: ${effectiveLightColor}`;
 
     const blob = new Blob([testSettings], { type: "text/plain" });
     const a = document.createElement("a");
@@ -130,7 +219,9 @@ const TestManager = () => {
     reader.onload = (e) => {
       const fileText = e.target.result;
       if (!validateFileFormat(fileText)) {
-        alert("Invalid file format. Please upload a properly formatted test settings file.");
+        showUiError(
+          { code: "INVALID_FILE_FORMAT", message: "Please upload a properly formatted test settings file." },
+        );
         event.target.value = "";
         return;
       }
@@ -183,55 +274,32 @@ const TestManager = () => {
           const data = await getCounts();
           setLeverPressCount(data.lever_press_count);
           setNosePokeCount(data.nose_poke_count);
+          setLightOn(Boolean(data.light_on));
+          setElapsedTime(Number(data.elapsed_seconds || 0));
+          setConfiguredDurationSeconds(Number(data.configured_duration_seconds || 0));
 
           // ADDED: Poll the backend to check if the test was stopped because the goal was reached
           const status = await getTestStatus();
+          if (status.error) {
+            setTestRunning(false);
+            setTestPaused(false);
+            showUiError(status.error, "The backend reported a test runtime error.");
+            return;
+          }
           if (status.testFinished) {
-            handleStopTest(true); // Auto-stop the frontend UI
+            applyCountsToUi(data);
+            setTestRunning(false);
+            setTestPaused(false);
+            setTestFinished(true);
             return;
           }
 
-          const count = interactionType === "Lever" ? data.lever_press_count : data.nose_poke_count;
-          const goal = parseInt(goalForTrial);
-          {/*
-          if (goal > 0 && count > 0 && count % goal === 0) {
-            const now = Date.now();
-            if (now - lastRewardTime >= parseInt(cooldown) * 1000) {
-              rewardType === "Water" ? setBlueLight(true) : setOrangeLight(true);
-              setTimeout(() => {
-                rewardType === "Water" ? setBlueLight(false) : setOrangeLight(false);
-              }, 1000);
-              setLastRewardTime(now);
-              setRewardCount(prev => prev + 1);
-            }
-          }
-          */}
           setRewardCount(data.reward_count);
-
-
-          // TODO: TASK, understand logic that is dealing with the timer
-          // Track elapsed time using ref to avoid stale closure issues
-          elapsedTimeRef.current += 1;
-          setElapsedTime(elapsedTimeRef.current);
-
-          // Check if the trial duration has been met (trialDuration is in minutes)
-          const durationInSeconds = parseInt(trialDuration) * 60;
-          if (elapsedTimeRef.current >= durationInSeconds) {
-            handleStopTest(true);
-            return;
-          }
-
-          // Update backend with current counts every 5 seconds
-          if (elapsedTimeRef.current > 0 && elapsedTimeRef.current % 5 === 0) {
-            const currentSettings = {
-              nosePoke: data.nose_poke_count,
-              leverPress: data.lever_press_count
-            };
-            // updateTestInformation(currentSettings).catch(e => console.error("Error sending 5s update:", e));
-          }
 
         } catch (error) {
           console.error("Error fetching test counts:", error);
+          setTestRunning(false);
+          showUiError(error, "Unable to fetch the current test state.");
         }
       }, 1000);
     }
@@ -240,9 +308,7 @@ const TestManager = () => {
   
   const handleResumeTest = async () => {
     try {
-        setTestPaused(false);
-        setTestRunning(true);
-        // Just restart the polling, don't reset anything
+        // Just restart the polling, don't reset anything.
         await runTest({
             testName,
             subjectID,
@@ -255,39 +321,46 @@ const TestManager = () => {
             rewardType,
             interactionType,
             stimulusType,
-            lightColor,
+            lightColor: effectiveLightColor,
+            endChimeEnabled,
+            endChimePattern,
             leverPress: leverPressCount,
             nosePoke: nosePokeCount
         });
+        setTestPaused(false);
+        setTestRunning(true);
     } catch (error) {
         console.error("Error resuming test:", error);
+        setTestRunning(false);
+        setTestPaused(true);
+        showUiError(error, "Unable to resume the test.");
     }
 };
 
 
   const handleRunTest = async () => {
     if (!testName || !trialDuration) {
-      alert("Please fill in all required fields before starting the test.");
+      showUiError(
+        { code: "VALIDATION_ERROR", message: "Please fill in all required fields before starting the test." },
+      );
       return;
     }
 
     if (testPaused) {
-      setTestPaused(false);
-      setTestRunning(true);
+      await handleResumeTest();
       return;
     }
 
     setTestResults(null);
     setTestFinished(false);
     setTestPaused(false);
-    setTestRunning(true);
     setElapsedTime(0);
-    elapsedTimeRef.current = 0;
-    setLastRewardTime(0);
+    setConfiguredDurationSeconds(Math.max(Number(trialDuration || 0) * 60, 0));
+    setLeverPressCount(0);
+    setNosePokeCount(0);
+    setLightOn(false);
     setRewardCount(0);
 
-    // FIX: Changed leverPressCount -> leverPress and nosePokeCount -> nosePoke
-    // to match the key names the backend expects in data.get("leverPress") and data.get("nosePoke")
     const testSettings = { 
       testName, 
       subjectID,
@@ -300,73 +373,89 @@ const TestManager = () => {
       rewardType, 
       interactionType, 
       stimulusType, 
-      lightColor,
-      leverPress: leverPressCount,
-      nosePoke: nosePokeCount
+      lightColor: effectiveLightColor,
+      endChimeEnabled,
+      endChimePattern,
+      leverPress: 0,
+      nosePoke: 0
     };
 
-    // TODO: Changed runTest to reflect sending the updated information
     try {
-      // Save test information to database FIRST to ensure record exists
+      // Save test information to the backend first so the DB row exists before the run begins.
       console.log("Saving test configuration...");
       await getTestInformation(testSettings);
       
-      // Then start the hardware test
+      // Then start the hardware test and only flip the UI into running mode after success.
       console.log("Starting hardware test...");
       await runTest(testSettings);
+      setTestRunning(true);
     } catch (error) {
       console.error("Error running test sequence:", error);
       setTestRunning(false);
-      alert("Failed to start test. Please check connections or backend logs.");
+      showUiError(error, "Failed to start the test.");
     }
   };
 
-  const handleStopTest = async (autoStop = false) => {
+  const handleStopTest = async () => {
     try {
       await stopTest();
-      setTestRunning(false);
       const finalCounts = await getCounts();
-      setTestResults(finalCounts);
-      setRewardCount(finalCounts.reward_count);  // ADD THIS
-      if (autoStop) {
-        setTestFinished(true);
-      } else {
-        setTestPaused(true);
-      }
+      applyCountsToUi(finalCounts);
+      setTestRunning(false);
+      setTestPaused(true);
+      setTestFinished(false);
     } catch (error) {
       console.error("Error stopping test:", error);
+      showUiError(error, "Unable to stop the test.");
+    }
+  };
+
+  const handleFinishTest = async () => {
+    try {
+      await finishTest();
+      const finalCounts = await getCounts();
+      applyCountsToUi(finalCounts);
+      setTestRunning(false);
+      setTestPaused(false);
+      setTestFinished(true);
+    } catch (error) {
+      console.error("Error finishing test:", error);
+      showUiError(error, "Unable to finish the test.");
     }
   };
 
   const handleDownloadResults = () => {
     if (!testResults) return;
-    const timestamp = new Date().toLocaleString();
-    // ADDED: Included Preset and Subject Identification fields in CSV to match handleSaveTest output
-    const csvLines = [
-      "Test Results",
-      `Timestamp:${timestamp}`,
-      `Preset:${presetValue}`,
-      `Test Name:${testName}`,
-      `Subject Identification:${subjectID}`,
-      `Trial Duration (minutes):${trialDuration}`,
-      `Goal for Trial:${goalForTrial}`,
-      `Goal for Test:${goalForTest}`,
-      `Time between reward and stimulus:${RewaStimTime}`,
-      `How long stimulus is active:${StimTimeOn}`,
-      `Cooldown (seconds):${cooldown}`,
-      `Reward Type:${rewardType}`,
-      `Interaction Type:${interactionType}`,
-      `Stimulus Type:${stimulusType}`,
-      `Light Color:${lightColor}`,
-      "",
-      "Final Trial Data",
-      `Elapsed Time (s):${elapsedTime}`,
-      `Lever Press Count:${testResults.lever_press_count}`,
-      `Nose Poke Count:${testResults.nose_poke_count}`,
-      `Light Status:${testResults.light_on ? "ON" : "OFF"}`,
-      `Rewards Given:${testResults.reward_count}`
-    ];
-    const csvData = csvLines.join("\n");
+    const csvData = buildTraditionalCsv({
+      exportedAt: new Date().toISOString(),
+      testName,
+      subjectId: subjectID,
+      status: testFinished ? "finished" : testPaused ? "paused" : "running",
+      complete: testFinished,
+      preset: appliedPresetName,
+      configuredDurationMinutes: Number(trialDuration || 0),
+      configuredDurationSeconds,
+      elapsedTimeSeconds: elapsedTime,
+      remainingTimeSeconds,
+      goalForTrial: Number(goalForTrial || 0),
+      goalForTest: Number(goalForTest || 0),
+      rewardDelaySeconds: Number(RewaStimTime || 0),
+      stimulusDurationSeconds: Number(StimTimeOn || 0),
+      cooldownSeconds: Number(cooldown || 0),
+      rewardType,
+      interactionType,
+      stimulusType,
+      stimulusDescription: stimulusSummary,
+      lightColor: effectiveLightColor,
+      endChimeEnabled,
+      endChimePattern,
+      leverPressCount: Number(testResults.lever_press_count || 0),
+      nosePokeCount: Number(testResults.nose_poke_count || 0),
+      totalInteractions: Number(testResults.lever_press_count || 0) + Number(testResults.nose_poke_count || 0),
+      rewardCount: Number(testResults.reward_count || 0),
+      createdAt: "",
+      updatedAt: "",
+    });
     const blob = new Blob([csvData], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -377,77 +466,150 @@ const TestManager = () => {
     document.body.removeChild(a);
   };
 
+  const handleSaveCurrentAsPreset = async () => {
+    if (!presetName.trim()) {
+      showUiError(
+        { code: "PRESET_NAME_REQUIRED", message: "Enter a preset name before saving the current settings." },
+      );
+      return;
+    }
+
+    if (!trialDuration || !goalForTrial || !goalForTest) {
+      showUiError(
+        { code: "PRESET_VALUES_REQUIRED", message: "Fill in the core trial values before saving a preset." },
+      );
+      return;
+    }
+
+    try {
+      const shouldReuseSelectedPresetId = Boolean(
+        selectedPreset && selectedPreset.name.trim().toLowerCase() === presetName.trim().toLowerCase()
+      );
+      const resolvedResult = await upsertUserPreset({
+        id: shouldReuseSelectedPresetId ? selectedPreset.id : undefined,
+        name: presetName,
+        description: presetDescription,
+        testName,
+        subjectID,
+        trialDuration,
+        goalForTrial,
+        goalForTest,
+        RewaStimTime,
+        StimTimeOn,
+        cooldown,
+        rewardType,
+        interactionType,
+        stimulusType,
+        lightColor: effectiveLightColor,
+        endChimeEnabled,
+        endChimePattern,
+      });
+
+      setUserPresets(resolvedResult.presets);
+      setPresetValue(resolvedResult.preset.id);
+      setPresetName(resolvedResult.preset.name);
+      setPresetDescription(resolvedResult.preset.description || "");
+      setPresetSaveMessage(
+        resolvedResult.replaced
+          ? `Preset "${resolvedResult.preset.name}" updated.`
+          : `Preset "${resolvedResult.preset.name}" saved.`
+      );
+    } catch (error) {
+      showUiError(
+        { code: "PRESET_SAVE_ERROR", message: error.message || "Unable to save the current preset." },
+      );
+    }
+  };
+
   const handleRGB = async (red, green, blue) => {
     try {
       const result = await setRGBLight(red, green, blue);
       setMessage(`RGB LED set to R:${result.rgb.red} G:${result.rgb.green} B:${result.rgb.blue}`);
     } catch (error) {
       setMessage("Failed to control RGB LED");
+      showUiError(error, "Unable to control the RGB LED.");
     }
   };
 
-// CHANGE: Completely rewrote handlePreset to support user-created presets from localStorage
-// Previous version: Only handled hardcoded Preset 1-4
-// New version: Handles Preset 1, "None", AND dynamically-loaded user presets
+  const handlePrimePump = async () => {
+    const parsedSeconds = Number(pumpPrimeSeconds);
+    if (!Number.isFinite(parsedSeconds) || parsedSeconds <= 0) {
+      showUiError(
+        { code: "INVALID_PUMP_PRIME_DURATION", message: "Enter a pump-prime duration greater than zero seconds." },
+      );
+      return;
+    }
+
+    try {
+      setPumpPrimeBusy(true);
+      setPumpPrimeMessage("");
+      const result = await primePump(parsedSeconds);
+      setPumpPrimeMessage(`Pump primed for ${result.durationSeconds} second${result.durationSeconds === 1 ? "" : "s"}.`);
+    } catch (error) {
+      console.error("Error priming pump:", error);
+      showUiError(error, "Unable to prime the pump.");
+    } finally {
+      setPumpPrimeBusy(false);
+    }
+  };
+
 const handlePreset = (event) => {
     const value = event.target.value;
     
     try {
         setPresetValue(value);
-        
-        // CHANGE: Simplified Preset 1 (removed Preset 2-4 for now)
-        // NOTE: These values look like test data - you may want to restore proper preset values
-        if (value === "Preset 1") {
-            setTestName("Preset 1 Test")        // CHANGE: Set to descriptive string
-            setTrialDuration(1)         // CHANGE: 1 minute duration
-            setGoalForTrial("Test")     // CHANGE: Non-numeric goal value
-            setGoalForTest("Test")
-            setRewaStimTime(1)
-            setStimTimeOn(1)
-            setCooldown(2)              // CHANGE: 2 second cooldown
-            setRewardType("Food")
-            setInteractionType("Lever")
-            setStimulusType("Light")
-            setLightColor("Green")
+
+        if (value === "None") {
+            setPresetName("");
+            setPresetDescription("");
+            setTestName("");
+            setTrialDuration("");
+            setSubjectID("");
+            setGoalForTrial("");
+            setGoalForTest("");
+            setRewaStimTime("");
+            setStimTimeOn("");
+            setCooldown("");
+            setRewardType("Water");
+            setInteractionType("Lever");
+            setStimulusType("Light");
+            setLightColor("Red");
+            setEndChimeEnabled(false);
+            setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
+            setPresetSaveMessage("");
+            return;
         }
-        // CHANGE: Simplified "None" option - now clears ALL fields including testName
-        // Previous version only cleared some fields
-        else if (value === "None") {
-            setTestName("")             // CHANGE: Now clears test name
-            setTrialDuration("")
-            setSubjectID("")
-            setGoalForTrial("")
-            setGoalForTest("")
-            setRewaStimTime("")
-            setStimTimeOn("")
-            setCooldown("")
-            setRewardType("")            // CHANGE: Now clears to empty instead of default "Water"
-            setInteractionType("")       // CHANGE: Now clears to empty instead of default "Lever"
-            setStimulusType("")          // CHANGE: Now clears to empty instead of default "Light"
-            setLightColor("")            // CHANGE: Now clears to empty instead of default "Red"
+
+        const userPreset = userPresets.find((preset) => preset.id === value);
+        if (!userPreset) {
+          return;
         }
-        // CHANGE: NEW - Added else block to handle user-created presets
-        // This enables dynamic preset loading from PresetManager-created configurations
-        else {
-            // Search userPresets array for matching preset name
-            const userPreset = userPresets.find(p => p.name === value);
-            if (userPreset) {
-                // Apply all preset values to form fields
-                setTrialDuration(userPreset.trialDuration);
-                setCooldown(userPreset.cooldown);
-                setRewardType(userPreset.rewardType);
-                setInteractionType(userPreset.interactionType);
-                setStimulusType(userPreset.stimulusType);
-                setLightColor(userPreset.lightColor);
-                setGoalForTrial(userPreset.goalForTrial);
-                setGoalForTest(userPreset.goalForTest);
-                setRewaStimTime(userPreset.RewaStimTime);
-                setStimTimeOn(userPreset.StimTimeOn);
-                // NOTE: testName is NOT set from preset (intentional - user should provide unique name per trial)
-            }
-        }
+
+        setPresetName(userPreset.name);
+        setPresetDescription(userPreset.description || "");
+        setTestName(userPreset.testName || "");
+        setSubjectID(userPreset.subjectID || "");
+        setTrialDuration(userPreset.trialDuration || "");
+        setGoalForTrial(userPreset.goalForTrial || "");
+        setGoalForTest(userPreset.goalForTest || "");
+        setRewaStimTime(userPreset.RewaStimTime || "");
+        setStimTimeOn(userPreset.StimTimeOn || "");
+        setCooldown(userPreset.cooldown || "");
+        setRewardType(userPreset.rewardType || "Water");
+        setInteractionType(userPreset.interactionType || "Lever");
+        setStimulusType(userPreset.stimulusType || "Light");
+        setLightColor(
+          userPreset.stimulusType === "Tone"
+            ? "Red"
+            : (userPreset.lightColor || "Red")
+        );
+        setEndChimeEnabled(Boolean(userPreset.endChimeEnabled));
+        setEndChimePattern(userPreset.endChimePattern || DEFAULT_END_CHIME_PATTERN);
+        setPresetSaveMessage(`Preset "${userPreset.name}" loaded into the test form.`);
     } catch(e) {
-        alert("Error loading preset");
+        showUiError(
+          { code: "PRESET_LOAD_ERROR", message: "Unable to load the selected preset." },
+        );
     }
 };
   // TODO: Add cookies and sessions for the refresh and login
@@ -462,7 +624,7 @@ const handlePreset = (event) => {
               <InputLabel id="lblPresetManager">Preset:</InputLabel>
                 <Select value={presetValue} onChange={handlePreset}>
                   {userPresets.map((preset, index) => (
-                      <MenuItem key={index} value={preset.name}>
+                      <MenuItem key={preset.id || index} value={preset.id}>
                           {preset.name}
                       </MenuItem>
                   ))}
@@ -470,6 +632,35 @@ const handlePreset = (event) => {
                 </Select>
             </FormControl>
           </div>  
+
+          <div className="preset-save-panel">
+            <h3>Save Current Settings As Preset</h3>
+            <p>Save this form as a reusable preset so you can auto-fill it later.</p>
+            <div className="preset-save-grid">
+              <FormControl fullWidth>
+                <InputLabel htmlFor="presetName">Preset Name:</InputLabel>
+                <Input
+                  id="presetName"
+                  placeholder="Enter preset name"
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                />
+              </FormControl>
+              <FormControl fullWidth>
+                <InputLabel htmlFor="presetDescription">Preset Description:</InputLabel>
+                <Input
+                  id="presetDescription"
+                  placeholder="Optional description"
+                  value={presetDescription}
+                  onChange={(e) => setPresetDescription(e.target.value)}
+                />
+              </FormControl>
+            </div>
+            <Button variant="contained" className="save-preset-button" onClick={handleSaveCurrentAsPreset}>
+              Save Current As Preset
+            </Button>
+            {presetSaveMessage && <p className="preset-save-message">{presetSaveMessage}</p>}
+          </div>
 
           <div className="input-group">
             <FormControl  fullWidth error={Boolean(testNameError)}>
@@ -688,21 +879,85 @@ const handlePreset = (event) => {
             </FormControl>
           </div> */}
         
+          {stimulusType === "Light" ? (
+            <div className="input-group">
+              <FormControl fullWidth>
+                <InputLabel id="lightColor">Light Color:</InputLabel>
+                  <Select
+                    id="selectLightColor"
+                    value={lightColor}
+                    onChange = {(e) => setLightColor(e.target.value)}
+                  >
+                    <MenuItem value={"Red"}>Red</MenuItem>
+                    <MenuItem value={"Green"}>Green</MenuItem>
+                    <MenuItem value={"Blue"}>Blue</MenuItem>
+                    <MenuItem value={"Yellow"}>Yellow</MenuItem>
+                  </Select>
+              </FormControl>
+            </div>
+          ) : (
+            <div className="stimulus-note">
+              Tone stimulus selected. Light color does not apply to this test.
+            </div>
+          )}
+
+          <div className="pump-prime-panel">
+            <h3>Prime Water Line</h3>
+            <p>Run the water pump before a test so the line is full.</p>
+            <div className="pump-prime-controls">
+              <FormControl fullWidth>
+                <InputLabel htmlFor="pumpPrimeSeconds">Prime Duration (s):</InputLabel>
+                <Input
+                  id="pumpPrimeSeconds"
+                  placeholder="Enter seconds"
+                  value={pumpPrimeSeconds}
+                  onChange={(e) => setPumpPrimeSeconds(e.target.value)}
+                  inputProps={{ inputMode: "decimal", min: "0", step: "0.1" }}
+                />
+              </FormControl>
+              <Button
+                className="prime-button"
+                variant="contained"
+                onClick={handlePrimePump}
+                disabled={pumpPrimeBusy}
+              >
+                {pumpPrimeBusy ? "Priming..." : "Prime Pump"}
+              </Button>
+            </div>
+            {pumpPrimeMessage && <p className="pump-prime-message">{pumpPrimeMessage}</p>}
+          </div>
+
           <div className="input-group">
             <FormControl fullWidth>
-              <InputLabel id="lightColor">Light Color:</InputLabel>
-                <Select
-                  id="selectLightColor"
-                  value={lightColor}
-                  onChange = {(e) => setLightColor(e.target.value)}
-                >
-                  <MenuItem value={"Red"}>Red</MenuItem>
-                  <MenuItem value={"Green"}>Green</MenuItem>
-                  <MenuItem value={"Blue"}>Blue</MenuItem>
-                  <MenuItem value={"Yellow"}>Yellow</MenuItem>
-                </Select>
+              <InputLabel id="endChimeEnabled">End-of-Test Chime:</InputLabel>
+              <Select
+                id="selectEndChimeEnabled"
+                value={endChimeEnabled ? "enabled" : "disabled"}
+                onChange={(e) => setEndChimeEnabled(e.target.value === "enabled")}
+              >
+                <MenuItem value={"disabled"}>Disabled</MenuItem>
+                <MenuItem value={"enabled"}>Enabled</MenuItem>
+              </Select>
             </FormControl>
-          </div>  
+          </div>
+
+          {endChimeEnabled ? (
+            <div className="input-group">
+              <FormControl fullWidth>
+                <InputLabel htmlFor="endChimePattern">End Chime Pattern:</InputLabel>
+                <Input
+                  id="txtEndChimePattern"
+                  placeholder="523:0.12,659:0.12,784:0.24"
+                  value={endChimePattern}
+                  onChange={(e) => setEndChimePattern(e.target.value)}
+                />
+              </FormControl>
+            </div>
+          ) : (
+            <div className="stimulus-note">
+              Enable this option if you want the passive buzzer on GPIO 27 to play a short custom chime when the test finishes.
+            </div>
+          )}
           
           <div className="input-group">
             <ButtonGroup variant="contained"  className="input-group" aria-label="Basic button group">
@@ -723,9 +978,14 @@ const handlePreset = (event) => {
           <div className="test-screen">
             {/* Dynamic title based on test completion state */}
             <h1>{testFinished ? "Test Completed" : "Test in Progress"}</h1>
-            <p>Elapsed Time: {elapsedTime}s</p>
+            <p>Time Remaining: {formatSecondsForDisplay(remainingTimeSeconds)}</p>
+            <p>Elapsed Time: {formatSecondsForDisplay(elapsedTime)}</p>
+            <p>Configured Duration: {formatSecondsForDisplay(configuredDurationSeconds)}</p>
             <p>Lever Presses: {leverPressCount}</p>
             <p>Nose Pokes: {nosePokeCount}</p>
+            <p>Rewards Given: {rewardCount}</p>
+            <p>Stimulus: {stimulusSummary}</p>
+            <p>End Chime: {chimeSummary}</p>
             <p>Light Status: {lightOn ? "ON" : "OFF"}</p>
 
             <div className="button-group">
@@ -738,12 +998,12 @@ const handlePreset = (event) => {
               {message && <p>{message}</p>}
 
 
-              {testRunning && <button className="stop-button" onClick={() => handleStopTest(false)}>Stop Test</button>}
+              {testRunning && <button className="stop-button" onClick={handleStopTest}>Stop Test</button>}
               {testPaused && (
                 <>
                   {/*<button className="resume-button" onClick={handleRunTest}>Resume</button>  */}
                   <button className="resume-button" onClick={handleResumeTest}>Resume</button>
-                  <button className="finish-button" onClick={() => { setTestPaused(false); setTestFinished(true); }}>Finish Test</button>
+                  <button className="finish-button" onClick={handleFinishTest}>Finish Test</button>
                   <button className="return-button" onClick={() => { setTestPaused(false); setTestResults(null); }}>Return to Test Setup</button>
                 </>
               )}
@@ -757,6 +1017,16 @@ const handlePreset = (event) => {
             </div>
           </div>
       )}
+      <Snackbar
+        open={uiError.open}
+        autoHideDuration={7000}
+        onClose={closeUiError}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert onClose={closeUiError} severity="error" variant="filled" sx={{ width: '100%' }}>
+          <strong>{uiError.code}</strong>: {uiError.message}
+        </Alert>
+      </Snackbar>
     </div>
   );
 }

@@ -1,16 +1,26 @@
-from gpiozero import LED
 from time import sleep
+
+from gpio_adapter import LED, GPIO_MODE
+
 
 PUMP_GPIO = 17
 
-# active_high=False because your relay is inverted
-pump = LED(PUMP_GPIO, active_high=False)
 
-print("Pump ON")
-pump.on()
-sleep(5)
+def main():
+    """Run a simple pump test using real GPIO on Pi and mock GPIO elsewhere."""
 
-print("Pump OFF")
-pump.off()
+    # active_high=False because the relay in this setup is inverted.
+    pump = LED(PUMP_GPIO, active_high=False)
 
-print("Done")
+    print(f"Pump test starting in GPIO mode: {GPIO_MODE}")
+    print("Pump ON")
+    pump.on()
+    sleep(5)
+
+    print("Pump OFF")
+    pump.off()
+    print("Done")
+
+
+if __name__ == "__main__":
+    main()

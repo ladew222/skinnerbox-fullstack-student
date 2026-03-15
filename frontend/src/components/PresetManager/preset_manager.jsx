@@ -1,264 +1,457 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
-import FormHelperText from '@mui/material/FormHelperText';
 import Button from '@mui/material/Button';
-import { FormControl, InputLabel, Input} from '@mui/material';
-// CHANGE: Added savePreset API import (currently unused - using localStorage instead)
-// Reason: Backend preset endpoints (/preset/save) not yet implemented in sbBackend.py
-// This import is kept for future migration to backend storage when endpoints are ready
-import { savePreset } from '../../utilities/api';
+import { Alert, FormControl, Input, InputLabel, Stack } from '@mui/material';
+import './main.css';
+import '../TestManager/TestManager.css';
 
-/**
- * PresetManager Component
- * CHANGE: Completely rewrote to save presets to localStorage instead of backend API
- * 
- * PURPOSE:
- * Allows users to create and save custom trial configurations (presets) that can be
- * quickly loaded in TestManager component's preset dropdown.
- * 
- * FUNCTIONALITY:
- * - Collects all trial parameters (duration, goal, cooldown, reward type, etc.)
- * - Validates required fields before saving
- * - Stores presets in browser's localStorage as JSON array
- * - Provides success feedback and clears form after save
- * 
- * DATA FLOW:
- * PresetManager (save to localStorage) → TestManager (load from localStorage) → Dropdown display
- * 
- * @param {Function} onCreatePreset - Optional callback to parent component when preset is created
- */
-const PresetManager = ({ onCreatePreset }) => {
-    const [presetName, setPresetName] = useState('');
-    const [presetDescription, setPresetDescription] = useState('');
-    const [prestTrialDuration, setPresetTrialDuration] = useState('');
-    const [presetTrialGoal, setPresetTrialGoal] = useState('');
-    const [presetTrialCooldown, setPresetTrialCooldown] = useState('');
-    const [presetRewardType, setPresetRewardType] = useState('');
-    const [presetInteractionType, setPresetInteractionType] = useState('');
-    const [presetStimulasType, setPresetStimulasType] = useState('');
-    const [presetLightColor, setPresetLightColor] = useState('');
-    const [error, setError] = useState('');
+import {
+  DEFAULT_END_CHIME_PATTERN,
+  PRESET_STORAGE_EVENT,
+  deleteUserPreset,
+  loadUserPresets,
+  upsertUserPreset,
+} from '../../utilities/presets';
 
-    /**
-     * CHANGE: Completely rewrote handlePresetSave function to use localStorage
-     * Previous version: Called backend API via savePreset() - always failed (endpoints not implemented)
-     * New version: Directly saves to browser localStorage - works immediately
-     * 
-     * IMPLEMENTATION DETAILS:
-     * 1. Validates required fields (name, duration, goal, cooldown)
-     * 2. Creates preset object with all configuration values
-     * 3. Retrieves existing presets array from localStorage
-     * 4. Appends new preset to array
-     * 5. Saves updated array back to localStorage as JSON string
-     * 6. Calls optional parent callback for component communication
-     * 7. Shows success message to user
-     * 8. Clears all form fields for next preset creation
-     * 
-     * STORAGE FORMAT:
-     * localStorage key: 'userPresets'
-     * Value: JSON array of preset objects
-     * Example: [{name: "FastTest", trialDuration: "5", goalForTrial: "10", ...}, ...]
-     * 
-     * ERROR HANDLING:
-     * Currently shows alert for missing required fields
-     * No try/catch - assumes localStorage is available (may fail in private browsing)
-     */
-    const handlePresetSave = () => {
-    // CHANGE: Simplified validation - only checks 4 required fields
-    // Previous version had async/await for API call that would fail
-    if (!presetName || !prestTrialDuration || !presetTrialGoal || !presetTrialCooldown) {
-        alert("Please fill in all required fields.");
-        return;
+
+const DEFAULT_PRESET_FORM = {
+  id: '',
+  name: '',
+  description: '',
+  testName: '',
+  subjectID: '',
+  trialDuration: '',
+  goalForTrial: '',
+  goalForTest: '',
+  RewaStimTime: '',
+  StimTimeOn: '',
+  cooldown: '',
+  rewardType: 'Water',
+  interactionType: 'Lever',
+  stimulusType: 'Light',
+  lightColor: 'Red',
+  endChimeEnabled: false,
+  endChimePattern: DEFAULT_END_CHIME_PATTERN,
+};
+
+
+const PresetManager = () => {
+  // Editable preset form that mirrors the important Trial configuration fields.
+  const [form, setForm] = useState(DEFAULT_PRESET_FORM);
+  // Per-user preset list loaded from the authenticated backend for the signed-in account.
+  const [savedPresets, setSavedPresets] = useState([]);
+  // Friendly success/error banner after save/delete/load actions.
+  const [feedback, setFeedback] = useState(null);
+
+  const refreshPresets = async (showError = false) => {
+    try {
+      setSavedPresets(await loadUserPresets());
+    } catch (error) {
+      if (showError) {
+        setFeedback({
+          severity: 'error',
+          message: error.message || 'Unable to load your saved presets.',
+        });
+      }
     }
+  };
 
-    // CHANGE: Create preset object matching TestManager's expected structure
-    // Object keys must match what TestManager's handlePreset() expects
-    const newPreset = {
-        name: presetName,                           // Unique identifier for dropdown
-        trialDuration: prestTrialDuration,          // Minutes for trial
-        goalForTrial: presetTrialGoal,              // Interactions needed for reward
-        cooldown: presetTrialCooldown,              // Seconds between rewards
-        rewardType: presetRewardType,               // "Water" or "Food"
-        interactionType: presetInteractionType,     // "Lever" or "Poke"
-        stimulusType: presetStimulasType,           // "Light" or "Tone"
-        lightColor: presetLightColor                // "Red", "Green", "Blue", "Yellow"
+  useEffect(() => {
+    refreshPresets(true);
+
+    const handlePresetStorageUpdate = () => {
+      refreshPresets();
     };
 
-    // CHANGE: Read existing presets from localStorage (NEW - not using backend API)
-    // Parse JSON string to array, default to empty array if key doesn't exist
-    const existingPresets = JSON.parse(localStorage.getItem('userPresets') || '[]');
-    
-    // CHANGE: Append new preset to existing array
-    // NOTE: This allows duplicate names - could add uniqueness check in future
-    existingPresets.push(newPreset);
-    
-    // CHANGE: Save updated array back to localStorage as JSON string
-    // Overwrites previous 'userPresets' value with new array including added preset
-    localStorage.setItem('userPresets', JSON.stringify(existingPresets));
-    
-    // CHANGE: Call optional parent callback for component communication
-    // Allows parent component to react to preset creation (refresh list, etc.)
-    if (onCreatePreset) {
-        onCreatePreset(newPreset);
+    window.addEventListener(PRESET_STORAGE_EVENT, handlePresetStorageUpdate);
+    window.addEventListener('storage', handlePresetStorageUpdate);
+
+    return () => {
+      window.removeEventListener(PRESET_STORAGE_EVENT, handlePresetStorageUpdate);
+      window.removeEventListener('storage', handlePresetStorageUpdate);
+    };
+  }, []);
+
+  const updateFormField = (fieldName, value) => {
+    setForm((currentForm) => ({
+      ...currentForm,
+      [fieldName]: value,
+      lightColor:
+        fieldName === 'stimulusType' && value === 'Tone'
+          ? 'Red'
+          : currentForm.lightColor,
+    }));
+  };
+
+  const resetForm = () => {
+    setForm(DEFAULT_PRESET_FORM);
+  };
+
+  const handlePresetSave = async () => {
+    if (!form.name.trim()) {
+      setFeedback({ severity: 'error', message: 'Preset name is required.' });
+      return;
     }
-    
-    // CHANGE: User feedback - confirms save was successful
-    alert(`Preset "${presetName}" saved successfully!`);
-    
-    // CHANGE: Clear all form fields after successful save
-    // Prepares form for creating another preset
-    // Previous version had commented out "// ... clear other fields"
-    setPresetName('');
-    setPresetTrialDuration('');
-    setPresetTrialGoal('');
-    setPresetTrialCooldown('');
-    setPresetRewardType('');
-    setPresetInteractionType('');
-    setPresetStimulasType('');
-    setPresetLightColor('');
-};
 
-    // COMPONENT STRUCTURE:
-    // Form mirrors TestManager's input fields but for preset creation instead of trial execution
-    // All inputs are unvalidated (no error states) - validation only checks if required fields are filled
-    // Uses same MUI components and CSS classes as TestManager for consistency
-    return (
-        <div className="trial-settings">
-            <div id = "formControlContainer">
-               {/* PRESET NAME INPUT - Required field */}
-               {/* Becomes the display name in TestManager's preset dropdown */}
-               <div className="input-group">
-                    <FormControl  fullWidth >
-                        <InputLabel htmlFor="presetNameLabel">Preset Name:</InputLabel>
-                        <Input
-                            id="testName"
-                            placeholder="Enter Preset Name/Number"
-                            required
-                            value={presetName}
-                            onChange = {(e) => setPresetName(e.target.value)}
-                        />
-                            <FormHelperText>
-                                {/* {testNameError} */}
-                            </FormHelperText>
-                    </FormControl>
-                </div>
+    if (!form.trialDuration || !form.goalForTrial || !form.goalForTest) {
+      setFeedback({
+        severity: 'error',
+        message: 'Fill in trial duration, goal for trial, and goal for test before saving a preset.',
+      });
+      return;
+    }
 
-                 <div className="input-group">
-                    <FormControl fullWidth>
-                    <InputLabel htmlFor="presetTrialDurationLabel">Trial Duration(Minutes):</InputLabel>
-                    <Input
-                        id="trialDuration"
-                        placeholder="Enter Preset Trial Duration"
-                        required
-                        min = "0"
-                        value={prestTrialDuration}
-                        onChange = {(e) => setPresetTrialDuration(e.target.value)}
-                    />
-                    <FormHelperText>
-                        {/* {trialDurationError} */}
-                    </FormHelperText>
-                    </FormControl>
-                </div>
+    try {
+      const loadedPreset = savedPresets.find((preset) => preset.id === form.id);
+      const shouldReusePresetId = Boolean(
+        loadedPreset && loadedPreset.name.trim().toLowerCase() === form.name.trim().toLowerCase()
+      );
 
-                <div className="input-group">
-                    <FormControl fullWidth>
-                    <InputLabel htmlFor="goalForTrialLabel">Goal for Trial:</InputLabel>
-                    <Input
-                        id="goalForTrial"
-                        placeholder="Enter PresetGoal"
-                        required
-                        value={presetTrialGoal}
-                        onChange = {(e) => setPresetTrialGoal(e.target.value)}
-                    />
-                    <FormHelperText>
-                        {/* {trialGoalError} */}
-                    </FormHelperText>
-                    </FormControl>
-                </div>
+      const result = await upsertUserPreset({
+        ...form,
+        id: shouldReusePresetId ? form.id : undefined,
+        lightColor: form.stimulusType === 'Tone' ? 'N/A' : form.lightColor,
+      });
 
-                <div className="input-group">
-                    <FormControl fullWidth>
-                    <InputLabel htmlFor="cooldownLabel">Cooldown:</InputLabel>
-                    <Input
-                        id="cooldown"
-                        placeholder="Enter Preset Cooldown"
-                        required
-                        min = "0"
-                        value={presetTrialCooldown}
-                        onChange = {(e) => setPresetTrialCooldown(e.target.value)}
-                    />
-                    <FormHelperText>
-                        {/* {coolDownError} */}
-                    </FormHelperText>
-                    </FormControl>
-                </div>
+      setSavedPresets(result.presets);
+      setForm({
+        ...result.preset,
+        lightColor: result.preset.stimulusType === 'Tone' ? 'Red' : result.preset.lightColor,
+      });
+      setFeedback({
+        severity: 'success',
+        message: result.replaced
+          ? `Preset "${result.preset.name}" updated.`
+          : `Preset "${result.preset.name}" saved.`,
+      });
+    } catch (error) {
+      setFeedback({
+        severity: 'error',
+        message: error.message || 'Unable to save the preset.',
+      });
+    }
+  };
 
+  const handlePresetLoad = (preset) => {
+    setForm({
+      ...preset,
+      lightColor: preset.stimulusType === 'Tone' ? 'Red' : preset.lightColor,
+    });
+    setFeedback({
+      severity: 'success',
+      message: `Preset "${preset.name}" loaded for editing.`,
+    });
+  };
 
-                <div className="input-group">
-                    <FormControl fullWidth>
-                        <InputLabel id="rewardTypeLabel">Reward Type:</InputLabel>
-                        <Select
-                            id="rewardType"
-                            value={presetRewardType}
-                            onChange = {(e) => setPresetRewardType(e.target.value)}
-                        >
-                            <MenuItem value={"Water"}>Water</MenuItem>
-                            <MenuItem value={"Food"}>Food</MenuItem>
-                        </Select>
-                    </FormControl>
-                </div>
+  const handlePresetDelete = async (presetId) => {
+    try {
+      const deletedPreset = savedPresets.find((preset) => preset.id === presetId);
+      const nextPresets = await deleteUserPreset(presetId);
+      setSavedPresets(nextPresets);
 
-                <div className="input-group">
-                    <FormControl fullWidth>
-                        <InputLabel id="interactionTypeLabel">Interaction Type:</InputLabel>
-                            <Select
-                            id="interactionType"
-                            value={presetInteractionType}
-                            onChange = {(e) => setPresetInteractionType(e.target.value)}
-                        >
-                        <MenuItem value={"Poke"}>Poke</MenuItem>
-                        <MenuItem value={"Lever"}>Lever</MenuItem>
-                        </Select>
-                    </FormControl>
-                </div>
+      if (form.id === presetId) {
+        resetForm();
+      }
 
-                <div className="input-group">
-                    <FormControl fullWidth>
-                    <InputLabel id="stimulusTypeLabel">Stimulus Type:</InputLabel>
-                        <Select
-                        id="stimulasType"
-                        value={presetStimulasType}
-                        onChange = {(e) => setPresetStimulasType(e.target.value)}
-                        >
-                        <MenuItem value={"Light"}>Light</MenuItem>
-                        <MenuItem value={"Tone"}>Tone</MenuItem>
-                        </Select>
-                    </FormControl>
-                </div>
+      setFeedback({
+        severity: 'success',
+        message: deletedPreset
+          ? `Preset "${deletedPreset.name}" deleted.`
+          : 'Preset deleted.',
+      });
+    } catch (error) {
+      setFeedback({
+        severity: 'error',
+        message: error.message || 'Unable to delete the selected preset.',
+      });
+    }
+  };
 
-                <div className="input-group">
-                    <FormControl fullWidth>
-                        <InputLabel id="lightColorLabel">Light Color:</InputLabel>
-                        <Select
-                            id="lightColor"
-                            value={presetLightColor}
-                            onChange = {(e) => setPresetLightColor(e.target.value)}
-                        >
-                            <MenuItem value={"Red"}>Red</MenuItem>
-                            <MenuItem value={"Green"}>Green</MenuItem>
-                            <MenuItem value={"Blue"}>Blue</MenuItem>
-                            <MenuItem value={"Yellow"}>Yellow</MenuItem>
-                        </Select>
-                    </FormControl>
-                </div>  
-
-                <div className="input-group">
-                    <Button className="save-button" onClick={handlePresetSave}>Save Preset</Button>
-                </div>
-            </div>  
+  return (
+    <div className="preset-manager-page">
+      <div className="trial-settings preset-manager-card">
+        <div className="preset-manager-header">
+          <h2>Preset Manager</h2>
+          <p>Save reusable trial values here, then pick them from the Trial page to auto-fill the form.</p>
+          <div className="preset-manager-note">
+            Presets are now saved to your signed-in account, so they stay available the next time you log in.
+          </div>
         </div>
-    );
+
+        {feedback && (
+          <Alert severity={feedback.severity} sx={{ mb: 2 }}>
+            {feedback.message}
+          </Alert>
+        )}
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel htmlFor="presetNameLabel">Preset Name:</InputLabel>
+            <Input
+              id="presetName"
+              placeholder="Enter preset name"
+              required
+              value={form.name}
+              onChange={(e) => updateFormField('name', e.target.value)}
+            />
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel htmlFor="presetDescriptionLabel">Description:</InputLabel>
+            <Input
+              id="presetDescription"
+              placeholder="Optional description"
+              value={form.description}
+              onChange={(e) => updateFormField('description', e.target.value)}
+            />
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel htmlFor="presetTestNameLabel">Default Test Name:</InputLabel>
+            <Input
+              id="presetTestName"
+              placeholder="Optional default test name"
+              value={form.testName}
+              onChange={(e) => updateFormField('testName', e.target.value)}
+            />
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel htmlFor="presetSubjectIDLabel">Default Subject ID:</InputLabel>
+            <Input
+              id="presetSubjectID"
+              placeholder="Optional default subject ID"
+              value={form.subjectID}
+              onChange={(e) => updateFormField('subjectID', e.target.value)}
+            />
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel htmlFor="presetTrialDurationLabel">Trial Duration (Minutes):</InputLabel>
+            <Input
+              id="trialDuration"
+              placeholder="Enter preset trial duration"
+              required
+              value={form.trialDuration}
+              onChange={(e) => updateFormField('trialDuration', e.target.value)}
+            />
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel htmlFor="goalForTrialLabel">Goal for Trial:</InputLabel>
+            <Input
+              id="goalForTrial"
+              placeholder="Enter goal for trial"
+              required
+              value={form.goalForTrial}
+              onChange={(e) => updateFormField('goalForTrial', e.target.value)}
+            />
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel htmlFor="goalForTestLabel">Goal for Test:</InputLabel>
+            <Input
+              id="goalForTest"
+              placeholder="Enter goal for test"
+              required
+              value={form.goalForTest}
+              onChange={(e) => updateFormField('goalForTest', e.target.value)}
+            />
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel htmlFor="rewardDelayLabel">Reward Delay (s):</InputLabel>
+            <Input
+              id="rewardDelay"
+              placeholder="Time between reward and new stimulus"
+              value={form.RewaStimTime}
+              onChange={(e) => updateFormField('RewaStimTime', e.target.value)}
+            />
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel htmlFor="stimulusDurationLabel">Stimulus Duration (s):</InputLabel>
+            <Input
+              id="stimulusDuration"
+              placeholder="How long the stimulus stays active"
+              value={form.StimTimeOn}
+              onChange={(e) => updateFormField('StimTimeOn', e.target.value)}
+            />
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel htmlFor="cooldownLabel">Cooldown (s):</InputLabel>
+            <Input
+              id="cooldown"
+              placeholder="Enter cooldown"
+              value={form.cooldown}
+              onChange={(e) => updateFormField('cooldown', e.target.value)}
+            />
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel id="rewardTypeLabel">Reward Type:</InputLabel>
+            <Select
+              id="rewardType"
+              value={form.rewardType}
+              onChange={(e) => updateFormField('rewardType', e.target.value)}
+            >
+              <MenuItem value="Water">Water</MenuItem>
+              <MenuItem value="Food">Food</MenuItem>
+            </Select>
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel id="interactionTypeLabel">Interaction Type:</InputLabel>
+            <Select
+              id="interactionType"
+              value={form.interactionType}
+              onChange={(e) => updateFormField('interactionType', e.target.value)}
+            >
+              <MenuItem value="Poke">Poke</MenuItem>
+              <MenuItem value="Lever">Lever</MenuItem>
+              <MenuItem value="Poke Then Lever">Poke then Lever</MenuItem>
+              <MenuItem value="Lever then Poke">Lever then Poke</MenuItem>
+            </Select>
+          </FormControl>
+        </div>
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel id="stimulusTypeLabel">Stimulus Type:</InputLabel>
+            <Select
+              id="stimulusType"
+              value={form.stimulusType}
+              onChange={(e) => updateFormField('stimulusType', e.target.value)}
+            >
+              <MenuItem value="Light">Light</MenuItem>
+              <MenuItem value="Tone">Tone</MenuItem>
+            </Select>
+          </FormControl>
+        </div>
+
+        {form.stimulusType === 'Light' ? (
+          <div className="input-group">
+            <FormControl fullWidth>
+              <InputLabel id="lightColorLabel">Light Color:</InputLabel>
+              <Select
+                id="lightColor"
+                value={form.lightColor}
+                onChange={(e) => updateFormField('lightColor', e.target.value)}
+              >
+                <MenuItem value="Red">Red</MenuItem>
+                <MenuItem value="Green">Green</MenuItem>
+                <MenuItem value="Blue">Blue</MenuItem>
+                <MenuItem value="Yellow">Yellow</MenuItem>
+              </Select>
+            </FormControl>
+          </div>
+        ) : (
+          <div className="stimulus-note">
+            Tone stimulus selected. Light color does not apply to this preset.
+          </div>
+        )}
+
+        <div className="input-group">
+          <FormControl fullWidth>
+            <InputLabel id="endChimeEnabledLabel">End-of-Test Chime:</InputLabel>
+            <Select
+              id="endChimeEnabled"
+              value={form.endChimeEnabled ? 'enabled' : 'disabled'}
+              onChange={(e) => updateFormField('endChimeEnabled', e.target.value === 'enabled')}
+            >
+              <MenuItem value="disabled">Disabled</MenuItem>
+              <MenuItem value="enabled">Enabled</MenuItem>
+            </Select>
+          </FormControl>
+        </div>
+
+        {form.endChimeEnabled ? (
+          <div className="input-group">
+            <FormControl fullWidth>
+              <InputLabel htmlFor="endChimePatternLabel">End Chime Pattern:</InputLabel>
+              <Input
+                id="endChimePattern"
+                placeholder="523:0.12,659:0.12,784:0.24"
+                value={form.endChimePattern}
+                onChange={(e) => updateFormField('endChimePattern', e.target.value)}
+              />
+            </FormControl>
+          </div>
+        ) : (
+          <div className="stimulus-note">
+            The default end chime pattern stays saved with this preset and is only used when the option is enabled.
+          </div>
+        )}
+
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2 }}>
+          <Button className="save-button" variant="contained" onClick={handlePresetSave}>
+            Save Preset
+          </Button>
+          <Button variant="outlined" onClick={resetForm}>
+            Clear Form
+          </Button>
+        </Stack>
+
+        <div className="preset-library">
+          <h3>Saved Presets</h3>
+          {savedPresets.length === 0 ? (
+            <p>No presets saved for this account yet.</p>
+          ) : (
+            <div className="preset-library-list">
+              {savedPresets.map((preset) => (
+                <div key={preset.id} className="preset-library-item">
+                  <div className="preset-library-copy">
+                    <strong>{preset.name}</strong>
+                    <p>{preset.description || 'No description provided.'}</p>
+                    <p>
+                      {preset.interactionType} / {preset.stimulusType}
+                      {preset.stimulusType === 'Light' ? ` (${preset.lightColor})` : ''}
+                    </p>
+                    <p>
+                      End chime: {preset.endChimeEnabled ? preset.endChimePattern : 'Disabled'}
+                    </p>
+                  </div>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                    <Button variant="contained" onClick={() => handlePresetLoad(preset)}>
+                      Load
+                    </Button>
+                    <Button variant="outlined" color="error" onClick={() => handlePresetDelete(preset.id)}>
+                      Delete
+                    </Button>
+                  </Stack>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 };
+
 
 export default PresetManager;

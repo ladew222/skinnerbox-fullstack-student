@@ -1,46 +1,61 @@
-from gpiozero import Button, LED, RGBLED
-from time import sleep
 from signal import pause
+from time import sleep
 
-# Initialize buttons with pull-down resistors
-button1 = Button(4, pull_up=False)
-button2 = Button(18, pull_up=False)
+from gpio_adapter import Button, LED, RGBLED, GPIO_MODE
 
-# Initialize single-color LEDs
-led1 = LED(24)
-led2 = LED(5)
 
-# Initialize RGB LED
-rgb_led = RGBLED(red=12, green=16, blue=20)
+BUTTON_ONE_GPIO = 4
+BUTTON_TWO_GPIO = 18
+LED_ONE_GPIO = 24
+LED_TWO_GPIO = 5
+RGB_RED_GPIO = 12
+RGB_GREEN_GPIO = 16
+RGB_BLUE_GPIO = 20
 
-# === BUTTON CALLBACK FUNCTIONS ===
-def button1_pressed():
-    print("[BUTTON] Button 1 Pressed! Toggling LED 1.")
-    led1.toggle()
 
-def button2_pressed():
-    print("[BUTTON] Button 2 Pressed! Toggling LED 2.")
-    led2.toggle()
+def build_devices():
+    """Create the button and light devices through the shared GPIO adapter."""
 
-# Assign button actions
-button1.when_pressed = button1_pressed
-button2.when_pressed = button2_pressed
+    button_one = Button(BUTTON_ONE_GPIO, pull_up=False)
+    button_two = Button(BUTTON_TWO_GPIO, pull_up=False)
+    led_one = LED(LED_ONE_GPIO)
+    led_two = LED(LED_TWO_GPIO)
+    rgb_led = RGBLED(red=RGB_RED_GPIO, green=RGB_GREEN_GPIO, blue=RGB_BLUE_GPIO)
+    return button_one, button_two, led_one, led_two, rgb_led
 
-# === LIGHT TEST FUNCTIONS ===
-def test_leds():
+
+def bind_callbacks(button_one, button_two, led_one, led_two):
+    """Wire button presses to LED toggles for a quick interactive smoke test."""
+
+    def button_one_pressed():
+        print("[BUTTON] Button 1 Pressed! Toggling LED 1.")
+        led_one.toggle()
+
+    def button_two_pressed():
+        print("[BUTTON] Button 2 Pressed! Toggling LED 2.")
+        led_two.toggle()
+
+    button_one.when_pressed = button_one_pressed
+    button_two.when_pressed = button_two_pressed
+
+
+def test_leds(led_one, led_two):
     """Blink the single LEDs to confirm they are working."""
+
     print("[TEST] Blinking single LEDs...")
     for _ in range(3):
-        led1.on()
-        led2.on()
+        led_one.on()
+        led_two.on()
         sleep(0.5)
-        led1.off()
-        led2.off()
+        led_one.off()
+        led_two.off()
         sleep(0.5)
     print("[TEST] LED test complete.")
 
-def test_rgb_led():
-    """Cycle through RGB LED colors to ensure all work."""
+
+def test_rgb_led(rgb_led):
+    """Cycle through RGB LED colors to ensure all channels work."""
+
     print("[TEST] Cycling RGB LED colors...")
     colors = {
         "Red": (1, 0, 0),
@@ -50,21 +65,31 @@ def test_rgb_led():
         "Cyan": (0, 1, 1),
         "Magenta": (1, 0, 1),
         "White": (1, 1, 1),
-        "Off": (0, 0, 0)
+        "Off": (0, 0, 0),
     }
-    
+
     for name, color in colors.items():
         rgb_led.color = color
         print(f"[RGB LED] {name}")
         sleep(1)
-    
+
     print("[TEST] RGB LED test complete.")
 
-# === RUN TESTS AT STARTUP ===
-print("Starting GPIO Test Script...")
 
-test_leds()       # Blink single LEDs
-test_rgb_led()    # Cycle through RGB LED colors
+def main():
+    """Run the standalone GPIO smoke test through the same adapter as the backend."""
 
-print("Test complete! Press buttons to toggle LEDs.")
-pause()  # Keeps script running for button events
+    print(f"Starting GPIO Test Script in GPIO mode: {GPIO_MODE}")
+
+    button_one, button_two, led_one, led_two, rgb_led = build_devices()
+    bind_callbacks(button_one, button_two, led_one, led_two)
+
+    test_leds(led_one, led_two)
+    test_rgb_led(rgb_led)
+
+    print("Test complete! Press buttons to toggle LEDs.")
+    pause()
+
+
+if __name__ == "__main__":
+    main()

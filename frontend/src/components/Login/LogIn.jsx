@@ -1,120 +1,103 @@
-// React core and hooks for state management
 import React, { useState } from 'react';
-// HTTP client for making API requests to backend
-import axios from 'axios';
-// React Router hook for programmatic navigation after login/register
-import { useNavigate } from 'react-router-dom';
+import { Alert, Button, FormControl, Input, InputLabel, Stack, Typography } from '@mui/material';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+
+import { useAuth } from '../../context/AuthContext';
+import './Login.css';
 
 
-// Importing the Necessary Mui Libraries 
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import FormHelperText from '@mui/material/FormHelperText';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import { FormControl, InputLabel, Input} from '@mui/material';
-
-// Import custom CSS for styling the login page
-import '../Login/Login.css';
-// Import Viterbo University logo image
-import VuLogo from '../../assets/RGB_Vertical_Viterbo_Logo.png';
-
-
-// TODO: Finish Building the UI for the Login Page
 const Login = () => {
-  // State for storing the user's password input
-  const [password, setPassword] = useState('');
-  // State for storing the user's email input
+  // Local form state for the login request payload.
   const [email, setEmail] = useState('');
-  // State to toggle between login mode (false) and register mode (true)
-  const [isRegister, setIsRegister] = useState(false);
-  // State for storing and displaying error messages from failed authentication
-  const [error, setError] = useState(''); 
-  // Hook for programmatic navigation to different routes
+  const [password, setPassword] = useState('');
+  // UI state used to show auth-specific success and error messages from the backend.
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { isAuthenticated, login } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
 
-  /**
-   * Handles form submission for both login and registration
-   * @param {Event} e - Form submission event
-   */
-  const handleSubmit = async (e) => {
-    // Prevent default form submission behavior (page reload)
-    e.preventDefault();
-    // Determine which endpoint to use based on current mode
-    const endpoint = isRegister ? '/register' : '/login';
-    // Construct full API URL pointing to backend server
-    const url = `http://localhost:5001${endpoint}`;
+  const redirectTarget = location.state?.from?.pathname || '/Trial';
+  const registrationSubmitted = location.state?.registrationSubmitted;
+
+  if (isAuthenticated) {
+    return <Navigate replace to={redirectTarget} />;
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setErrorMessage('');
 
     try {
-      // Make POST request to backend with email and password
-      // withCredentials: true enables cookie-based session management
-      const response = await axios.post(url, { email, password }, { withCredentials: true });
-
-      // Check if backend returned a success message
-      if (response.data.message) {
-        // Display success message to user
-        alert(response.data.message);
-        if (!isRegister) {
-          // If logging in, redirect to Home page
-          navigate('/Home');
-        } else {
-          // If registering, switch back to login mode so user can log in
-          setIsRegister(false);
-        }
-      }
+      const response = await login({ email, password });
+      navigate(response.user.role === 'admin' ? '/Admin' : redirectTarget, { replace: true });
     } catch (error) {
-      // Capture and display error message from backend, or generic message if none provided
-      setError(error.response?.data?.error || 'Something went wrong');
+      setErrorMessage(error.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleRegistration = () => {
-    navigate('/Register');
-  }
-
   return (
     <div className="trial-settings">
-      <div id = "loginFormContainer">
-
-        <form onSubmit={handleSubmit}>
-          <h1>Login</h1>
-
-          <div className="input-group">
-            <FormControl  fullWidth>
-              <InputLabel htmlFor="loginEmail">Email:</InputLabel>
-              <Input
-                id="txtEmail"
-                placeholder="Enter Email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </FormControl>
-          </div>
-
-          <div className="input-group">
-            <FormControl  fullWidth>
-              <InputLabel htmlFor="loginPassword">Password:</InputLabel>
-              <Input
-                id="txtPassword"
-                placeholder="Enter Password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </FormControl>
-          </div>
-
+      <form onSubmit={handleSubmit}>
+        <Stack spacing={3}>
           <div>
-            {/* <button type="submit">{isRegister ? 'Register' : 'Login'}</button> */}
-            <Button type = "submit" id = "btnLogin" variant="contained" size="large">Login</Button>
-            <link rel="stylesheet" href="../" />
-            <Button id = "btnRegister" onClick={handleRegistration} variant="contained" size="large">Register</Button>
+            <Typography variant="h4" component="h1" gutterBottom>
+              Sign In
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Sign in to run tests, view results, and manage the SkinnerBox on your network.
+            </Typography>
           </div>
-        </form>
-      </div>
+
+          {registrationSubmitted && (
+            <Alert severity="success">
+              Registration submitted. A local administrator must approve your account before you can log in.
+            </Alert>
+          )}
+
+          {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
+
+          <FormControl fullWidth>
+            <InputLabel htmlFor="loginEmail">Email</InputLabel>
+            <Input
+              id="loginEmail"
+              placeholder="Enter Email"
+              required
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </FormControl>
+
+          <FormControl fullWidth>
+            <InputLabel htmlFor="loginPassword">Password</InputLabel>
+            <Input
+              id="loginPassword"
+              placeholder="Enter Password"
+              required
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </FormControl>
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <Button type="submit" id="btnLogin" variant="contained" size="large" disabled={isSubmitting}>
+              {isSubmitting ? 'Signing In...' : 'Sign In'}
+            </Button>
+            <Button component={Link} id="btnRegister" to="/Register" variant="outlined" size="large">
+              Request Access
+            </Button>
+          </Stack>
+        </Stack>
+      </form>
     </div>
   );
 };
+
 
 export default Login;

@@ -4,3 +4,5 @@ RPi.GPIO
 rpi-ws281x
 spidev
 smbus2
+Pillow
+luma.oled

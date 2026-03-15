@@ -1,549 +1,434 @@
+# SkinnerBox Full-Stack Student
 
-# SkinnerBox Full-Stack System
+This repository contains the current student-facing SkinnerBox application:
 
-**Development · Testing · Deployment · Update Guide**
+- a React frontend in [frontend/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend)
+- a Flask backend in [backend/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend)
+- a GPIO abstraction layer that uses mock hardware on a computer and real GPIO on a Raspberry Pi
+- optional I2C OLED status displays for ready/running/error feedback on the box
+- token-based authentication with admin approval for network access
 
-This repository contains the **official student-supported version** of the SkinnerBox experimental control system.
+This project is documented for native runs only.
 
-The system is a **full-stack application** composed of:
+The backend is the source of truth for test state. It owns:
 
-- **Flask backend** (Python) — experiment logic & hardware control  
-- **React frontend** (JavaScript) — user interface  
-- **GPIO hardware layer** (Raspberry Pi only)
+- test lifecycle: configure, start, pause, resume, finish
+- elapsed-time and timer logic
+- lever/nose-poke counts
+- reward and stimulus execution
+- SQLite persistence
 
-The project is designed so that:
+The frontend is a control and monitoring UI. It sends configuration to the backend and polls backend state instead of running the test logic itself.
 
+Authenticated user presets are now stored in SQLite through the backend as well, so saved Trial form values follow the signed-in account instead of only one browser.
 
-- No physical hardware is required for development
-- The *same code* runs in development and production
-- Real hardware is enabled only on the Raspberry Pi
-- Code updates can be pulled safely in production
+## Architecture
 
----
+At a high level the app looks like this:
 
-## 1. System Overview (Mental Model)
+```text
+React UI
+  -> frontend/src/components/TestManager/TestManager.jsx
+  -> frontend/src/components/ResultsList/ResultsList.jsx
+  -> frontend/src/utilities/api.js
 
-Think of the system as **four layers**:
+Flask API
+  -> backend/sbBackend.py
+     -> TestSessionManager: test lifecycle, timer, counters
+     -> SQLiteTestRepository: save/update/load results from SQLite
+     -> SQLiteAuthRepository: users, bearer tokens, admin approvals
+     -> SkinnerHardware: lights, tone, reward pump, pump priming
 
+GPIO Layer
+  -> backend/gpio_adapter.py
+     -> mock GPIO on a laptop/desktop
+     -> real gpiozero hardware on a Raspberry Pi
+
+OLED Layer
+  -> backend/display_adapter.py
+     -> mock/no-op display on a laptop/desktop
+     -> real I2C OLED rendering on a Raspberry Pi
 ```
 
-[ React Frontend ]
-↓
-[ Flask Backend ]
-↓
-[ GPIO Adapter ]
-↓
-[ Mock GPIO ]  OR  [ Real Hardware ]
+## Important Files
 
+```text
+backend/
+  sbBackend.py           Main Flask app and backend logic
+  gpio_adapter.py        Mock-vs-real GPIO selection
+  display_adapter.py     Mock-vs-real OLED status display selection
+  auth.py                User accounts, login tokens, admin approvals
+  reset_admin.py         Local admin create/reset script
+  run_backend.sh         Backend launcher with auto GPIO mode
+  requirements.txt       Dev/laptop Python dependencies
+  requirements.pi.txt    Raspberry Pi Python dependencies
+  testdatabase.db        SQLite database used by the backend
+  tests/                 Backend tests
+
+frontend/
+  src/components/TestManager/TestManager.jsx   Test setup and live run UI
+  src/components/ResultsList/ResultsList.jsx   Saved result viewer
+  src/utilities/api.js                         Shared API client
+  package.json                                React scripts and dependencies
 ```
 
-Only the **bottom layer changes** between development and production.
+## GPIO Modes
 
-Everything else stays the same.
+The backend uses [gpio_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/gpio_adapter.py).
 
----
+Supported modes:
 
-## 2. Repository Structure
+- `GPIO_MODE=auto`: real GPIO on a detected Raspberry Pi, mock elsewhere
+- `GPIO_MODE=mock`: always use mock hardware
+- `GPIO_MODE=real`: always use real GPIO
 
-```
+For most cases:
 
-skinnerbox-fullstack-student/
-├── backend/
-│   ├── sbBackend.py          # Backend entry point
-│   ├── gpio_adapter.py       # Mock vs real GPIO
-│   ├── requirements.base.txt # Shared Python deps
-│   ├── requirements.txt      # Laptop / dev deps
-│   ├── requirements.pi.txt   # Raspberry Pi deps
-│   ├── Dockerfile
-│
-├── frontend/
-│   ├── src/
-│   ├── package.json
-│   ├── Dockerfile
-│
-├── docker-compose.yml        # Laptop development
-├── docker-compose.pi.yml     # Raspberry Pi override
-├── README.md
+- on your computer, use `mock` or `auto`
+- on the Pi, use `auto` or `real`
 
-````
+## OLED Status Displays
 
----
+The backend can also mirror basic status text to one or more small I2C OLEDs.
 
-## 3. Development Mode (Laptop / Desktop)
+Supported behavior:
 
-### Purpose
+- waiting/configured: shows `READY`, the test name, subject, and a prompt to start
+- running: shows the test name, time remaining, lever count, and reward count
+- paused/finished: shows a basic summary screen
+- error: shows a short error message while the error LED is blinking
 
-- Write code
-- Test experiment logic
-- Learn system behavior
-- **No hardware required**
+This uses [display_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/display_adapter.py) and follows the same idea as GPIO:
 
----
+- `OLED_MODE=auto`: real OLEDs on a detected Raspberry Pi, mock elsewhere
+- `OLED_MODE=mock`: never touch real I2C hardware
+- `OLED_MODE=real`: always try to use the OLEDs
 
-### Requirements
+Useful OLED environment variables:
 
-- **Docker Desktop**
+- `OLED_I2C_ADDRESSES=0x3C` for one display, or `OLED_I2C_ADDRESSES=0x3C,0x3D` to mirror the same status on two displays
+- `OLED_DEVICE_TYPE=ssd1306` by default
+- `OLED_DEVICE_TYPE=sh1106` if your mini OLEDs use the SH1106 controller instead
+- `OLED_WIDTH=128` and `OLED_HEIGHT=64` by default
+- `OLED_ROTATE=0` by default
 
-You do **not** need:
+On a computer, leave `OLED_MODE=mock` or `OLED_MODE=auto`.
 
-- Python
-- Node.js
-- GPIO libraries
-- A Raspberry Pi
+## Authentication
 
----
+The app is designed to be reachable on your network, so test control and results pages are protected.
 
-### Start the system (DEV)
+- registration creates a `pending` account in SQLite
+- an approved admin must grant access before that user can log in
+- login returns a bearer token that the React frontend stores locally and sends on API requests
+- protected pages include Trial, Results, Test I/O, Preset Manager, and Admin
+- presets are saved per approved user account and are available from both Trial and Preset Manager after sign-in
 
-From the project root:
+Admin accounts are managed locally with the backend reset script instead of through the web UI.
 
-```bash
-docker compose up --build
-````
+### Default Validation Admin
 
-This uses:
+The bundled [backend/testdatabase.db](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/testdatabase.db) now includes a default admin account for local testing and validation:
 
-```
-docker-compose.yml
-```
+- email: `admin@example.com`
+- password: `AdminPass123`
 
----
-
-### Access the system
-
-| Service  | URL                                            |
-| -------- | ---------------------------------------------- |
-| Frontend | [http://localhost:3000](http://localhost:3000) |
-| Backend  | [http://localhost:5001](http://localhost:5001) |
-
-> ⚠️ The backend is exposed on **port 5001** on your laptop.
-
----
-
-## 4. Live Editing (Critical Concept)
-
-This project uses **Docker volume mounts**.
-
-That means:
-
-> 🧠 You edit files on your computer
-> 🐳 Docker runs those same files live
+This is meant for validation only. Reset or replace it before exposing the system on a broader network.
 
 Example:
 
-```yaml
-volumes:
-  - ./backend:/app
+```bash
+cd backend
+source .venv/bin/activate
+python reset_admin.py --email admin@example.com --name "Local Admin"
 ```
 
-### What this means
+The script prompts for a password if you do not pass `--password`.
 
-* Edit code → changes apply immediately
-* No rebuild required for code changes
-* Rebuild **only if dependencies change**
-
----
-
-## 5. Editing the Code
-
-### Backend (Flask / Python)
-
-Edit files in:
-
-```
-backend/
-```
-
-Primary files:
-
-* `sbBackend.py` — API routes & experiment logic
-* `gpio_adapter.py` — hardware abstraction
-
----
-
-### Frontend (React)
-
-Edit files in:
-
-```
-frontend/src/
-```
-
-React runs in development mode with **hot reload enabled**.
-
----
-
-## 6. GPIO Abstraction (Why Hardware Is Optional)
-
-GPIO behavior is controlled in:
-
-```
-backend/gpio_adapter.py
-```
-
-Modes:
-
-* **Mock mode (default on laptops)**
-
-  * Prints log messages
-  * Safe everywhere
-* **Real mode (Raspberry Pi only)**
-
-  * Accesses physical GPIO pins
-
-The backend never imports GPIO libraries directly.
-
----
-
-## 7. Simulated Inputs (No Hardware Required)
-
-When running on a laptop, physical buttons do not exist.
-
-The backend provides **simulation endpoints** that trigger the **same callbacks** used by GPIO interrupts on the Pi.
-
----
-
-### Simulation Endpoints
-
-| Action             | Method | Endpoint              |
-| ------------------ | ------ | --------------------- |
-| Simulate lever     | POST   | `/api/input/lever`    |
-| Simulate nose poke | POST   | `/api/input/nosepoke` |
-
----
-
-### Example (Terminal)
+To recreate the same validation admin explicitly:
 
 ```bash
-curl -X POST http://localhost:5001/api/input/lever
-curl -X POST http://localhost:5001/api/input/nosepoke
+cd backend
+source .venv/bin/activate
+python reset_admin.py --email admin@example.com --name "Validation Admin" --password AdminPass123
 ```
 
-Expected backend output:
+## Running On A Computer
 
-```
-Lever pressed. Count: 1
-Nose poke. Count: 1
-```
+### Native development
 
-The backend does **not** know whether an input came from hardware or simulation.
-
----
-
-## 8. Verifying the Backend
-
-### Check containers
+Backend:
 
 ```bash
-docker ps
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+GPIO_MODE=mock OLED_MODE=mock FLASK_APP=sbBackend.py flask run --host=0.0.0.0 --port=5000
 ```
 
-You should see:
-
-* `skinnerbox-backend`
-* `skinnerbox-frontend`
-
----
-
-### Check backend directly
+Create or reset the local admin account:
 
 ```bash
-curl http://localhost:5001
+cd backend
+source .venv/bin/activate
+python reset_admin.py --email admin@example.com --name "Local Admin"
+```
+
+If you use the repo's current [backend/testdatabase.db](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/testdatabase.db), you can sign in immediately with the default validation admin:
+
+- email: `admin@example.com`
+- password: `AdminPass123`
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm start
+```
+
+Open:
+
+- frontend: [http://localhost:3000](http://localhost:3000)
+- backend: [http://localhost:5000](http://localhost:5000)
+
+Notes:
+
+- in native frontend development, `package.json` proxies `/api/*` to `http://localhost:5000`
+- no physical hardware is needed when `GPIO_MODE=mock`
+- no physical OLED hardware is needed when `OLED_MODE=mock`
+
+## Running On A Raspberry Pi
+
+### Native Pi run
+
+Backend:
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.pi.txt
+GPIO_MODE=auto OLED_MODE=auto ./run_backend.sh
+```
+
+Example Pi run with two mirrored OLEDs:
+
+```bash
+cd backend
+source .venv/bin/activate
+OLED_MODE=auto OLED_I2C_ADDRESSES=0x3C,0x3D OLED_DEVICE_TYPE=ssd1306 GPIO_MODE=auto ./run_backend.sh
+```
+
+Create or reset the local admin account on the Pi:
+
+```bash
+cd backend
+source .venv/bin/activate
+python reset_admin.py --email admin@example.com --name "Local Admin"
+```
+
+If you copy the bundled [backend/testdatabase.db](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/testdatabase.db) to the Pi, the same validation admin is available there too until you reset it.
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm start
+```
+
+If the frontend is running on another machine instead of the Pi, set the backend URL explicitly:
+
+```bash
+cd frontend
+REACT_APP_BACKEND_URL=http://<pi-ip>:5000 npm start
+```
+
+## Basic Workflow
+
+### Before a test
+
+1. Make sure an admin account exists locally with `python reset_admin.py --email ...`.
+2. For quick validation, sign in with `admin@example.com` / `AdminPass123`.
+3. Have users register from the frontend `Register` page.
+4. Sign in as an admin and approve those registrations on the `Admin` page.
+5. Sign in as an approved user.
+6. Open the Test Manager in the frontend.
+7. Optionally use the `Prime Water Line` section to run the pump for a chosen number of seconds.
+8. Either pick a saved preset to auto-fill the Trial form or enter the test configuration manually.
+9. Optionally save the current form as a preset for later reuse.
+10. Click `Run Test`.
+
+### During a test
+
+- the backend owns the timer and counts
+- the frontend polls `/api/counts` and `/api/test/status`
+- lever presses and nose pokes are counted in the backend
+- if OLEDs are enabled, the box display shows time remaining and live lever counts during the run
+
+### After a test
+
+- the backend writes counts and status into SQLite
+- the frontend Results page loads saved runs from `/api/results`
+
+## Pump Priming
+
+Pump priming is backend-controlled.
+
+- UI entry point: [TestManager.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/TestManager/TestManager.jsx)
+- API call: `POST /api/pump/prime`
+- backend route: [sbBackend.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/sbBackend.py)
+
+Example:
+
+```bash
+curl -X POST http://localhost:5000/api/pump/prime \
+  -H "Content-Type: application/json" \
+  -d '{"durationSeconds": 1.5}'
+```
+
+The backend blocks pump priming while a test is actively running.
+
+## Simulating Inputs Without Hardware
+
+On a computer in mock mode, you can still exercise the test flow.
+
+Simulation endpoints:
+
+- `POST /api/input/lever`
+- `POST /api/input/nosepoke`
+
+Examples:
+
+```bash
+curl -X POST http://localhost:5000/api/input/lever
+curl -X POST http://localhost:5000/api/input/nosepoke
+```
+
+These hit the same backend callbacks used by real GPIO inputs.
+
+## Database
+
+The backend stores active and completed test runs in SQLite:
+
+- default database file: [backend/testdatabase.db](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/testdatabase.db)
+- optional override for tests or temporary runs: `SKINNERBOX_DB_PATH=/path/to/file.db`
+- auth tables in the same SQLite file: `users` and `auth_tokens`
+
+The backend schema is auto-migrated on startup so older database files can still be used.
+
+## How To Validate That The System Is Working
+
+### One-command regression runner
+
+From the repo root:
+
+```bash
+python3 scripts/run_regression_suite.py
+```
+
+This is the quickest way to validate the project after changes. The script lives at [scripts/run_regression_suite.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/scripts/run_regression_suite.py) and runs the checks in a fixed order:
+
+- backend `unittest` coverage in mock GPIO/OLED mode
+- frontend Jest smoke tests
+- frontend production build
+
+How it works:
+
+- it runs from the repository root and targets [backend/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend) and [frontend/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend) automatically
+- it uses `backend/.venv/bin/python` for backend tests, so the backend virtual environment must already exist
+- it forces `GPIO_MODE=mock` and `OLED_MODE=mock` during backend tests so the suite is safe to run on a laptop without Raspberry Pi hardware attached
+- it sets `CI=true` for the frontend Jest run so the test command exits instead of waiting in watch mode
+- it stops on the first failing step and returns a non-zero exit code, which makes it useful as a basic regression gate
+
+Prerequisites:
+
+- Python 3
+- backend virtual environment and installed backend dependencies
+- Node.js and `npm`
+- frontend dependencies already installed in [frontend/node_modules](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/node_modules)
+
+Useful options:
+
+- `python3 scripts/run_regression_suite.py --backend-only`
+- `python3 scripts/run_regression_suite.py --frontend-only`
+- `python3 scripts/run_regression_suite.py --frontend-only --skip-build`
+
+When to use each option:
+
+- use the default command before merging or after broader backend/frontend changes
+- use `--backend-only` when you changed Flask routes, database logic, GPIO/OLED behavior, auth, presets, or test lifecycle code
+- use `--frontend-only` when you changed React components, routing, API wiring, or MUI presentation logic
+- use `--skip-build` when you only want a fast frontend smoke check and do not need the production bundle rebuilt yet
+
+Typical success output ends with:
+
+```text
+Regression suite passed.
+```
+
+The frontend build may still print warnings from older CRA/ESLint tooling. Warnings do not fail the regression run unless the underlying command exits with an error.
+
+### 1. Backend tests
+
+From [backend/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend):
+
+```bash
+PYTHONPYCACHEPREFIX=/tmp GPIO_MODE=mock OLED_MODE=mock .venv/bin/python -m unittest discover -s tests -v
+```
+
+This covers:
+
+- authentication, registration approval, and logout
+- GPIO mode resolution
+- helper GPIO scripts
+- OLED ready/running display updates in mock mode
+- simulated lever presses
+- backend timer completion
+- database migration
+- pump priming success and safety guard
+
+### 2. Frontend tests
+
+From [frontend/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend):
+
+```bash
+CI=true npm test -- --watch=false
+```
+
+### 3. Frontend production build
+
+From [frontend/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend):
+
+```bash
+npm run build
+```
+
+### 4. Manual smoke checks
+
+Backend health:
+
+```bash
+curl http://localhost:5000/
 ```
 
 Expected response:
 
-```
+```text
 Backend is running!
 ```
 
----
+Authentication smoke check:
 
-### Expected backend logs (DEV)
+1. Sign in as `admin@example.com` with password `AdminPass123`.
+2. Confirm the `Admin` page loads.
+3. Register a new user from the frontend.
+4. Sign in as the admin and approve the new user on `/Admin`.
+5. Sign in as the approved user and confirm `/Trial`, `/Results`, and `/IoTesting` load.
+6. Reset or replace the validation admin password before wider network use.
 
-```
-[GPIO MOCK] Button initialized
-[GPIO MOCK] LED initialized
- * Running on http://0.0.0.0:5000
-```
+## Frontend README
 
-> Flask runs on 5000 **inside** the container, mapped to **5001 on the host**.
-
----
-
-## 9. Git Workflow (Student Workflow)
-
-### Start work
-
-```bash
-git pull
-docker compose up
-```
-
----
-
-### Save work
-
-```bash
-git add .
-git commit -m "Describe your change"
-git push
-```
-
----
-
-### Rule
-
-> ❗ Never edit files inside a running container
-> Always edit files in the repository folders
-
----
-
-## 10. Raspberry Pi Deployment (Production)
-
-The Raspberry Pi uses **two Docker Compose files**:
-
-1. Base system
-2. Pi-specific override
-
----
-
-### Start system on the Pi
-
-```bash
-docker compose \
-  -f docker-compose.yml \
-  -f docker-compose.pi.yml \
-  up -d --build
-```
-
-This enables:
-
-* real GPIO
-* privileged access
-* background execution
-
-⚠️ Only run this on a Raspberry Pi with hardware attached.
-
----
-
-## 11. Updating Code on the Pi
-
-```bash
-git pull
-docker compose \
-  -f docker-compose.yml \
-  -f docker-compose.pi.yml \
-  up -d --build
-```
-
----
-
-## 12. Requirements Files (Do Not Edit Unless Instructed)
-
-| File                    | Purpose                    |
-| ----------------------- | -------------------------- |
-| `requirements.base.txt` | Shared Python dependencies |
-| `requirements.txt`      | Laptop / development       |
-| `requirements.pi.txt`   | Raspberry Pi GPIO          |
-
----
-
-## 13. Key Takeaway
-
-> This is **one system** with **two configurations**.
-
-* Development → mock hardware
-* Production → real hardware
-* Same code
-* Only configuration changes
-
----
-
-## 14. Final Advice
-
-If something breaks, ask:
-
-> **Which layer am I working in?**
-
-Frontend? Backend? GPIO? Docker?
-
-That question solves most problems.
-
-
-
-
-# SSH into the Raspberry Pi
-
-SSH allows you to open a terminal on the Raspberry Pi from another computer.
-
-## 1. Find the Pi IP address (run on the Pi)
-
-```bash
-hostname -I
-```
-
-Example output:
-
-```
-192.168.1.62
-```
-
-Use this address in the next step.
-
----
-
-## 2. Connect from a laptop or desktop
-
-Open a terminal and run:
-
-```bash
-ssh ladew222@192.168.1.62
-```
-
-Replace:
-
-* `ladew222` with the Pi username
-* `192.168.1.62` with the Pi IP address
-
----
-
-## 3. First connection
-
-If prompted:
-
-```
-Are you sure you want to continue connecting (yes/no)?
-```
-
-Type:
-
-```
-yes
-```
-
-Enter the Pi password when asked.
-
----
-
-## 4. Verify connection
-
-After login, the prompt should look like:
-
-```
-ladew222@skbox:~ $
-```
-
-You are now running commands on the Pi.
-
----
-
-## 5. Navigate to the project
-
-```bash
-cd skinnerbox-fullstack-student
-```
-
----
-
-## 6. Disconnect
-
-```bash
-exit
-```
-
----
-
-# Starting and Stopping Services
-
-The backend and frontend run as system services.
-
-## Start services
-
-```bash
-sudo systemctl start skinnerbox-backend
-sudo systemctl start skinnerbox-frontend
-```
-
----
-
-## Stop services
-
-```bash
-sudo systemctl stop skinnerbox-backend
-sudo systemctl stop skinnerbox-frontend
-```
-
----
-
-## Restart services
-
-Use this after updating code:
-
-```bash
-sudo systemctl restart skinnerbox-backend
-sudo systemctl restart skinnerbox-frontend
-```
-
----
-
-## Check service status
-
-```bash
-sudo systemctl status skinnerbox-backend
-sudo systemctl status skinnerbox-frontend
-```
-
----
-
-# Updating Code (Git Workflow)
-
-Before pulling new code, save local changes.
-
-## 1. Save local work (stash)
-
-```bash
-git stash
-```
-
----
-
-## 2. Pull latest code
-
-```bash
-git pull
-```
-
----
-
-## 3. Restore your changes
-
-```bash
-git stash pop
-```
-
----
-
-## 4. Restart services after update
-
-```bash
-sudo systemctl restart skinnerbox-backend
-sudo systemctl restart skinnerbox-frontend
-```
-
----
-
-# Typical Update Workflow
-
-```bash
-ssh ladew222@PI_IP_ADDRESS
-cd skinnerbox-fullstack-student
-
-git stash
-git pull
-git stash pop
-
-sudo systemctl restart skinnerbox-backend
-sudo systemctl restart skinnerbox-frontend
-```
-
+If you open [frontend/README.md](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/README.md), treat this root README as the source of truth for project architecture and full-stack run instructions.

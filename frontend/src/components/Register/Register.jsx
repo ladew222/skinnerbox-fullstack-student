@@ -1,88 +1,133 @@
 import React, { useState } from 'react';
+import { Alert, Button, FormControl, Input, InputLabel, Stack, Typography } from '@mui/material';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
+
+import { useAuth } from '../../context/AuthContext';
+import '../Login/Login.css';
 
 
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import FormHelperText from '@mui/material/FormHelperText';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import { FormControl, InputLabel, Input} from '@mui/material';
-
-
-// TODO: Finish Building the UI for the Register Page
 const Register = () => {
-    const [form, setForm] = useState({
-        email: '',
-        password: '',
-    });
+  // Form state used to request a new account that an admin can later approve.
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  // Feedback shown after the backend accepts or rejects the registration request.
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const [message, setMessage] = useState('');
+  const { isAuthenticated, register } = useAuth();
+  const navigate = useNavigate();
 
-    const handleChange = (e) => {
-        setForm({
-            ...form,
-            [e.target.name]: e.target.value,
-        });
-    };
+  if (isAuthenticated) {
+    return <Navigate replace to="/Trial" />;
+  }
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        // Here you would typically send form data to your backend API
-        setMessage('Registration successful!');
-    };
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
 
-   /*return (
-    const handleRegistration = (e) => {
-        e.preventDefault();
-        // TODO: Handle registration logic
-        console.log("Register clicked");
-    };
+    if (password !== confirmPassword) {
+      setErrorMessage('Passwords must match before submitting the registration request.');
+      return;
+    }
 
-    return (
-        <div className="trial-settings">
-            <div id = "loginFormContainer">
+    setIsSubmitting(true);
+    try {
+      const response = await register({
+        email,
+        password,
+        displayName,
+      });
+      setSuccessMessage(response.message);
+      navigate('/LogIn', {
+        replace: true,
+        state: { registrationSubmitted: true },
+      });
+    } catch (error) {
+      setErrorMessage(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-                <form onSubmit={handleSubmit}>
-                <h1>Login</h1>
+  return (
+    <div className="trial-settings">
+      <form onSubmit={handleSubmit}>
+        <Stack spacing={3}>
+          <div>
+            <Typography variant="h4" component="h1" gutterBottom>
+              Request Access
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Create an account request. A local admin must approve it before you can access tests or results.
+            </Typography>
+          </div>
 
-                <div className="input-group">
-                    <FormControl  fullWidth>
-                    <InputLabel htmlFor="loginEmail">Email:</InputLabel>
-                    <Input
-                        id="txtEmail"
-                        name="email"
-                        placeholder="Enter Email"
-                        required
-                        value={form.email}
-                        onChange={handleChange}
-                    />
-                    </FormControl>
-                </div>
+          {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
+          {successMessage && <Alert severity="success">{successMessage}</Alert>}
 
-                <div className="input-group">
-                    <FormControl  fullWidth>
-                    <InputLabel htmlFor="loginPassword">Password:</InputLabel>
-                    <Input
-                        id="txtPassword"
-                        name="password"
-                        placeholder="Enter Password"
-                        required
-                        value={form.password}
-                        onChange={handleChange}
-                    />
-                    </FormControl>
-                </div>
+          <FormControl fullWidth>
+            <InputLabel htmlFor="registerDisplayName">Display Name</InputLabel>
+            <Input
+              id="registerDisplayName"
+              placeholder="Enter Name"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+            />
+          </FormControl>
 
-                <div>
-                    { <button type="submit">{isRegister ? 'Register' : 'Login'}</button> }
-                    <Button type = "submit" id = "btnLogin" variant="contained" size="large">Login</Button>
-                    <link rel="stylesheet" href="../" />
-                    <Button id = "btnRegister" onClick={handleRegistration} variant="contained" size="large">Register</Button>
-                </div>
-                </form>
-            </div>
-        </div>
-    ); */
+          <FormControl fullWidth>
+            <InputLabel htmlFor="registerEmail">Email</InputLabel>
+            <Input
+              id="registerEmail"
+              placeholder="Enter Email"
+              required
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </FormControl>
+
+          <FormControl fullWidth>
+            <InputLabel htmlFor="registerPassword">Password</InputLabel>
+            <Input
+              id="registerPassword"
+              placeholder="Enter Password"
+              required
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </FormControl>
+
+          <FormControl fullWidth>
+            <InputLabel htmlFor="registerConfirmPassword">Confirm Password</InputLabel>
+            <Input
+              id="registerConfirmPassword"
+              placeholder="Confirm Password"
+              required
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+            />
+          </FormControl>
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <Button type="submit" variant="contained" size="large" disabled={isSubmitting}>
+              {isSubmitting ? 'Submitting...' : 'Submit Request'}
+            </Button>
+            <Button component={Link} to="/LogIn" variant="outlined" size="large">
+              Back to Sign In
+            </Button>
+          </Stack>
+        </Stack>
+      </form>
+    </div>
+  );
 };
+
 
 export default Register;
