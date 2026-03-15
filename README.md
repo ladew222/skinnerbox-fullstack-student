@@ -99,22 +99,26 @@ Browser route
   -> SQLite and optional GPIO/OLED hardware
 ```
 
+In beginner terms, a user clicks something in the browser, React decides which screen to show, that screen calls the shared API helper, and the API helper sends a request to Flask. Flask then decides whether the request is allowed, updates test state or the database, possibly triggers hardware, and sends a JSON response back to the frontend so the page can refresh what the user sees.
+
+For example, when someone clicks `Run Test`, the frontend does not start a timer by itself. It sends the chosen settings to the backend, the backend starts the session, owns the countdown and counters, and the frontend keeps polling for updated status so it can display the current state.
+
 ### Frontend structure
 
 The frontend entry point is [frontend/src/components/App/App.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/App/App.js). It sets up routes and wraps protected areas of the UI.
 
 Main frontend modules:
 
-- [frontend/src/context/AuthContext.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/context/AuthContext.jsx): stores the signed-in user, token lifecycle, and auth helpers
-- [frontend/src/components/Auth/ProtectedRoute.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/Auth/ProtectedRoute.jsx): blocks unauthenticated access to protected pages
-- [frontend/src/utilities/api.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/api.js): shared HTTP layer, bearer-token wiring, and normalized error handling
-- [frontend/src/components/TestManager/TestManager.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/TestManager/TestManager.jsx): main trial setup form, run controls, live counts, time remaining, pump priming, and CSV export
-- [frontend/src/components/ResultsList/ResultsList.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/ResultsList/ResultsList.jsx): loads saved runs and exports them
-- [frontend/src/components/PresetManager/preset_manager.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/PresetManager/preset_manager.jsx): per-user preset browsing and editing
-- [frontend/src/components/Admin/AdminPanel.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/Admin/AdminPanel.jsx): approve or disable users
-- [frontend/src/components/IoTestingGrid/IoTestingGrid.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/IoTestingGrid/IoTestingGrid.jsx): live I/O visibility during hardware checks
-- [frontend/src/utilities/presets.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/presets.js): preset payload shaping and migration from older local/browser data
-- [frontend/src/utilities/resultsCsv.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/resultsCsv.js): shared CSV formatting for live and saved results
+- [frontend/src/context/AuthContext.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/context/AuthContext.jsx): This is the frontend's "who is signed in?" layer. It remembers the current user and token, restores them when the page reloads, and gives the rest of the app simple helpers like login, logout, and current-user checks.
+- [frontend/src/components/Auth/ProtectedRoute.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/Auth/ProtectedRoute.jsx): This is the guard in front of protected pages. When a user tries to open Trial, Results, Admin, or other protected routes, this component decides whether to let them in or send them back to the login flow.
+- [frontend/src/utilities/api.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/api.js): This file is the shared frontend-to-backend bridge. Instead of every component building its own fetch or axios calls, they use these helpers so token headers, backend URLs, and error formatting stay consistent everywhere.
+- [frontend/src/components/TestManager/TestManager.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/TestManager/TestManager.jsx): This is the main working screen for experiments. It renders the form for test settings, starts and stops runs, shows time remaining and counts, lets the operator prime the pump, and handles saving or loading presets.
+- [frontend/src/components/ResultsList/ResultsList.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/ResultsList/ResultsList.jsx): This screen asks the backend for saved runs and turns them into something the user can read or export. If someone wants to understand how results show up in the UI, this is the first place to look.
+- [frontend/src/components/PresetManager/preset_manager.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/PresetManager/preset_manager.jsx): This is the UI for saved experiment templates. It lets a user review previously saved settings, reuse them later, and manage presets without retyping the same test values every time.
+- [frontend/src/components/Admin/AdminPanel.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/Admin/AdminPanel.jsx): This is the approval and access-control screen for administrators. It loads pending users from the backend and gives admins buttons to approve or disable accounts.
+- [frontend/src/components/IoTestingGrid/IoTestingGrid.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/IoTestingGrid/IoTestingGrid.jsx): This is a simpler diagnostic view for hardware signals and counts. It is useful when you want to confirm that inputs like lever presses or nose pokes are being seen by the system.
+- [frontend/src/utilities/presets.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/presets.js): This utility helps translate preset data into the shape the UI and backend expect. It also carries forward older preset formats so people do not lose saved settings when the app structure changes.
+- [frontend/src/utilities/resultsCsv.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/resultsCsv.js): This utility builds the CSV output for downloads. Keeping that formatting in one place makes it easier to keep live-run exports and saved-result exports consistent.
 
 ### Backend structure
 
@@ -122,17 +126,17 @@ The backend entry point is [backend/sbBackend.py](/Users/egweinberg/Documents/sk
 
 Main backend modules:
 
-- [backend/sbBackend.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/sbBackend.py): Flask routes plus the core classes below
-- `TestConfiguration`: validates and normalizes incoming trial settings
-- `SQLiteTestRepository`: owns SQLite reads, writes, and schema upgrades for test data
-- `SkinnerHardware`: maps high-level actions like pump, stimulus, buzzer, status LEDs, and OLED updates to the adapters
-- `TestSessionManager`: owns configure/start/pause/resume/finish behavior, timer state, counts, pump priming rules, end chime logic, and status payloads
-- [backend/auth.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/auth.py): user accounts, password checks, bearer tokens, admin approvals, and auth persistence
-- [backend/shared_errors.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/shared_errors.py): predictable API error types and payload shapes for frontend consumption
-- [backend/gpio_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/gpio_adapter.py): auto/mock/real GPIO abstraction for laptop vs Raspberry Pi
-- [backend/display_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/display_adapter.py): auto/mock/real OLED abstraction
-- [backend/reset_admin.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/reset_admin.py): local bootstrap for admin access
-- [backend/tests/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/tests): backend integration and hardware-abstraction regression coverage
+- [backend/sbBackend.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/sbBackend.py): This is the main backend application file. It defines the Flask app, exposes the HTTP routes the frontend calls, and wires together the classes that manage tests, hardware, persistence, and error handling.
+- `TestConfiguration`: This class takes raw form data from the frontend and turns it into a clean, consistent configuration object. It is where values are checked, defaults are applied, and field names are normalized so the rest of the backend can trust what it receives.
+- `SQLiteTestRepository`: This class is the database layer for experiment data. It knows how to create or upgrade tables, save a configured test, update a running test, mark it finished, and load past results back out of SQLite.
+- `SkinnerHardware`: This class is the backend's hardware translator. The rest of the backend says things like "turn on the running LED" or "play the end chime," and this class converts those high-level requests into GPIO or OLED adapter calls.
+- `TestSessionManager`: This class is the heart of the experiment runtime. It remembers the current session in memory, starts and stops tests, keeps track of elapsed and remaining time, counts inputs, updates the database, and prepares the status JSON that the frontend polls.
+- [backend/auth.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/auth.py): This file contains the authentication system. It creates users, verifies passwords, issues or revokes bearer tokens, tracks approval state, and gives the backend a single place to manage network access.
+- [backend/shared_errors.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/shared_errors.py): This file defines the predictable error format shared with the frontend. Instead of returning random exceptions or vague messages, the backend can raise structured errors that React can show in a clear MUI alert.
+- [backend/gpio_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/gpio_adapter.py): This adapter makes the same backend code work on both a laptop and a Raspberry Pi. In mock mode it creates fake hardware objects for testing, and in real mode it uses `gpiozero` devices on the Pi.
+- [backend/display_adapter.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/display_adapter.py): This does the same job for OLED displays that `gpio_adapter.py` does for GPIO. It lets the backend write display messages in one consistent way whether the current machine has real I2C OLED hardware or not.
+- [backend/reset_admin.py](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/reset_admin.py): This is the local recovery and bootstrap tool for administrators. If nobody can log in yet, this script is how you create or reset an approved admin account from the machine itself.
+- [backend/tests/](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/tests): This folder contains the backend regression tests. These tests simulate API calls, auth flows, GPIO behavior, OLED behavior, and trial execution so developers can catch regressions without needing the actual box connected.
 
 ### Where to make common changes
 
