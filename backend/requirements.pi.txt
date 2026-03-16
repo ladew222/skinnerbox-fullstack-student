@@ -1,5 +1,6 @@
 -r requirements.base.txt
 gpiozero==2.0.1
+gunicorn
 lgpio
 RPi.GPIO
 rpi-ws281x

@@ -520,7 +520,9 @@ sudo apt install -y liblgpio-dev liblgpio1 swig python3-dev build-essential
 On current Debian-based Raspberry Pi systems, this project uses `gpiozero` with
 the `lgpio` backend. The backend launcher now prefers
 `GPIOZERO_PIN_FACTORY=lgpio` automatically on a detected Raspberry Pi, and the
-bundled `systemd` service sets it explicitly.
+bundled `systemd` service sets it explicitly. The Pi backend launcher now uses
+Gunicorn by default with a single worker so the hardware control process stays
+predictable while moving off Flask's development server.
 
 Backend:
 
@@ -603,7 +605,7 @@ Then let the service serve that built output without rebuilding on boot.
 
 The updated launchers are designed for `systemd`:
 
-- [backend/run_backend.sh](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/run_backend.sh) activates the virtual environment, forces a single Flask process without the reloader, and writes logs to [logs/backend.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/backend.log) and [logs/backend.error.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/backend.error.log).
+- [backend/run_backend.sh](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/run_backend.sh) activates the virtual environment, starts Gunicorn with a single worker by default, and writes logs to [logs/backend.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/backend.log) and [logs/backend.error.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/backend.error.log).
 - [frontend/run_frontend.sh](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/run_frontend.sh) builds the frontend with same-origin `/api` requests by default, serves the built files through [frontend/server.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/server.js), proxies `/api/*` to the configured backend target, and writes logs to [logs/frontend.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/frontend.log) and [logs/frontend.error.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/frontend.error.log).
 
 Ready-to-copy unit files are included here:
@@ -626,6 +628,8 @@ WorkingDirectory=/home/ladew222/skinnerbox-fullstack-student/backend
 Environment=GPIO_MODE=auto
 Environment=OLED_MODE=auto
 Environment=GPIOZERO_PIN_FACTORY=lgpio
+Environment=BACKEND_SERVER=gunicorn
+Environment=GUNICORN_WORKERS=1
 Environment=FLASK_RUN_PORT=5000
 ExecStart=/bin/bash /home/ladew222/skinnerbox-fullstack-student/backend/run_backend.sh
 Restart=on-failure
@@ -660,6 +664,8 @@ WantedBy=multi-user.target
 ```
 
 These examples now assume the Pi user is `ladew222`. If your repository lives somewhere else, update the `WorkingDirectory=` and `ExecStart=` paths before enabling the services.
+
+If you ever need to fall back to Flask temporarily while developing, set `BACKEND_SERVER=flask` before running [backend/run_backend.sh](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/run_backend.sh) or in the service override.
 
 After copying those files into `/etc/systemd/system`, run:
 

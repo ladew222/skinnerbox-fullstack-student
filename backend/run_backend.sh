@@ -64,7 +64,27 @@ export FLASK_DEBUG=0
 export FLASK_APP="${FLASK_APP:-sbBackend.py}"
 export FLASK_RUN_HOST="${FLASK_RUN_HOST:-0.0.0.0}"
 export FLASK_RUN_PORT="${FLASK_RUN_PORT:-5000}"
+export BACKEND_SERVER="${BACKEND_SERVER:-gunicorn}"
+export GUNICORN_WORKERS="${GUNICORN_WORKERS:-1}"
+export GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-120}"
+export GUNICORN_THREADS="${GUNICORN_THREADS:-1}"
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Backend host=${FLASK_RUN_HOST} port=${FLASK_RUN_PORT} gpio=${GPIO_MODE} oled=${OLED_MODE} pin_factory=${GPIOZERO_PIN_FACTORY:-default}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Backend host=${FLASK_RUN_HOST} port=${FLASK_RUN_PORT} gpio=${GPIO_MODE} oled=${OLED_MODE} pin_factory=${GPIOZERO_PIN_FACTORY:-default} server=${BACKEND_SERVER}"
 
-exec flask run --no-debugger --no-reload
+if [ "${BACKEND_SERVER}" = "flask" ]; then
+  exec flask run --no-debugger --no-reload
+fi
+
+if ! command -v gunicorn >/dev/null 2>&1; then
+  echo "gunicorn is required for BACKEND_SERVER=${BACKEND_SERVER}. Install backend/requirements.pi.txt or set BACKEND_SERVER=flask."
+  exit 1
+fi
+
+exec gunicorn \
+  --workers "${GUNICORN_WORKERS}" \
+  --threads "${GUNICORN_THREADS}" \
+  --bind "${FLASK_RUN_HOST}:${FLASK_RUN_PORT}" \
+  --timeout "${GUNICORN_TIMEOUT}" \
+  --access-logfile - \
+  --error-logfile - \
+  sbBackend:app
