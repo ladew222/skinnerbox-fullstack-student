@@ -36,6 +36,28 @@ export PYTHONUNBUFFERED="${PYTHONUNBUFFERED:-1}"
 export GPIO_MODE="${GPIO_MODE:-auto}"
 export OLED_MODE="${OLED_MODE:-auto}"
 
+looks_like_raspberry_pi() {
+  local model_file
+
+  for model_file in /sys/firmware/devicetree/base/model /proc/device-tree/model; do
+    if [ -r "${model_file}" ] && tr '[:upper:]' '[:lower:]' < "${model_file}" | grep -q "raspberry pi"; then
+      return 0
+    fi
+  done
+
+  if [ -r /proc/cpuinfo ] && grep -Eqi 'raspberry pi|bcm27|bcm28' /proc/cpuinfo; then
+    return 0
+  fi
+
+  return 1
+}
+
+# On Debian-based Raspberry Pi installs, gpiozero is most reliable when the
+# lgpio pin factory is selected explicitly. Keep laptop/mock runs untouched.
+if [ "${GPIO_MODE}" != "mock" ] && [ -z "${GPIOZERO_PIN_FACTORY:-}" ] && looks_like_raspberry_pi; then
+  export GPIOZERO_PIN_FACTORY=lgpio
+fi
+
 # Disable Flask debug/reload behavior so GPIO and background threads do not
 # start twice when the script is used by systemd.
 export FLASK_DEBUG=0
@@ -43,6 +65,6 @@ export FLASK_APP="${FLASK_APP:-sbBackend.py}"
 export FLASK_RUN_HOST="${FLASK_RUN_HOST:-0.0.0.0}"
 export FLASK_RUN_PORT="${FLASK_RUN_PORT:-5000}"
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Backend host=${FLASK_RUN_HOST} port=${FLASK_RUN_PORT} gpio=${GPIO_MODE} oled=${OLED_MODE}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Backend host=${FLASK_RUN_HOST} port=${FLASK_RUN_PORT} gpio=${GPIO_MODE} oled=${OLED_MODE} pin_factory=${GPIOZERO_PIN_FACTORY:-default}"
 
 exec flask run --no-debugger --no-reload

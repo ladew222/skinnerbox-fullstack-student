@@ -510,12 +510,25 @@ Notes:
 
 ### Native Pi run
 
+Install the Raspberry Pi system packages that the GPIO/OLED stack expects first:
+
+```bash
+sudo apt update
+sudo apt install -y liblgpio-dev liblgpio1 swig python3-dev build-essential
+```
+
+On current Debian-based Raspberry Pi systems, this project uses `gpiozero` with
+the `lgpio` backend. The backend launcher now prefers
+`GPIOZERO_PIN_FACTORY=lgpio` automatically on a detected Raspberry Pi, and the
+bundled `systemd` service sets it explicitly.
+
 Backend:
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
+pip install --upgrade pip
 pip install -r requirements.pi.txt
 GPIO_MODE=auto OLED_MODE=auto ./run_backend.sh
 ```
@@ -612,6 +625,7 @@ User=ladew222
 WorkingDirectory=/home/ladew222/skinnerbox-fullstack-student/backend
 Environment=GPIO_MODE=auto
 Environment=OLED_MODE=auto
+Environment=GPIOZERO_PIN_FACTORY=lgpio
 Environment=FLASK_RUN_PORT=5000
 ExecStart=/bin/bash /home/ladew222/skinnerbox-fullstack-student/backend/run_backend.sh
 Restart=on-failure
