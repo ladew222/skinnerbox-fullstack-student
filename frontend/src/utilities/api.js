@@ -1,7 +1,6 @@
 import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_BACKEND_URL || '';
-const AUTH_TOKEN_STORAGE_KEY = 'skinnerbox.authToken';
 const AUTH_USER_STORAGE_KEY = 'skinnerbox.authUser';
 export const AUTH_INVALID_EVENT_NAME = 'skinnerbox-auth-invalid';
 
@@ -10,44 +9,26 @@ const getLegacyLocalStorage = () => window.localStorage;
 
 const migrateLegacyAuthStorageIfNeeded = () => {
   const sessionStorage = getSessionStorage();
-  if (sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || sessionStorage.getItem(AUTH_USER_STORAGE_KEY)) {
+  if (sessionStorage.getItem(AUTH_USER_STORAGE_KEY)) {
     return;
   }
 
   const legacyStorage = getLegacyLocalStorage();
-  const legacyToken = legacyStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
   const legacyUser = legacyStorage.getItem(AUTH_USER_STORAGE_KEY);
-
-  if (legacyToken) {
-    sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, legacyToken);
-    legacyStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-  }
 
   if (legacyUser) {
     sessionStorage.setItem(AUTH_USER_STORAGE_KEY, legacyUser);
     legacyStorage.removeItem(AUTH_USER_STORAGE_KEY);
   }
+
+  sessionStorage.removeItem('skinnerbox.authToken');
+  legacyStorage.removeItem('skinnerbox.authToken');
 };
 
 // Shared axios client so every request uses the same base URL and auth behavior.
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-});
-
-// Attach the saved bearer token to every authenticated API request automatically.
-apiClient.interceptors.request.use((config) => {
-  const token = getStoredAuthToken();
-  if (!token) {
-    return config;
-  }
-
-  return {
-    ...config,
-    headers: {
-      ...config.headers,
-      Authorization: `Bearer ${token}`,
-    },
-  };
+  withCredentials: true,
 });
 
 const AUTH_FAILURE_CODES = new Set([
@@ -68,11 +49,6 @@ const maybeDispatchAuthInvalid = (normalizedError) => {
   }
 };
 
-export const getStoredAuthToken = () => {
-  migrateLegacyAuthStorageIfNeeded();
-  return getSessionStorage().getItem(AUTH_TOKEN_STORAGE_KEY) || '';
-};
-
 export const getStoredAuthUser = () => {
   migrateLegacyAuthStorageIfNeeded();
   const rawUser = getSessionStorage().getItem(AUTH_USER_STORAGE_KEY);
@@ -88,19 +64,23 @@ export const getStoredAuthUser = () => {
   }
 };
 
-export const storeAuthSession = ({ token, user }) => {
+export const storeAuthSession = ({ user }) => {
   const sessionStorage = getSessionStorage();
-  sessionStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
-  sessionStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
-  getLegacyLocalStorage().removeItem(AUTH_TOKEN_STORAGE_KEY);
+  if (user) {
+    sessionStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
+  } else {
+    sessionStorage.removeItem(AUTH_USER_STORAGE_KEY);
+  }
   getLegacyLocalStorage().removeItem(AUTH_USER_STORAGE_KEY);
+  sessionStorage.removeItem('skinnerbox.authToken');
+  getLegacyLocalStorage().removeItem('skinnerbox.authToken');
 };
 
 export const clearAuthSession = () => {
-  getSessionStorage().removeItem(AUTH_TOKEN_STORAGE_KEY);
   getSessionStorage().removeItem(AUTH_USER_STORAGE_KEY);
-  getLegacyLocalStorage().removeItem(AUTH_TOKEN_STORAGE_KEY);
+  getSessionStorage().removeItem('skinnerbox.authToken');
   getLegacyLocalStorage().removeItem(AUTH_USER_STORAGE_KEY);
+  getLegacyLocalStorage().removeItem('skinnerbox.authToken');
 };
 
 const normalizeApiError = (error, fallbackCode, fallbackMessage) => {

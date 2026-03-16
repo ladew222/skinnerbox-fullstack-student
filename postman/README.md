@@ -19,6 +19,7 @@ Use this request order for a full validation run:
 10. `Get Counts`
 11. `Get Test Status`
 12. `Get Results`
+13. `Logout Operator`
 
 Default environment values assume:
 
@@ -33,6 +34,17 @@ If your backend is not running on port `5000`, open the `SkinnerBox Local` envir
 - `http://192.168.1.50:5001`
 
 You can change the operator email/password and the trial parameters directly in the Postman environment as well.
+
+This collection now uses the normal cookie-session flow:
+
+- `Login Default Admin` stores the admin session in Postman's cookie jar automatically
+- `Login Approved Operator` replaces that cookie with the operator session, which is expected for a single Postman environment on one host
+- the remaining trial requests use that operator cookie automatically
+- no `Authorization: Bearer ...` header is needed for the standard collection flow
+
+If you open Postman's cookie viewer for your `baseUrl`, you should see the `skinnerbox_session` cookie after a successful login.
+
+The backend still accepts bearer headers for internal scripts and compatibility tests, but the standard Postman collection no longer depends on them.
 
 The current Postman trial payload also includes:
 

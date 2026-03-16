@@ -4,7 +4,6 @@ import {
   AUTH_INVALID_EVENT_NAME,
   clearAuthSession,
   getCurrentUser,
-  getStoredAuthToken,
   getStoredAuthUser,
   loginUser,
   logoutUser,
@@ -17,26 +16,21 @@ const AuthContext = createContext(null);
 
 
 export const AuthProvider = ({ children }) => {
-  // Load any saved browser session first so refreshes stay logged in when the token is valid.
+  // Load the last known user quickly, then verify the real cookie-backed session with /me.
   const [user, setUser] = useState(() => getStoredAuthUser());
-  const [isLoading, setIsLoading] = useState(() => Boolean(getStoredAuthToken()));
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
 
     const restoreSession = async () => {
-      const token = getStoredAuthToken();
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
-
       try {
         const response = await getCurrentUser();
         if (!isMounted) {
           return;
         }
         setUser(response.user);
+        storeAuthSession({ user: response.user });
       } catch (error) {
         if (!isMounted) {
           return;
@@ -74,7 +68,6 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     const response = await loginUser(credentials);
     storeAuthSession({
-      token: response.token,
       user: response.user,
     });
     setUser(response.user);
@@ -96,7 +89,6 @@ export const AuthProvider = ({ children }) => {
     const response = await getCurrentUser();
     setUser(response.user);
     storeAuthSession({
-      token: getStoredAuthToken(),
       user: response.user,
     });
     return response.user;
@@ -105,7 +97,7 @@ export const AuthProvider = ({ children }) => {
   const contextValue = {
     user,
     isLoading,
-    isAuthenticated: Boolean(user && getStoredAuthToken()),
+    isAuthenticated: Boolean(user),
     isAdmin: user?.role === 'admin',
     login,
     logout,

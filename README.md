@@ -57,7 +57,7 @@ backend/
   sbBackend.py           Main Flask app and backend logic
   gpio_adapter.py        Mock-vs-real GPIO selection
   display_adapter.py     Mock-vs-real OLED status display selection
-  auth.py                User accounts, login tokens, admin approvals
+  auth.py                User accounts, session/token records, admin approvals
   reset_admin.py         Local admin create/reset script
   run_backend.sh         Backend launcher with auto GPIO mode
   requirements.txt       Dev/laptop Python dependencies
@@ -125,9 +125,9 @@ The frontend entry point is [frontend/src/components/App/App.js](/Users/egweinbe
 
 Main frontend modules:
 
-- [frontend/src/context/AuthContext.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/context/AuthContext.jsx): This is the frontend's shared "who is signed in right now?" helper. It remembers the current user and token, restores them when the page reloads, and gives the rest of the app simple helpers like login, logout, and current-user checks. In plain terms, this is how pages avoid each one separately tracking authentication. A page can ask AuthContext "do we have a logged-in user?" or "who is the current user?" instead of building that logic from scratch.
+- [frontend/src/context/AuthContext.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/context/AuthContext.jsx): This is the frontend's shared "who is signed in right now?" helper. It remembers the current user snapshot, asks the backend to restore the real session from the auth cookie, and gives the rest of the app simple helpers like login, logout, and current-user checks. In plain terms, this is how pages avoid each one separately tracking authentication. A page can ask AuthContext "do we have a logged-in user?" or "who is the current user?" instead of building that logic from scratch.
 - [frontend/src/components/Auth/ProtectedRoute.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/Auth/ProtectedRoute.jsx): This is the guard in front of protected pages. When a user tries to open Trial, Results, Admin, or other protected routes, this component checks the shared auth state from AuthContext and decides whether to let them in or send them back to the login flow. You can think of it like a checkpoint at the door that asks, "is this user signed in, and are they allowed to be here?"
-- [frontend/src/utilities/api.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/api.js): This file is the shared frontend-to-backend bridge. Instead of every component building its own fetch or axios calls, they use these helpers so token headers, backend URLs, and error formatting stay consistent everywhere.
+- [frontend/src/utilities/api.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/utilities/api.js): This file is the shared frontend-to-backend bridge. Instead of every component building its own fetch or axios calls, they use these helpers so auth cookies, backend URLs, and error formatting stay consistent everywhere.
 - [frontend/src/components/TestManager/TestManager.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/TestManager/TestManager.jsx): This is the main working screen for experiments. It renders the form for test settings, starts and stops runs, shows time remaining and counts, lets the operator prime the pump, and handles saving or loading presets.
 - [frontend/src/components/ResultsList/ResultsList.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/ResultsList/ResultsList.jsx): This screen asks the backend for saved runs and turns them into something the user can read or export. If someone wants to understand how results show up in the UI, this is the first place to look.
 - [frontend/src/components/PresetManager/preset_manager.jsx](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/src/components/PresetManager/preset_manager.jsx): This is the UI for saved experiment templates. It lets a user review previously saved settings, reuse them later, and manage presets without retyping the same test values every time.
@@ -409,7 +409,9 @@ The app is designed to be reachable on your network, so test control and results
 
 - registration creates a `pending` account in SQLite
 - an approved admin must grant access before that user can log in
-- login returns a bearer token that the React frontend stores locally and sends on API requests
+- login sets an auth session cookie and the React frontend restores the signed-in user from `/api/auth/me`
+- Postman can use the same cookie session flow through its built-in cookie jar
+- the backend still accepts `Authorization: Bearer ...` for internal scripts and compatibility helpers if you already have a token from a non-browser path
 - protected pages include Trial, Results, I/O Config, Preset Manager, and Admin
 - presets are saved per approved user account and are available from both Trial and Preset Manager after sign-in
 

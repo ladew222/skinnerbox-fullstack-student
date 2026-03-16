@@ -2,13 +2,13 @@
   "info": {
     "_postman_id": "5c6018fd-0b31-480c-b3f5-5774bf57d2f8",
     "name": "SkinnerBox Auth And Trial Simulation",
-    "description": "Import this collection with the matching local environment to validate login, admin approval, trial start, simulated lever presses, end-chime trial settings, counts, status, and saved results against the Flask backend.",
+    "description": "Import this collection with the matching local environment to validate login, admin approval, trial start, simulated lever presses, end-chime trial settings, counts, status, and saved results against the backend. The normal flow now uses Postman's cookie jar instead of manually storing bearer tokens.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
       "name": "Setup And Auth",
-      "description": "Use these requests in order to sign in as the validation admin, register an operator account, approve it, and sign in as the approved operator.",
+      "description": "Use these requests in order to sign in as the validation admin, register an operator account, approve it, and sign in as the approved operator. Postman keeps the active auth session in its cookie jar automatically.",
       "item": [
         {
           "name": "Health Check",
@@ -51,7 +51,7 @@
               }
             },
             "url": "{{baseUrl}}/api/auth/login",
-            "description": "Stores the returned admin bearer token in the active Postman environment as `authToken`."
+            "description": "Signs in as the validation admin. Postman stores the returned `skinnerbox_session` cookie automatically for later admin requests."
           },
           "event": [
             {
@@ -63,7 +63,9 @@
                   "  pm.response.to.have.status(200);",
                   "});",
                   "const data = pm.response.json();",
-                  "pm.environment.set('authToken', data.token);"
+                  "pm.test('Admin login returns a user payload', function () {",
+                  "  pm.expect(data.user.email).to.eql(pm.environment.get('adminEmail'));",
+                  "});"
                 ]
               }
             }
@@ -109,12 +111,7 @@
           "name": "List Users And Cache Operator Id",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{authToken}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/auth/admin/users",
             "description": "Finds the operator account by email and stores its id as `pendingUserId` for the approval request."
           },
@@ -146,10 +143,6 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{authToken}}"
-              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
@@ -201,7 +194,7 @@
               }
             },
             "url": "{{baseUrl}}/api/auth/login",
-            "description": "Stores the approved operator bearer token in the active Postman environment as `operatorToken`."
+            "description": "Signs in as the approved operator. This replaces the admin cookie with the operator session, which is expected for a single Postman environment on one host."
           },
           "event": [
             {
@@ -213,7 +206,9 @@
                   "  pm.response.to.have.status(200);",
                   "});",
                   "const data = pm.response.json();",
-                  "pm.environment.set('operatorToken', data.token);"
+                  "pm.test('Operator login returns a user payload', function () {",
+                  "  pm.expect(data.user.email).to.eql(pm.environment.get('operatorEmail'));",
+                  "});"
                 ]
               }
             }
@@ -223,12 +218,7 @@
           "name": "Current Operator User",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{operatorToken}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/auth/me"
           },
           "event": [
@@ -249,17 +239,13 @@
     },
     {
       "name": "Trial Simulation",
-      "description": "These requests use the approved operator token to configure a trial, start it, simulate lever presses, and inspect counts and saved results. If the backend is running on a Pi with OLED support enabled, the same flow also drives the live OLED waiting/running screens.",
+      "description": "These requests use the approved operator cookie session to configure a trial, start it, simulate lever presses, and inspect counts and saved results. If the backend is running on a Pi with OLED support enabled, the same flow also drives the live OLED waiting/running screens.",
       "item": [
         {
           "name": "Save Trial Configuration",
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{operatorToken}}"
-              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
@@ -295,12 +281,7 @@
           "name": "Start Trial",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{operatorToken}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/test/run",
             "description": "Starts the active trial that was saved in the previous request."
           },
@@ -322,12 +303,7 @@
           "name": "Simulate Lever Press",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{operatorToken}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/input/lever",
             "description": "Send this request repeatedly to simulate lever presses. With the default environment values, send it three times to finish the trial."
           },
@@ -349,12 +325,7 @@
           "name": "Simulate Nose Poke",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{operatorToken}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/input/nosepoke",
             "description": "Optional helper if you want to validate a poke-based or mixed interaction sequence."
           },
@@ -376,12 +347,7 @@
           "name": "Get Counts",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{operatorToken}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/counts",
             "description": "Use this after simulated presses to see the current lever and nose-poke counters."
           },
@@ -403,12 +369,7 @@
           "name": "Get Test Status",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{operatorToken}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/test/status",
             "description": "Once the valid interaction goal is reached, this response should show `testFinished: true`."
           },
@@ -430,12 +391,7 @@
           "name": "Get Results",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{operatorToken}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/results",
             "description": "Use this after the trial finishes to inspect the saved result row, including lever count, reward count, and end-chime metadata."
           },
@@ -464,25 +420,7 @@
           "name": "Logout Operator",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{operatorToken}}"
-              }
-            ],
-            "url": "{{baseUrl}}/api/auth/logout"
-          }
-        },
-        {
-          "name": "Logout Admin",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{authToken}}"
-              }
-            ],
+            "header": [],
             "url": "{{baseUrl}}/api/auth/logout"
           }
         }

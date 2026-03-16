@@ -9,14 +9,24 @@ beforeEach(() => {
   jest.clearAllMocks();
   axios.get.mockImplementation((url) => {
     if (url === '/api/auth/me') {
+      const storedUser = sessionStorage.getItem('skinnerbox.authUser');
+      if (!storedUser) {
+        return Promise.reject({
+          response: {
+            status: 401,
+            data: {
+              error: {
+                code: 'AUTH_REQUIRED',
+                message: 'Sign in to access this part of the system.',
+              },
+            },
+          },
+        });
+      }
+
       return Promise.resolve({
         data: {
-          user: {
-            id: 1,
-            email: 'operator@example.com',
-            displayName: 'Operator User',
-            role: 'operator',
-          },
+          user: JSON.parse(storedUser),
         },
       });
     }
@@ -89,7 +99,6 @@ test('renders the hawk works about page', () => {
 });
 
 test('renders the trial setup for an authenticated operator', async () => {
-  sessionStorage.setItem('skinnerbox.authToken', 'test-token');
   sessionStorage.setItem(
     'skinnerbox.authUser',
     JSON.stringify({
@@ -112,7 +121,6 @@ test('renders the trial setup for an authenticated operator', async () => {
 });
 
 test('renders the real-time pump prime controls on the I/O config page', async () => {
-  sessionStorage.setItem('skinnerbox.authToken', 'test-token');
   sessionStorage.setItem(
     'skinnerbox.authUser',
     JSON.stringify({

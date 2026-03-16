@@ -27,6 +27,26 @@ DATABASE_FILE = Path(
     os.getenv("SKINNERBOX_DB_PATH", str(Path(__file__).with_name("testdatabase.db")))
 )
 DEFAULT_END_CHIME_PATTERN = "523:0.12,659:0.12,784:0.24"
+SESSION_COOKIE_NAME = os.getenv("SKINNERBOX_SESSION_COOKIE_NAME", "skinnerbox_session")
+SESSION_COOKIE_SECURE = os.getenv("SKINNERBOX_SESSION_COOKIE_SECURE", "0").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+SESSION_COOKIE_SAMESITE = os.getenv("SKINNERBOX_SESSION_COOKIE_SAMESITE", "Lax")
+SESSION_COOKIE_PATH = os.getenv("SKINNERBOX_SESSION_COOKIE_PATH", "/")
+SESSION_COOKIE_MAX_AGE_SECONDS = max(
+    int(os.getenv("SKINNERBOX_SESSION_COOKIE_MAX_AGE_SECONDS", str(60 * 60 * 12))),
+    1,
+)
+AUTH_COOKIE_CLEAR_ERROR_CODES = {
+    "AUTH_REQUIRED",
+    "INVALID_AUTH_TOKEN",
+    "AUTH_TOKEN_REVOKED",
+    "AUTH_TOKEN_EXPIRED",
+    "ACCOUNT_DISABLED",
+}
 
 
 @dataclass(slots=True)
@@ -3809,7 +3829,7 @@ def _describe_stimulus(stimulus_type: str, light_color: str) -> str:
 
 # Flask app and shared backend objects used by the current process.
 app = Flask(__name__)
-CORS(app)
+CORS(app, supports_credentials=True)
 
 repository = SQLiteTestRepository(DATABASE_FILE)
 auth_repository = SQLiteAuthRepository(DATABASE_FILE)
@@ -3826,7 +3846,10 @@ def handle_api_error(error: ApiError):
             hardware.signal_error(error.message)
         except ApiError:
             pass
-    return jsonify(error.to_payload()), error.status
+    response = jsonify(error.to_payload())
+    if error.code in AUTH_COOKIE_CLEAR_ERROR_CODES:
+        _clear_auth_session_cookie(response)
+    return response, error.status
 
 
 @app.errorhandler(Exception)
@@ -3868,11 +3891,43 @@ def index():
     return "Backend is running!"
 
 
-def _extract_bearer_token() -> str:
-    """Read the bearer token from the Authorization header for protected routes."""
+def _set_auth_session_cookie(response, token: str) -> None:
+    """Store the opaque auth token in an HttpOnly cookie."""
+
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        token,
+        max_age=SESSION_COOKIE_MAX_AGE_SECONDS,
+        httponly=True,
+        secure=SESSION_COOKIE_SECURE,
+        samesite=SESSION_COOKIE_SAMESITE,
+        path=SESSION_COOKIE_PATH,
+    )
+
+
+def _clear_auth_session_cookie(response) -> None:
+    """Remove the current auth cookie from the browser."""
+
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        "",
+        max_age=0,
+        expires=0,
+        httponly=True,
+        secure=SESSION_COOKIE_SECURE,
+        samesite=SESSION_COOKIE_SAMESITE,
+        path=SESSION_COOKIE_PATH,
+    )
+
+
+def _extract_auth_token() -> str:
+    """Read the current session token from the Authorization header or auth cookie."""
 
     authorization = request.headers.get("Authorization", "")
     if not authorization.startswith("Bearer "):
+        token = request.cookies.get(SESSION_COOKIE_NAME, "").strip()
+        if token:
+            return token
         raise ApiError(
             code="AUTH_REQUIRED",
             message="Sign in to access this part of the system.",
@@ -3890,12 +3945,12 @@ def _extract_bearer_token() -> str:
 
 
 def require_authenticated_user(*, admin_only: bool = False):
-    """Protect a Flask route by requiring a valid bearer token and optional admin role."""
+    """Protect a Flask route by requiring a valid session token and optional admin role."""
 
     def decorator(view_function):
         @wraps(view_function)
         def wrapped(*args, **kwargs):
-            token = _extract_bearer_token()
+            token = _extract_auth_token()
             current_user = auth_repository.get_user_for_token(token)
 
             if admin_only and current_user.role != "admin":
@@ -3934,28 +3989,32 @@ def register_user():
 
 @app.route("/api/auth/login", methods=["POST"])
 def login_user():
-    """Validate credentials and issue an opaque token for the frontend to store."""
+    """Validate credentials and set an HttpOnly session cookie for the browser."""
 
     payload = request.get_json(silent=True) or {}
     result = auth_repository.login_user(
         email=_coerce_text(payload.get("email"), "email", default=""),
         password=_coerce_text(payload.get("password"), "password", default=""),
     )
-    return jsonify(
+    response = jsonify(
         {
             "message": "Login successful.",
-            **result,
+            "user": result["user"],
         }
-    ), 200
+    )
+    _set_auth_session_cookie(response, result["token"])
+    return response, 200
 
 
 @app.route("/api/auth/logout", methods=["POST"])
 @require_authenticated_user()
 def logout_user():
-    """Revoke the current bearer token so the browser session is signed out."""
+    """Revoke the current session token and clear the browser cookie."""
 
     auth_repository.revoke_token(g.auth_token)
-    return jsonify({"message": "Logged out successfully."}), 200
+    response = jsonify({"message": "Logged out successfully."})
+    _clear_auth_session_cookie(response)
+    return response, 200
 
 
 @app.route("/api/auth/me", methods=["GET"])

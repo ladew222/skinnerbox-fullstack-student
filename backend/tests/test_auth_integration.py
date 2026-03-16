@@ -55,6 +55,9 @@ class AuthenticationIntegrationTest(unittest.TestCase):
         self.assertEqual(response.get_json()["error"]["code"], "AUTH_REQUIRED")
 
     def test_registered_user_must_be_approved_before_login(self):
+        admin_client = sbBackend.app.test_client()
+        approved_operator_client = sbBackend.app.test_client()
+
         register_response = self.client.post(
             "/api/auth/register",
             json={
@@ -84,7 +87,7 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             password="AdminPass123",
             display_name="Local Admin",
         )
-        admin_login_response = self.client.post(
+        admin_login_response = admin_client.post(
             "/api/auth/login",
             json={
                 "email": "admin@example.com",
@@ -92,25 +95,25 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(admin_login_response.status_code, 200)
-        admin_headers = {
-            "Authorization": f"Bearer {admin_login_response.get_json()['token']}",
-        }
+        self.assertIn(
+            f"{sbBackend.SESSION_COOKIE_NAME}=",
+            admin_login_response.headers.get("Set-Cookie", ""),
+        )
 
-        users_response = self.client.get("/api/auth/admin/users", headers=admin_headers)
+        users_response = admin_client.get("/api/auth/admin/users")
         self.assertEqual(users_response.status_code, 200)
         pending_user = next(
             user for user in users_response.get_json()["users"] if user["email"] == "student@example.com"
         )
 
-        approve_response = self.client.post(
+        approve_response = admin_client.post(
             f"/api/auth/admin/users/{pending_user['id']}/status",
             json={"status": "approved"},
-            headers=admin_headers,
         )
         self.assertEqual(approve_response.status_code, 200)
         self.assertEqual(approve_response.get_json()["user"]["status"], "approved")
 
-        approved_login_response = self.client.post(
+        approved_login_response = approved_operator_client.post(
             "/api/auth/login",
             json={
                 "email": "student@example.com",
@@ -118,17 +121,17 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(approved_login_response.status_code, 200)
-        self.assertIn("token", approved_login_response.get_json())
-
-        me_response = self.client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {approved_login_response.get_json()['token']}"},
+        self.assertIn(
+            f"{sbBackend.SESSION_COOKIE_NAME}=",
+            approved_login_response.headers.get("Set-Cookie", ""),
         )
+
+        me_response = approved_operator_client.get("/api/auth/me")
         self.assertEqual(me_response.status_code, 200)
         self.assertEqual(me_response.get_json()["user"]["email"], "student@example.com")
         self.assertEqual(admin_user.role, "admin")
 
-    def test_logout_revokes_the_current_bearer_token(self):
+    def test_logout_revokes_the_current_cookie_session(self):
         self.auth_repository.upsert_admin(
             email="admin@example.com",
             password="AdminPass123",
@@ -143,16 +146,17 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(login_response.status_code, 200)
-        auth_headers = {
-            "Authorization": f"Bearer {login_response.get_json()['token']}",
-        }
 
-        logout_response = self.client.post("/api/auth/logout", headers=auth_headers)
+        logout_response = self.client.post("/api/auth/logout")
         self.assertEqual(logout_response.status_code, 200)
+        self.assertIn(
+            f"{sbBackend.SESSION_COOKIE_NAME}=",
+            logout_response.headers.get("Set-Cookie", ""),
+        )
 
-        me_response = self.client.get("/api/auth/me", headers=auth_headers)
+        me_response = self.client.get("/api/auth/me")
         self.assertEqual(me_response.status_code, 401)
-        self.assertEqual(me_response.get_json()["error"]["code"], "AUTH_TOKEN_REVOKED")
+        self.assertEqual(me_response.get_json()["error"]["code"], "AUTH_REQUIRED")
 
     def test_upsert_admin_creates_an_approved_admin_account(self):
         admin_user = self.auth_repository.upsert_admin(
@@ -166,6 +170,9 @@ class AuthenticationIntegrationTest(unittest.TestCase):
         self.assertEqual(admin_user.status, "approved")
 
     def test_admin_can_reset_an_operator_password_and_revoke_old_sessions(self):
+        admin_client = sbBackend.app.test_client()
+        operator_client = sbBackend.app.test_client()
+
         admin_user = self.auth_repository.upsert_admin(
             email="admin@example.com",
             password="AdminPass123",
@@ -182,7 +189,7 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             acting_admin_user_id=admin_user.user_id,
         )
 
-        admin_login_response = self.client.post(
+        admin_login_response = admin_client.post(
             "/api/auth/login",
             json={
                 "email": "admin@example.com",
@@ -190,11 +197,8 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(admin_login_response.status_code, 200)
-        admin_headers = {
-            "Authorization": f"Bearer {admin_login_response.get_json()['token']}",
-        }
 
-        operator_login_response = self.client.post(
+        operator_login_response = operator_client.post(
             "/api/auth/login",
             json={
                 "email": "operator@example.com",
@@ -202,14 +206,10 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(operator_login_response.status_code, 200)
-        operator_headers = {
-            "Authorization": f"Bearer {operator_login_response.get_json()['token']}",
-        }
 
-        reset_response = self.client.post(
+        reset_response = admin_client.post(
             f"/api/auth/admin/users/{operator_user.user_id}/password",
             json={"password": "OperatorPass456"},
-            headers=admin_headers,
         )
         self.assertEqual(reset_response.status_code, 200)
         self.assertEqual(
@@ -230,7 +230,7 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             "INVALID_CREDENTIALS",
         )
 
-        revoked_session_response = self.client.get("/api/auth/me", headers=operator_headers)
+        revoked_session_response = operator_client.get("/api/auth/me")
         self.assertEqual(revoked_session_response.status_code, 401)
         self.assertEqual(
             revoked_session_response.get_json()["error"]["code"],
@@ -251,6 +251,9 @@ class AuthenticationIntegrationTest(unittest.TestCase):
         )
 
     def test_admin_can_delete_an_operator_account(self):
+        admin_client = sbBackend.app.test_client()
+        operator_client = sbBackend.app.test_client()
+
         admin_user = self.auth_repository.upsert_admin(
             email="admin@example.com",
             password="AdminPass123",
@@ -267,7 +270,7 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             acting_admin_user_id=admin_user.user_id,
         )
 
-        admin_login_response = self.client.post(
+        admin_login_response = admin_client.post(
             "/api/auth/login",
             json={
                 "email": "admin@example.com",
@@ -275,11 +278,8 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(admin_login_response.status_code, 200)
-        admin_headers = {
-            "Authorization": f"Bearer {admin_login_response.get_json()['token']}",
-        }
 
-        operator_login_response = self.client.post(
+        operator_login_response = operator_client.post(
             "/api/auth/login",
             json={
                 "email": "operator@example.com",
@@ -287,13 +287,9 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(operator_login_response.status_code, 200)
-        operator_headers = {
-            "Authorization": f"Bearer {operator_login_response.get_json()['token']}",
-        }
 
-        delete_response = self.client.delete(
+        delete_response = admin_client.delete(
             f"/api/auth/admin/users/{operator_user.user_id}",
-            headers=admin_headers,
         )
         self.assertEqual(delete_response.status_code, 200)
         self.assertEqual(
@@ -301,7 +297,7 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             "User account deleted successfully.",
         )
 
-        users_response = self.client.get("/api/auth/admin/users", headers=admin_headers)
+        users_response = admin_client.get("/api/auth/admin/users")
         self.assertEqual(users_response.status_code, 200)
         self.assertFalse(
             any(user["email"] == "operator@example.com" for user in users_response.get_json()["users"])
@@ -320,7 +316,7 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             "INVALID_CREDENTIALS",
         )
 
-        revoked_session_response = self.client.get("/api/auth/me", headers=operator_headers)
+        revoked_session_response = operator_client.get("/api/auth/me")
         self.assertEqual(revoked_session_response.status_code, 401)
         self.assertEqual(
             revoked_session_response.get_json()["error"]["code"],

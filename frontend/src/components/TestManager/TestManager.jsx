@@ -745,7 +745,6 @@ const handlePreset = (event) => {
         );
     }
 };
-  // TODO: Add cookies and sessions for the refresh and login
   // TODO: Determine why name is getting set to a number 
   
   return (
