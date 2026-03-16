@@ -74,18 +74,19 @@ frontend/
 
 ## User Manual
 
-If you want a screenshot-heavy user guide for operators, start with [docs/user-manual.md](/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/user-manual.md).
+If you want the operator-facing guide for using the app, start with [docs/user-manual.md](/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/user-manual.md).
 
-That manual is written as a structured template on purpose. It already includes:
+That guide focuses on:
 
-- section-by-section page explanations
-- beginner-friendly prompts for what each screen does
-- screenshot placeholders and screenshot naming suggestions
-- a Playwright-based screenshot workflow for generating a consistent first pass of manual images
-- parameter explanation sections for Trial setup
-- demo-data, startup, and troubleshooting sections
+- signing in
+- using I/O Config
+- running a trial
+- using presets
+- reviewing results and charts
+- using the Admin page
+- troubleshooting common user problems
 
-The idea is to use that file as the source of truth, then either keep it as Markdown in the repo or turn it into a polished PDF/manual later.
+If you are maintaining the screenshots or refreshing the manual assets, use [docs/manual-maintenance.md](/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/manual-maintenance.md) instead.
 
 ## Developer Guide
 

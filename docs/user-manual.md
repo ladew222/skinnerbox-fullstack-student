@@ -1,450 +1,473 @@
-# SkinnerBox User Manual
+# SkinnerBox User Guide
 
-## Purpose
-This manual is the user-facing guide for the SkinnerBox system. It is meant to explain what each page does, how to use it, what the user should expect to happen, and what common mistakes to watch for.
+## What This Program Does
 
-This file is also the best place to build a screenshot-heavy manual over time. Each section below includes suggested screenshot slots and writing prompts so the manual stays consistent even as features evolve.
+SkinnerBox is used to run behavioral trials from a web interface. After a user signs in, they can:
 
-## How To Use This Manual
-- Read the short `Purpose` line at the top of each section first.
-- Follow the numbered steps in `How To Use It`.
-- Compare your screen to the `Suggested Screenshot` notes.
-- Use the `Common Issues` notes when something does not behave as expected.
+-   check hardware behavior in real time
+-   configure and run a trial
+-   save and reuse presets
+-   review completed trials
+-   export result data
 
-## Screenshot Style Guide
-Use one screenshot style throughout the manual so it feels consistent and easier to follow.
+The system is designed so that the backend controls the actual experiment timing, counting, reward delivery, and stop conditions. The web interface is where users set up, monitor, and review those runs.
 
-- Keep the browser window at a consistent size before taking screenshots.
-- Crop tightly around the feature being explained.
-- Use numbered callouts if one image supports a multi-step explanation.
-- Prefer one main idea per screenshot.
-- If a page is long, use two smaller screenshots instead of one giant one.
-- When possible, show the expected result after an action, not only the form before it.
+## Normal Workflow
 
-## Suggested Asset Structure
-If you want to keep images in the repo, use a folder like:
+Most users will use the program in this order:
 
-```text
-docs/assets/user-manual/
-```
+1.  Sign in with an approved account.
+2.  Open `I/O Config` to confirm the lever, nose poke, pump, light, and buzzer behave correctly.
+3.  Open `Run a Trial` and load a preset or enter trial values manually.
+4.  Start the trial and watch the live status during the run.
+5.  Open `Results` to review the saved session, compare runs, and export data.
 
-Suggested naming pattern:
+![Home page after sign-in](./assets/user-manual/generated/02-home-page.png)
 
-```text
-01-login-page.png
-02-admin-approval.png
-03-io-config-overview.png
-```
+## Signing In
 
-## Screenshot Automation
-If you want a consistent first draft of the screenshots, you can generate them with the Playwright-based capture script in the frontend.
+Use the sign-in page to access the protected parts of the system.
 
-### Best Use
-Use the automation for:
+### How To Sign In
 
-- consistent browser size
-- repeatable page-to-page capture
-- refreshed screenshots after UI changes
+1.  Open the login page.
+2.  Enter your approved email and password.
+3.  Select `Sign In`.
 
-Then manually keep, crop, annotate, or replace the screenshots you want in the final manual.
+If your account has not been approved yet, you will not be able to use the protected pages until an administrator approves access.
 
-### Before You Run It
-1. Start the backend.
-2. Start the frontend.
-3. Decide whether you want demo data in the screenshots.
-4. If you want seeded demo content, use the `--seed-demo` option.
-
-### Command
-```bash
-cd /Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend
-npm run screenshots:manual -- --seed-demo
-```
-
-### What It Captures
-The script saves a consistent set of page screenshots into:
-
-```text
-docs/assets/user-manual/generated/
-```
-
-It captures the major operator screens, including:
-
-- login
-- home
-- I/O Config
-- trial setup
-- preset manager
-- results overview
-- results detail
-- results timeline trends
-- admin
-- about
-
-It also writes a `manifest.json` file next to the screenshots so you can match each image to the right section of this manual.
-
-### Useful Options
-```bash
-npm run screenshots:manual -- --frontend-url=http://localhost:3001
-npm run screenshots:manual -- --email=admin@example.com --password=AdminPass123
-npm run screenshots:manual -- --output-dir=/custom/path
-npm run screenshots:manual -- --keep-existing
-```
-
-### Notes
-- The script assumes the app is already running.
-- It uses a local Chrome install by default. If Chrome lives somewhere unusual, set `PLAYWRIGHT_EXECUTABLE_PATH`.
-- The script is meant to give you a strong starting set, not the final polished manual by itself.
-
-## Quick Start
-### Purpose
-This section should help a new user get from startup to a successful test run as quickly as possible.
-
-### How To Use It
-1. Start the backend and frontend.
-2. Sign in with an approved account.
-3. Open `I/O Config` and confirm hardware is responding.
-4. Open `Run a Trial`, load a preset or enter values manually.
-5. Start the test and watch the live counters.
-6. Open `Results` to review the saved run and export data.
-
-### Suggested Screenshot
-- Home page after login, with the main navigation visible.
-
-![Home page after sign-in](assets/user-manual/generated/02-home-page.png)
+![Login page](./assets/user-manual/generated/01-login-page.png)
 
 ### What To Expect
-- Users should be able to move from login to trial setup without needing Postman or direct backend access.
 
-### Common Issues
-- Backend not running or frontend pointed at the wrong backend port.
-- User account not approved yet.
+-   Approved users can open the trial, results, preset, and I/O pages.
+-   Administrators can also open the Admin page.
 
-## Logging In
-### Purpose
-Explain how users sign in and what approval means.
+### Common Problems
 
-### How To Use It
-1. Open the sign-in page.
-2. Enter the approved email and password.
-3. Select `Sign In`.
-4. If the account is pending, wait for an administrator to approve access.
+-   Wrong password
+-   Account still waiting for approval
+-   Backend not reachable
 
-### Suggested Screenshot
-- Login page with the email/password fields and the main action buttons.
+## Administrator Workflow
 
-![Login page](assets/user-manual/generated/01-login-page.png)
+Some actions in the system can only be handled by an administrator. This matters because a normal user may need admin help before they can use the system fully.
 
-### What To Expect
-- Approved users are taken into the app.
-- Pending users should see a message that they need approval before using the system.
+Administrators are responsible for:
 
-### Common Issues
-- Wrong password.
-- Pending account not yet approved.
-- Backend unavailable.
+-   approving newly registered users
+-   resetting passwords for users who cannot sign in
+-   disabling access when a user should no longer use the system
+-   deleting non-admin accounts when permanent removal is needed
+-   deleting saved trials from `Results` when cleanup is required
+
+### Typical Admin Workflow
+
+1.  Sign in with an administrator account.
+2.  Open the `Admin` page.
+3.  Review any pending users and approve the people who should be allowed into the system.
+4.  Help users who forgot their password by using `Reset Password`.
+5.  Disable or delete user access if a person should no longer use the system.
+6.  Open `Results` as an admin if saved trial cleanup is needed.
+
+### What Non-Admin Users Need To Know
+
+If you are not an administrator, you may need admin help when:
+
+-   your account is still pending
+-   you forgot your password
+-   you need a user account changed or removed
+-   saved trial data needs to be deleted
 
 ## Home Page
-### Purpose
-Explain the landing page and where users should go next.
 
-### How To Use It
-1. Read the short overview of what the system does.
-2. Use the navigation to move to `I/O Config`, `Run a Trial`, `Results`, or `Preset Manager`.
+The Home page is the landing page for the app. It explains the purpose of the system and gives users a clear place to start.
 
-### Suggested Screenshot
-- Full home page hero area and the section that explains the normal workflow.
+Use it to:
 
-![Home landing page](assets/user-manual/generated/02-home-page.png)
+-   understand the overall workflow
+-   move to the main pages of the system
+-   quickly reach `I/O Config`, `Run a Trial`, `Results`, or `About Us`
 
-### What To Expect
-- The home page should act like a welcome page and directional guide, not a control panel.
-
-### Common Issues
-- Users may not know whether to start on `I/O Config` or `Run a Trial`; this section should explain that `I/O Config` is for setup/testing and `Run a Trial` is for the actual experiment.
+![Home landing page](./assets/user-manual/generated/02-home-page.png)
 
 ## I/O Config
-### Purpose
-Explain the hardware and maintenance page. This is where users verify that the box hardware responds correctly and where default maintenance values are adjusted.
 
-### What This Page Does
-- Shows current hardware counts like lever presses and nose pokes.
-- Lets the user manually run the pump for a set number of milliseconds.
-- Lets the user adjust and save the default pump calibration value used during reward delivery.
-- Lets the user adjust the lever debounce setting.
-- Lets the user decide whether a lever must be released before another count is accepted.
-- Provides real-time test actions like buzzer testing and other hardware checks.
+`I/O Config` is the page used to check and adjust live hardware behavior before a trial starts.
 
-### How To Use It
-1. Open `I/O Config`.
-2. Review the current default values shown on the page.
-3. Use `Manual Run Pump` when testing the pump line.
-4. Update `Pump Calibration` if the default reward pulse needs to change.
-5. Update `Lever Debounce` if the lever is overcounting or undercounting.
-6. Turn on the lever release requirement if a new count should only happen after a release.
-7. Use the baseline reset buttons to measure fresh lever or nose-poke activity from the current moment.
+Use this page when you want to:
 
-### Suggested Screenshots
-- Full I/O Config page overview.
-- Maintenance settings area with current values visible.
-- Lever and nose-poke baseline section.
-- Pump and buzzer controls.
+-   confirm that lever presses are being counted
+-   confirm that nose pokes are being counted
+-   manually run the pump
+-   test the stimulus light
+-   play the buzzer test
+-   review or change the current pump calibration value
+-   review or change the lever debounce value
+-   decide whether the lever must be released before another count can happen
 
-![I/O Config page](assets/user-manual/generated/03-io-config-page.png)
+![I/O Config page](./assets/user-manual/generated/03-io-config-page.png)
 
-### What To Expect
-- Manual hardware actions should happen right away.
-- Baseline reset buttons should only reset the local `since baseline` counters on the page.
-- Saved maintenance values should remain available after refresh or restart.
+### Interaction Counts
 
-### Common Issues
-- Confusing live totals with `since baseline` counters.
-- Expecting a baseline reset to clear backend totals.
-- Forgetting to save a new default after testing a new value.
+The counts section shows the current total lever presses and nose pokes seen by the backend.
+
+It also shows:
+
+-   `Lever Presses Since Baseline`
+-   `Nose Pokes Since Baseline`
+
+These `since baseline` values are only local measuring helpers for the page. They do not erase the real backend totals.
+
+### Reset Lever Baseline
+
+Use this when you want to start measuring fresh lever activity from the current moment.
+
+This is useful when:
+
+-   you are testing the lever after making an adjustment
+-   you want to see whether one physical hit is being counted once or more than once
+
+### Reset Nose Poke Baseline
+
+Use this when you want to start measuring fresh nose-poke activity from the current moment.
+
+This is useful when:
+
+-   you are checking whether the nose-poke sensor is triggering consistently
+-   you want to compare activity before and after a sensor adjustment
+
+### Manual Run Pump
+
+Use this to run the pump immediately for a one-time pulse in milliseconds.
+
+This is for live checking only. It does not change the saved default used during trials.
+
+### Pump Calibration
+
+This is the saved default pump pulse used for water reward delivery during trials.
+
+Use this section when:
+
+-   the water reward pulse needs to be increased or decreased
+-   you want to confirm the current default value being used by the system
+
+### Lever Debounce
+
+Debounce helps prevent one physical lever hit from being counted multiple times because of very fast switch bounce.
+
+Increase this value if:
+
+-   one hit is being counted more than once
+
+Decrease it carefully only if:
+
+-   valid hits are being missed
+
+### Require Lever Release Before A New Count
+
+Turn this on if a new lever count should only happen after the lever has been released.
+
+This is stricter than debounce alone and is helpful when:
+
+-   a held lever should not keep generating extra counts
+-   you want a full press-and-release cycle before another valid press can be recorded
+
+### Common Problems
+
+-   Confusing total counts with `since baseline` counts
+-   Expecting a baseline reset to erase backend totals
+-   Forgetting to save a new default after testing a better value
 
 ## Run A Trial
-### Purpose
-Explain how to configure and start an actual behavioral test.
 
-### What This Page Does
-- Collects the trial configuration.
-- Loads presets.
-- Starts, pauses, resumes, stops, or finishes a test.
-- Shows live status such as counts, elapsed time, and time remaining.
-- Can play a browser notification sound when the test completes.
+`Run a Trial` is where the actual experiment is configured and started.
 
-### Parameter Guide
-Use this section to explain the fields in plain language for beginners.
+Use this page to:
+
+-   load a preset
+-   enter trial values manually
+-   start a trial
+-   pause, resume, stop, or finish a trial
+-   watch the live trial state while it is running
+
+![Trial configuration page](./assets/user-manual/generated/04-trial-page.png)
+
+### Main Trial Fields
 
 #### Test Name
-This is the label used to identify the run later in Results. It should be descriptive enough that someone can recognize the run without opening it.
+
+This is the name that will appear later in Results. Use a clear name that helps identify the session.
 
 #### Subject ID
-This is optional. Use it when you want to associate the test with a specific animal or subject. Leave it blank when subject tracking is not being used.
+
+This is optional. Use it if you want to associate the trial with a specific subject. Leave it blank if subject tracking is not being used.
 
 #### Trial Duration
-This is the total amount of time the test is allowed to run. The backend uses this value to determine when the test should end if it has not already ended by reaching its goal.
 
-#### Goal For Trial
-This is the number of required interactions before the system counts that portion of the task as complete and moves toward reward delivery.
+This is the total amount of time the trial is allowed to run.
 
-#### Goal For Test
-This is the overall goal for the session. It must make sense relative to the trial goal, because the full test should not end before a trial can complete.
+#### Responses Needed For Each Reward
+
+This is the number of valid responses needed before the system gives a reward for that cycle.
+
+#### Total Valid Responses Before Finish
+
+This is the overall response goal for the session. When the session reaches this amount, the test can complete.
+
+#### Delay After Reward Before Next Cycle
+
+This is the wait time after reward delivery before the next cycle begins.
+
+#### Stimulus On Time
+
+This is how long the selected stimulus stays active during each cycle.
 
 #### Reward Type
-This is currently fixed to water. Users should not expect food delivery as an active option right now.
+
+Reward type is currently fixed to water.
+
+#### Interaction Type
+
+This determines what kind of interaction the trial is looking for, such as lever-only or mixed interaction patterns if those are configured in the system.
 
 #### Stimulus Type
-This determines whether the box uses `Light`, `Tone`, or `Light + Tone` during the stimulus portion of the task.
 
-#### Reward Delay
-This is the time between a successful interaction goal and when the reward is actually delivered.
+This controls whether the trial uses:
 
-#### Stimulus Time
-This is how long the chosen stimulus stays active during each cycle.
-
-#### Cooldown
-This is stored with the test configuration. If the current backend behavior changes over time, this field may become more important, so the manual should describe how the live system is currently using it.
+-   `Light`
+-   `Tone`
+-   `Light + Tone`
 
 #### End Chime
-This simply tells the system whether the end-of-test chime should be active or inactive.
 
-### How To Use It
-1. Open `Run a Trial`.
-2. Load a preset or enter values manually.
-3. Review the form carefully before starting.
-4. Select `Run Test`.
-5. Watch the live counters and time remaining during the run.
-6. Pause or finish the trial if needed.
-7. Download the data if needed, then review the saved result in `Results`.
+This controls whether the end-of-test chime is active or inactive.
 
-### Suggested Screenshots
-- Trial form overview.
-- Example of a completed form ready to start.
-- Live running test state with counts and time remaining.
-- Completed test state with available downloads.
+### Starting A Trial
 
-![Trial configuration page](assets/user-manual/generated/04-trial-page.png)
+1.  Open `Run a Trial`.
+2.  Load a preset or fill in the form manually.
+3.  Review the values carefully.
+4.  Select `Run Test`.
 
-### What To Expect
-- The backend, not the frontend, owns the timer and completion logic.
-- The page should update as the test progresses.
-- Completion should be visible both in the page state and later in Results.
+### During A Trial
 
-### Common Issues
-- Confusing `Goal For Trial` and `Goal For Test`.
-- Starting a test without reviewing the saved/default maintenance values in `I/O Config`.
-- Expecting a manual pump prime to be part of starting a test.
+While the test runs, the page shows:
+
+-   elapsed time
+-   time remaining
+-   current counts
+-   reward information
+-   trial state
+
+The backend controls the timer and stop conditions. The page is showing backend state, not inventing its own copy of the timer.
+
+### When The Trial Finishes
+
+When the trial finishes:
+
+-   the run is saved
+-   the page can play the completion sound in the browser
+-   the run becomes available in Results
+
+### Common Problems
+
+-   Confusing `Responses Needed For Each Reward` with the total session goal
+-   Starting a trial before checking the hardware in `I/O Config`
+-   Expecting a manual pump test to be part of the trial start process
 
 ## Preset Manager
-### Purpose
-Explain how users save, reuse, and maintain trial configurations.
 
-### What This Page Does
-- Saves reusable test settings tied to the signed-in account.
-- Lets users load common setups instead of retyping values every time.
+`Preset Manager` is used to save and reuse trial configurations.
+
+Use it when:
+
+-   you run similar trials often
+-   you want to avoid re-entering the same settings every time
+-   you want to update a commonly used trial setup
+
+![Preset Manager page](./assets/user-manual/generated/05-preset-manager-page.png)
 
 ### How To Use It
-1. Open `Preset Manager`.
-2. Create a new preset or edit an existing one.
-3. Save the preset.
-4. Open `Run a Trial` and use that preset to auto-fill the form.
 
-### Suggested Screenshot
-- Preset list and a saved preset form.
-
-![Preset Manager page](assets/user-manual/generated/05-preset-manager-page.png)
+1.  Open `Preset Manager`.
+2.  Create a new preset or select one to edit.
+3.  Save the preset.
+4.  Open `Run a Trial` and load that preset into the trial form.
 
 ### What To Expect
-- Presets should belong to the current authenticated user.
-- Saved presets should appear later as auto-fill options in the Trial page.
 
-### Common Issues
-- Expecting one user’s presets to appear for another user.
-- Forgetting to save after making changes.
+-   Presets belong to the signed-in user.
+-   A preset saved by one user is not automatically shared with every other account.
 
 ## Results
-### Purpose
-Explain how users review, compare, chart, and export completed trials.
 
-### What This Page Does
-- Lists saved trials.
-- Shows detail for a selected trial.
-- Lets users download summary CSV files and timeline CSV files.
-- Lets users compare multiple trials together.
-- Shows chart summaries across visible or selected trials.
+`Results` is where saved trials are reviewed after they finish.
 
-### How To Use It
-1. Open `Results`.
-2. Search for a trial by name if needed.
-3. Select one saved trial to inspect its detail.
-4. Check multiple trials to compare them in the charts and comparison table.
-5. Download summary CSVs or event timeline CSVs as needed.
+Use it to:
 
-### Suggested Screenshots
-- Results page overview.
-- Selected trial detail panel.
-- Multi-trial comparison section.
-- Charts section with multiple trials selected.
+-   search for saved trials
+-   open one trial in detail
+-   compare multiple trials
+-   review operator notes
+-   download summary CSV files
+-   download event timeline CSV files
 
-![Results overview page](assets/user-manual/generated/06-results-overview.png)
+![Results overview page](./assets/user-manual/generated/06-results-overview.png)
 
-![Selected result detail panel](assets/user-manual/generated/07-results-detail.png)
+![Selected result detail panel](./assets/user-manual/generated/07-results-detail.png)
 
-### What To Expect
-- The summary panel should reflect either the filtered set or the checked selection, depending on the current page behavior.
-- Timeline downloads should only work when event timeline data exists for that run.
+### Available Trials
 
-### Common Issues
-- Opening an old saved trial that has no event timeline.
-- Expecting delete actions to work for non-admin accounts.
+The left side of the page lists saved trials. Each row shows:
+
+-   trial name
+-   saved date
+-   operator
+
+Users can search the list to find specific runs more quickly.
+
+### Comparing Multiple Trials
+
+Check multiple trials if you want the charts and comparison table to summarize a selected set of runs instead of just one.
+
+This is useful when:
+
+-   comparing different sessions for one subject
+-   comparing different stimulus types
+-   reviewing multiple runs from one day
+
+### Download Data
+
+Use `Download Data` to export the saved summary values for the currently selected trial.
+
+Use `Download Selected CSV` to export multiple checked trials at once.
+
+### Download Timeline
+
+Use `Download Timeline` when the selected saved trial contains event timeline data.
+
+Timeline data may include:
+
+-   lever events
+-   nose-poke events
+-   reward events
+-   operator notes
+-   other saved session events
+
+If no timeline was saved for a run, the page will tell you that there is nothing to download or chart.
+
+### Timeline Trends
+
+Use `Show Timeline Trends` to see how activity accumulated during one saved run over time.
+
+This view helps users spot patterns such as:
+
+-   responses clustering early or late in a session
+-   slow reward buildup
+-   differences between lever and nose-poke activity across the trial
+
+![Timeline trends chart](./assets/user-manual/generated/08-results-timeline-trends.png)
+
+### Common Problems
+
+-   Opening an older saved run that has no timeline data
+-   Expecting delete actions to work when signed in as a non-admin user
 
 ## Understanding The Charts
-### Purpose
-Help beginners understand what the summary charts mean.
 
-### Suggested Explanations
-- `Completion Overview`: shows how many selected trials completed versus how many did not.
-- `Average Response Profile`: shows the average lever, nose-poke, and reward counts across the current set.
-- `Interactions By Trial`: compares total activity from run to run.
-- `Stimulus Mix`: shows how many selected trials used each stimulus mode.
-- `Timeline Trends`: shows how events accumulated over time inside one run.
+The charts on the Results page are quick visual summaries of the current result set.
 
-### Suggested Screenshot
-- Results page with chart labels visible.
+### Completion Overview
 
-![Timeline trends chart](assets/user-manual/generated/08-results-timeline-trends.png)
+Shows how many of the selected or visible trials completed versus how many did not.
+
+### Average Response Profile
+
+Shows average response counts across the current result set.
+
+### Interactions By Trial
+
+Shows how active each trial was compared with the others.
+
+### Stimulus Mix
+
+Shows how many of the selected or visible runs used each stimulus mode.
+
+### Timeline Trends
+
+Shows how counts accumulated through time inside one selected saved run.
 
 ## Admin Page
-### Purpose
-Explain what administrators can do and what normal users cannot do.
 
-### What This Page Does
-- Approves or disables users.
-- Resets user passwords.
-- Deletes non-admin users.
+The Admin page is only for administrator accounts.
 
-### How To Use It
-1. Open `Admin`.
-2. Review pending or approved users.
-3. Approve, disable, reset password, or delete as needed.
+Use it to:
 
-### Suggested Screenshot
-- Admin page showing one approved user and the available admin actions.
+-   approve new users
+-   disable user access
+-   reset a user password
+-   delete a non-admin user account
 
-![Admin page](assets/user-manual/generated/09-admin-page.png)
+![Admin page](./assets/user-manual/generated/09-admin-page.png)
 
-### What To Expect
-- Only admins should see and use this page.
-- Deleting a user should remove the account while preserving historical run snapshots.
+### Admin-Only Actions
 
-### Common Issues
-- Expecting operators to have admin permissions.
-- Confusing `Disable Access` with permanent deletion.
+Only an administrator can:
 
-## Demo Data
-### Purpose
-Explain how to load fake content for demonstrations, screenshots, and chart reviews.
+-   approve a newly registered user so that person can sign in
+-   reset another user's password
+-   disable a user's access
+-   permanently delete a non-admin user account
+-   open the `Admin` page itself
+-   delete saved trial data from the `Results` page
 
-### How To Use It
-1. Open a terminal in the repo root.
-2. Run the demo seeder command.
-3. Sign in as the validation admin.
-4. Open `Results` to inspect the demo runs.
-5. Open `Run a Trial` or `Preset Manager` to inspect the demo preset.
+### When An Admin Is Needed
 
-### Command
-```bash
-cd /Users/egweinberg/Documents/skinnerbox-fullstack-student
-backend/.venv/bin/python scripts/generate_demo_results.py --database backend/testdatabase.db --count 18 --reset-demo
-```
+A regular user needs administrator help when:
 
-### Suggested Screenshot
-- Results page populated with demo trials and charts.
-
-![Demo results page](assets/user-manual/generated/06-results-overview.png)
+-   their account is still pending approval
+-   they forgot their password
+-   they need an account disabled or removed
+-   saved trial data needs to be deleted from the system
 
 ### What To Expect
-- Demo results should appear in Results.
-- The validation admin should also see a demo preset.
 
-### Common Issues
-- Forgetting to refresh the backend or browser after seeding.
-- Mistaking demo data for real study data.
-
-## Startup And Shutdown
-### Purpose
-Document the normal way to start and stop the system on a laptop or Raspberry Pi.
-
-### Suggested Subsections
-- Local computer startup
-- Raspberry Pi startup
-- Service-based startup on the Pi
-- How to change ports if needed
-- Where logs are written
-
-### Suggested Screenshot
-- Optional terminal screenshot of a healthy backend or frontend startup.
+-   Regular operators should not use this page.
+-   Historical result snapshots remain even if a user account is later removed.
+-   Approval, password reset, disable, and delete actions are administrator-only.
 
 ## Troubleshooting
-### Purpose
-Give users a short list of fixes for the most common problems.
 
-### Suggested Topics
-- Cannot sign in
-- Port already in use
-- Backend not reachable
-- Trial will not start
-- No lever or nose-poke counts
-- Timeline download not available
-- Results delete requires admin
-- Browser sound did not play on completion
+### Cannot Sign In
 
-## Revision Notes
-Use this section to note when screenshots or instructions were last refreshed.
+-   Confirm the backend is running.
+-   Confirm the frontend is pointed at the correct backend port.
+-   Confirm the account has been approved.
+-   Confirm the password is correct.
 
-Example:
+### Trial Will Not Start
 
-```text
-Last reviewed for release branch: codex/skinnerbox-system-updates
-Last screenshot refresh: 2026-03-16
-```
+-   Recheck the required trial fields.
+-   Confirm the hardware is responding in `I/O Config`.
+-   Look for an error message on the Trial page.
+
+### Counts Are Not Changing
+
+-   Use `I/O Config` to confirm the hardware is triggering.
+-   Reset the lever or nose-poke baseline if you want to measure fresh activity from the current moment.
+-   Recheck debounce and release settings if lever counts look wrong.
+
+### Timeline Download Does Nothing
+
+-   Open a result that actually has saved timeline events.
+-   Check the event count shown in the selected trial details.
+
+### Results Delete Fails
+
+-   Make sure you are signed in as an administrator.
+
+### Browser Completion Sound Does Not Play
+
+-   Make sure the Trial page was open during the run.
+-   Make sure the browser was allowed to play audio after user interaction.

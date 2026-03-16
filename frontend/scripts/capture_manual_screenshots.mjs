@@ -175,6 +175,19 @@ async function captureLocator(locator, outputPath) {
   });
 }
 
+async function writeLocalPreviewManual() {
+  const sourceManualPath = path.join(projectRoot, 'docs', 'user-manual.md');
+  const localPreviewPath = path.join(projectRoot, 'docs', 'user-manual.local-preview.md');
+
+  const sourceManual = await fs.readFile(sourceManualPath, 'utf8');
+  const previewManual = sourceManual.replaceAll(
+    '](./assets/user-manual/generated/',
+    `](${path.join(projectRoot, 'docs', 'assets', 'user-manual', 'generated')}/`
+  );
+
+  await fs.writeFile(localPreviewPath, previewManual, 'utf8');
+}
+
 async function maybeLoadDemoPreset(page) {
   const presetCombobox = page.locator('#formControlContainer [role="combobox"]').first();
   if ((await presetCombobox.count()) === 0) {
@@ -318,6 +331,8 @@ async function captureManualScreenshots(config) {
       ),
       'utf8'
     );
+
+    await writeLocalPreviewManual();
   } finally {
     await browser.close();
   }

@@ -5,3 +5,4 @@
 backend/.venv/
 frontend/build/
 logs/
+docs/user-manual.local-preview.md
