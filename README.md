@@ -72,6 +72,21 @@ frontend/
   package.json                                React scripts and dependencies
 ```
 
+## User Manual
+
+If you want a screenshot-heavy user guide for operators, start with [docs/user-manual.md](/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/user-manual.md).
+
+That manual is written as a structured template on purpose. It already includes:
+
+- section-by-section page explanations
+- beginner-friendly prompts for what each screen does
+- screenshot placeholders and screenshot naming suggestions
+- a Playwright-based screenshot workflow for generating a consistent first pass of manual images
+- parameter explanation sections for Trial setup
+- demo-data, startup, and troubleshooting sections
+
+The idea is to use that file as the source of truth, then either keep it as Markdown in the repo or turn it into a polished PDF/manual later.
+
 ## Developer Guide
 
 ### Mental model

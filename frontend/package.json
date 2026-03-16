@@ -33,6 +33,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "screenshots:manual": "node scripts/capture_manual_screenshots.mjs",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -52,5 +53,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "playwright-core": "^1.58.2"
   }
 }

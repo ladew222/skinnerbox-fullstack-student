@@ -1,0 +1,80 @@
+{
+  "generatedAt": "2026-03-16T15:40:13.473Z",
+  "frontendUrl": "http://localhost:3000",
+  "viewport": {
+    "width": 1440,
+    "height": 1100
+  },
+  "screenshots": [
+    {
+      "file": "01-login-page.png",
+      "title": "Login page",
+      "section": "Logging In",
+      "path": "/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/assets/user-manual/generated/01-login-page.png",
+      "capturedAt": "2026-03-16T15:39:59.986Z"
+    },
+    {
+      "file": "02-home-page.png",
+      "title": "Home page",
+      "section": "Home Page",
+      "path": "/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/assets/user-manual/generated/02-home-page.png",
+      "capturedAt": "2026-03-16T15:40:02.009Z"
+    },
+    {
+      "file": "03-io-config-page.png",
+      "title": "I/O Config page",
+      "section": "I/O Config",
+      "path": "/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/assets/user-manual/generated/03-io-config-page.png",
+      "capturedAt": "2026-03-16T15:40:05.096Z"
+    },
+    {
+      "file": "04-trial-page.png",
+      "title": "Trial setup page",
+      "section": "Run A Trial",
+      "path": "/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/assets/user-manual/generated/04-trial-page.png",
+      "capturedAt": "2026-03-16T15:40:07.699Z"
+    },
+    {
+      "file": "05-preset-manager-page.png",
+      "title": "Preset Manager page",
+      "section": "Preset Manager",
+      "path": "/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/assets/user-manual/generated/05-preset-manager-page.png",
+      "capturedAt": "2026-03-16T15:40:08.902Z"
+    },
+    {
+      "file": "06-results-overview.png",
+      "title": "Results overview",
+      "section": "Results",
+      "path": "/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/assets/user-manual/generated/06-results-overview.png",
+      "capturedAt": "2026-03-16T15:40:10.578Z"
+    },
+    {
+      "file": "07-results-detail.png",
+      "title": "Results detail panel",
+      "section": "Results",
+      "path": "/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/assets/user-manual/generated/07-results-detail.png",
+      "capturedAt": "2026-03-16T15:40:10.931Z"
+    },
+    {
+      "file": "08-results-timeline-trends.png",
+      "title": "Timeline trends chart",
+      "section": "Understanding The Charts",
+      "path": "/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/assets/user-manual/generated/08-results-timeline-trends.png",
+      "capturedAt": "2026-03-16T15:40:11.172Z"
+    },
+    {
+      "file": "09-admin-page.png",
+      "title": "Admin page",
+      "section": "Admin Page",
+      "path": "/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/assets/user-manual/generated/09-admin-page.png",
+      "capturedAt": "2026-03-16T15:40:12.289Z"
+    },
+    {
+      "file": "10-about-page.png",
+      "title": "About page",
+      "section": "Home Page",
+      "path": "/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/assets/user-manual/generated/10-about-page.png",
+      "capturedAt": "2026-03-16T15:40:13.473Z"
+    }
+  ]
+}
