@@ -755,8 +755,8 @@ const handlePreset = (event) => {
           <div className="trial-form-intro">
             <h2>Configure a Trial</h2>
             <p>
-              The backend owns the timing, counts, rewards, and final stop conditions for every run.
-              Use these settings to define how the trial should behave before you start it.
+              Enter the trial settings you want to use, or load a saved preset to fill them in faster.
+              Check the values, then start the trial when everything looks right.
             </p>
           </div>
 

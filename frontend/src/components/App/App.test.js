@@ -108,7 +108,7 @@ test('renders the trial setup for an authenticated operator', async () => {
 
   expect(await screen.findByRole('heading', { name: /save current settings as preset/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /run test/i })).toBeInTheDocument();
-  expect(screen.getByText(/the backend owns the timing, counts, rewards/i)).toBeInTheDocument();
+  expect(screen.getByText(/enter the trial settings you want to use/i)).toBeInTheDocument();
 });
 
 test('renders the real-time pump prime controls on the I/O config page', async () => {
