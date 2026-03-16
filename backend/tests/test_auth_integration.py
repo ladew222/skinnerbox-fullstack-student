@@ -250,6 +250,83 @@ class AuthenticationIntegrationTest(unittest.TestCase):
             "operator@example.com",
         )
 
+    def test_admin_can_delete_an_operator_account(self):
+        admin_user = self.auth_repository.upsert_admin(
+            email="admin@example.com",
+            password="AdminPass123",
+            display_name="Local Admin",
+        )
+        operator_user = self.auth_repository.register_user(
+            email="operator@example.com",
+            password="OperatorPass123",
+            display_name="Operator User",
+        )
+        self.auth_repository.update_user_status(
+            user_id=operator_user.user_id,
+            status="approved",
+            acting_admin_user_id=admin_user.user_id,
+        )
+
+        admin_login_response = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "admin@example.com",
+                "password": "AdminPass123",
+            },
+        )
+        self.assertEqual(admin_login_response.status_code, 200)
+        admin_headers = {
+            "Authorization": f"Bearer {admin_login_response.get_json()['token']}",
+        }
+
+        operator_login_response = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "operator@example.com",
+                "password": "OperatorPass123",
+            },
+        )
+        self.assertEqual(operator_login_response.status_code, 200)
+        operator_headers = {
+            "Authorization": f"Bearer {operator_login_response.get_json()['token']}",
+        }
+
+        delete_response = self.client.delete(
+            f"/api/auth/admin/users/{operator_user.user_id}",
+            headers=admin_headers,
+        )
+        self.assertEqual(delete_response.status_code, 200)
+        self.assertEqual(
+            delete_response.get_json()["message"],
+            "User account deleted successfully.",
+        )
+
+        users_response = self.client.get("/api/auth/admin/users", headers=admin_headers)
+        self.assertEqual(users_response.status_code, 200)
+        self.assertFalse(
+            any(user["email"] == "operator@example.com" for user in users_response.get_json()["users"])
+        )
+
+        deleted_user_login_response = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "operator@example.com",
+                "password": "OperatorPass123",
+            },
+        )
+        self.assertEqual(deleted_user_login_response.status_code, 401)
+        self.assertEqual(
+            deleted_user_login_response.get_json()["error"]["code"],
+            "INVALID_CREDENTIALS",
+        )
+
+        revoked_session_response = self.client.get("/api/auth/me", headers=operator_headers)
+        self.assertEqual(revoked_session_response.status_code, 401)
+        self.assertEqual(
+            revoked_session_response.get_json()["error"]["code"],
+            "INVALID_AUTH_TOKEN",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

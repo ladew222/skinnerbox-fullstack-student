@@ -1,5 +1,5 @@
 # Copy this file to /etc/systemd/system/skinnerbox-frontend.service on the Pi.
-# Update User= and WorkingDirectory= if your checkout is not in /home/pi.
+# Update WorkingDirectory= if your checkout is not in /home/ladew222.
 
 [Unit]
 Description=SkinnerBox frontend
@@ -8,13 +8,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/skinnerbox-fullstack-student/frontend
+User=ladew222
+WorkingDirectory=/home/ladew222/skinnerbox-fullstack-student/frontend
 Environment=BACKEND_HOST=localhost
 Environment=BACKEND_PORT=5000
 Environment=FRONTEND_PORT=3000
-Environment=FRONTEND_BUILD_ON_START=1
-ExecStart=/bin/bash /home/pi/skinnerbox-fullstack-student/frontend/run_frontend.sh
+Environment=FRONTEND_BUILD_ON_START=0
+ExecStart=/bin/bash /home/ladew222/skinnerbox-fullstack-student/frontend/run_frontend.sh
 Restart=on-failure
 RestartSec=5
 

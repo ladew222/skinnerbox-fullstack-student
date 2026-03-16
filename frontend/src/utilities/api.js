@@ -194,6 +194,16 @@ export const resetAdminUserPassword = async (userId, password) => {
   }
 };
 
+export const deleteAdminUser = async (userId) => {
+  try {
+    const response = await apiClient.delete(`/api/auth/admin/users/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting user account:', error);
+    rethrowNormalizedError(error, 'USER_DELETE_ERROR', 'Unable to delete the selected user account.');
+  }
+};
+
 export const getPresets = async () => {
   try {
     const response = await apiClient.get('/api/presets');
@@ -265,9 +275,11 @@ export const setRGBLight = async (red, green, blue) => {
   }
 };
 
-export const primePump = async (durationSeconds) => {
+export const primePump = async (durationMilliseconds) => {
   try {
-    const response = await apiClient.post('/api/pump/prime', { durationSeconds });
+    const response = await apiClient.post('/api/pump/prime', {
+      durationSeconds: Number(durationMilliseconds) / 1000,
+    });
     return response.data;
   } catch (error) {
     console.error('Error priming water pump:', error);
@@ -295,17 +307,56 @@ export const getMaintenanceStatus = async () => {
   }
 };
 
-export const savePumpCalibration = async ({ durationSeconds, measuredVolumeMl, noteText }) => {
+export const savePumpCalibration = async ({ durationMilliseconds, measuredVolumeMl }) => {
   try {
     const response = await apiClient.post('/api/maintenance/pump-calibration', {
-      durationSeconds,
+      durationSeconds: Number(durationMilliseconds) / 1000,
       measuredVolumeMl,
-      noteText,
     });
     return response.data;
   } catch (error) {
     console.error('Error saving pump calibration:', error);
     rethrowNormalizedError(error, 'CALIBRATION_SAVE_ERROR', 'Unable to save the pump calibration.');
+  }
+};
+
+export const saveLeverDebounce = async ({ debounceMilliseconds }) => {
+  try {
+    const response = await apiClient.post('/api/maintenance/lever-debounce', {
+      debounceMilliseconds,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error saving lever debounce:', error);
+    rethrowNormalizedError(error, 'LEVER_DEBOUNCE_SAVE_ERROR', 'Unable to save the lever debounce setting.');
+  }
+};
+
+export const saveLeverReleaseRequirement = async ({ requireReleaseBeforeCount }) => {
+  try {
+    const response = await apiClient.post('/api/maintenance/lever-release-requirement', {
+      requireReleaseBeforeCount,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error saving lever count mode:', error);
+    rethrowNormalizedError(
+      error,
+      'LEVER_RELEASE_REQUIREMENT_SAVE_ERROR',
+      'Unable to save the lever count mode.'
+    );
+  }
+};
+
+export const saveRewardPulse = async ({ rewardPulseMilliseconds }) => {
+  try {
+    const response = await apiClient.post('/api/maintenance/reward-pulse', {
+      rewardPulseMilliseconds,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error saving automatic reward pulse:', error);
+    rethrowNormalizedError(error, 'REWARD_PULSE_SAVE_ERROR', 'Unable to save the automatic reward pulse.');
   }
 };
 

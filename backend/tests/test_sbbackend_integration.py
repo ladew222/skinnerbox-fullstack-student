@@ -238,6 +238,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         run_response = self.client.post("/api/test/run", json=payload, headers=self.auth_headers)
         self.assertEqual(run_response.status_code, 200)
 
+        self._wait_for_condition(lambda: sbBackend.session_manager.stimulus_active is False)
         lever_response = self.client.post("/api/input/lever", headers=self.auth_headers)
         self.assertEqual(lever_response.status_code, 200)
 
@@ -542,6 +543,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         run_response = self.client.post("/api/test/run", json=payload, headers=self.auth_headers)
         self.assertEqual(run_response.status_code, 200)
 
+        self._wait_for_condition(lambda: sbBackend.session_manager.stimulus_active is False)
         lever_response = self.client.post("/api/input/lever", headers=self.auth_headers)
         self.assertEqual(lever_response.status_code, 200)
 
@@ -641,6 +643,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(note_response.status_code, 200)
 
+        self._wait_for_condition(lambda: sbBackend.session_manager.stimulus_active is False)
         lever_response = self.client.post("/api/input/lever", headers=self.auth_headers)
         self.assertEqual(lever_response.status_code, 200)
 
@@ -726,6 +729,128 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertEqual(
             status_payload["latestPumpCalibration"]["noteText"],
             "Measured after replacing the water line.",
+        )
+        self.assertEqual(status_payload["rewardPulseSeconds"], 0.03)
+
+    def test_lever_debounce_setting_is_saved_and_reported_in_maintenance_status(self):
+        debounce_response = self.client.post(
+            "/api/maintenance/lever-debounce",
+            json={
+                "debounceMilliseconds": 300,
+                "noteText": "Raised for rat lever bounce.",
+            },
+            headers=self.auth_headers,
+        )
+        self.assertEqual(debounce_response.status_code, 200)
+        payload = debounce_response.get_json()["leverDebounce"]
+        self.assertAlmostEqual(payload["durationSeconds"], 0.3, places=3)
+        self.assertEqual(payload["noteText"], "Raised for rat lever bounce.")
+
+        status_response = self.client.get(
+            "/api/maintenance/status",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(status_response.status_code, 200)
+        status_payload = status_response.get_json()
+        self.assertEqual(status_payload["activeLeverDebounceMilliseconds"], 300)
+        self.assertEqual(
+            status_payload["latestLeverDebounce"]["noteText"],
+            "Raised for rat lever bounce.",
+        )
+        self.assertAlmostEqual(
+            sbBackend.session_manager.hardware.lever_debounce_seconds,
+            0.3,
+            places=3,
+        )
+
+    def test_lever_release_requirement_is_saved_and_reported_in_maintenance_status(self):
+        lever_mode_response = self.client.post(
+            "/api/maintenance/lever-release-requirement",
+            json={
+                "requireReleaseBeforeCount": True,
+                "noteText": "Count only after the lever returns to rest.",
+            },
+            headers=self.auth_headers,
+        )
+        self.assertEqual(lever_mode_response.status_code, 200)
+        payload = lever_mode_response.get_json()["leverReleaseRequirement"]
+        self.assertEqual(payload["durationSeconds"], 1)
+        self.assertEqual(payload["noteText"], "Count only after the lever returns to rest.")
+
+        status_response = self.client.get(
+            "/api/maintenance/status",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(status_response.status_code, 200)
+        status_payload = status_response.get_json()
+        self.assertTrue(status_payload["activeRequireLeverReleaseBeforeCount"])
+        self.assertEqual(
+            status_payload["latestLeverReleaseRequirement"]["noteText"],
+            "Count only after the lever returns to rest.",
+        )
+        self.assertTrue(sbBackend.session_manager.require_lever_release_before_count)
+
+    def test_lever_release_requirement_blocks_duplicate_counts_until_release(self):
+        lever_mode_response = self.client.post(
+            "/api/maintenance/lever-release-requirement",
+            json={"requireReleaseBeforeCount": True},
+            headers=self.auth_headers,
+        )
+        self.assertEqual(lever_mode_response.status_code, 200)
+
+        first_press = self.client.post("/api/input/lever", headers=self.auth_headers)
+        self.assertEqual(first_press.status_code, 200)
+
+        second_press = self.client.post("/api/input/lever", headers=self.auth_headers)
+        self.assertEqual(second_press.status_code, 200)
+
+        counts_response = self.client.get("/api/counts", headers=self.auth_headers)
+        self.assertEqual(counts_response.status_code, 200)
+        self.assertEqual(counts_response.get_json()["lever_press_count"], 1)
+
+        release_response = self.client.post(
+            "/api/input/lever/release",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(release_response.status_code, 200)
+
+        third_press = self.client.post("/api/input/lever", headers=self.auth_headers)
+        self.assertEqual(third_press.status_code, 200)
+
+        final_counts_response = self.client.get("/api/counts", headers=self.auth_headers)
+        self.assertEqual(final_counts_response.status_code, 200)
+        self.assertEqual(final_counts_response.get_json()["lever_press_count"], 2)
+
+    def test_reward_pulse_setting_is_saved_and_reported_in_maintenance_status(self):
+        reward_pulse_response = self.client.post(
+            "/api/maintenance/reward-pulse",
+            json={
+                "rewardPulseMilliseconds": 300,
+                "noteText": "Known good reward pulse for calibration runs.",
+            },
+            headers=self.auth_headers,
+        )
+        self.assertEqual(reward_pulse_response.status_code, 200)
+        payload = reward_pulse_response.get_json()["rewardPulse"]
+        self.assertAlmostEqual(payload["durationSeconds"], 0.3, places=4)
+        self.assertEqual(payload["noteText"], "Known good reward pulse for calibration runs.")
+
+        status_response = self.client.get(
+            "/api/maintenance/status",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(status_response.status_code, 200)
+        status_payload = status_response.get_json()
+        self.assertEqual(status_payload["activeRewardPulseMilliseconds"], 300)
+        self.assertEqual(
+            status_payload["latestRewardPulse"]["noteText"],
+            "Known good reward pulse for calibration runs.",
+        )
+        self.assertAlmostEqual(status_payload["rewardPulseSeconds"], 0.3, places=4)
+        self.assertAlmostEqual(
+            sbBackend.session_manager.hardware.reward_pulse_seconds,
+            0.3,
+            places=4,
         )
 
     def test_repository_migrates_legacy_active_test_schema(self):

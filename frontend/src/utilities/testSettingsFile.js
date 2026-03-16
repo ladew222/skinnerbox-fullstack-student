@@ -44,7 +44,7 @@ const getFirstDefined = (entries, labels) => {
 
 const normalizeEnabledValue = (value) => {
   const normalizedValue = String(value || '').trim().toLowerCase();
-  return ['enabled', 'true', '1', 'yes', 'on'].includes(normalizedValue);
+  return ['enabled', 'active', 'true', '1', 'yes', 'on'].includes(normalizedValue);
 };
 
 
@@ -81,8 +81,7 @@ export const buildTestSettingsText = ({
     `Interaction Type: ${interactionType}`,
     `Stimulus Type: ${resolvedStimulusType}`,
     `Stimulus Light: ${resolvedLightColor}`,
-    `End Chime: ${endChimeEnabled ? 'Enabled' : 'Disabled'}`,
-    `End Chime Pattern: ${endChimePattern || DEFAULT_END_CHIME_PATTERN}`,
+    `End Chime: ${endChimeEnabled ? 'Active' : 'Inactive'}`,
   ].join('\n');
 };
 
@@ -133,4 +132,4 @@ export const parseTestSettingsText = (text) => {
 };
 
 
-export { SINGLE_LIGHT_LABEL };
+export { DEFAULT_END_CHIME_PATTERN, SINGLE_LIGHT_LABEL };

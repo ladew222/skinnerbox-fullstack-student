@@ -80,6 +80,37 @@ const validatePositiveInteger = (value, label) => {
 };
 
 
+const validateOptionalPositiveInteger = (value, label) => {
+  const normalizedValue = normalizeNumericInput(value);
+
+  if (!normalizedValue) {
+    return {
+      value: '',
+      error: '',
+    };
+  }
+
+  if (!WHOLE_NUMBER_PATTERN.test(normalizedValue)) {
+    return {
+      value: normalizedValue,
+      error: `${label} must be a whole number.`,
+    };
+  }
+
+  if (Number(normalizedValue) <= 0) {
+    return {
+      value: normalizedValue,
+      error: `${label} must be greater than 0 when used.`,
+    };
+  }
+
+  return {
+    value: normalizedValue,
+    error: '',
+  };
+};
+
+
 const validateNonNegativeInteger = (value, label) => {
   const normalizedValue = normalizeNumericInput(value);
 
@@ -185,7 +216,7 @@ const validateEndChimePattern = (value, enabled) => {
 export const validateTrialForm = (values) => {
   const normalizedValues = {
     testName: validateRequiredName(values.testName).value,
-    subjectID: validatePositiveInteger(values.subjectID, "Subject ID").value,
+    subjectID: validateOptionalPositiveInteger(values.subjectID, "Subject ID").value,
     trialDuration: validatePositiveDecimal(values.trialDuration, "Trial duration").value,
     goalForTrial: validatePositiveInteger(values.goalForTrial, "Goal for trial").value,
     goalForTest: validatePositiveInteger(values.goalForTest, "Goal for test").value,
@@ -207,7 +238,7 @@ export const validateTrialForm = (values) => {
 
   const errors = {
     testName: validateRequiredName(normalizedValues.testName).error,
-    subjectID: validatePositiveInteger(normalizedValues.subjectID, "Subject ID").error,
+    subjectID: validateOptionalPositiveInteger(normalizedValues.subjectID, "Subject ID").error,
     trialDuration: validatePositiveDecimal(normalizedValues.trialDuration, "Trial duration").error,
     goalForTrial: validatePositiveInteger(normalizedValues.goalForTrial, "Goal for trial").error,
     goalForTest: validatePositiveInteger(normalizedValues.goalForTest, "Goal for test").error,
@@ -251,7 +282,7 @@ export const validationFunctions = {
   testTrialDurtion: (value) => validatePositiveDecimal(value, "Trial duration"),
   testTrialGoal: (value) => validatePositiveInteger(value, "Goal"),
   testCoolDown: (value) => validateNonNegativeInteger(value, "Cooldown"),
-  testSubjectID: (value) => validatePositiveInteger(value, "Subject ID"),
+  testSubjectID: (value) => validateOptionalPositiveInteger(value, "Subject ID"),
   testRewardDelay: (value) => validateNonNegativeInteger(value, "Reward delay"),
   testStimulusDuration: (value) => validateNonNegativeInteger(value, "Stimulus time"),
   testEndChimePattern: validateEndChimePattern,

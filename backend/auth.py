@@ -573,6 +573,83 @@ class SQLiteAuthRepository:
                 },
             ) from error
 
+    def delete_user(
+        self,
+        *,
+        user_id: int,
+        acting_admin_user_id: int,
+    ) -> dict[str, object]:
+        """Permanently remove a non-admin account, its tokens, and saved presets."""
+
+        now = self._timestamp()
+
+        try:
+            with self.connect() as connection:
+                row = connection.execute(
+                    "SELECT * FROM users WHERE id = ?",
+                    (user_id,),
+                ).fetchone()
+                if row is None:
+                    raise ApiError(
+                        code="USER_NOT_FOUND",
+                        message="The requested user account was not found.",
+                        status=404,
+                        details={"userId": user_id},
+                    )
+
+                if row["role"] == "admin":
+                    raise ApiError(
+                        code="ADMIN_MANAGED_LOCALLY",
+                        message="Admin accounts are managed locally with the reset_admin.py script.",
+                        status=400,
+                    )
+
+                deleted_user = self._row_to_admin_payload(
+                    {
+                        **dict(row),
+                        "approved_by_email": connection.execute(
+                            "SELECT email FROM users WHERE id = ?",
+                            (row["approved_by_user_id"],),
+                        ).fetchone()["email"] if row["approved_by_user_id"] else None,
+                    }
+                )
+
+                connection.execute(
+                    """
+                    UPDATE auth_tokens
+                    SET revoked_at = ?
+                    WHERE user_id = ? AND revoked_at IS NULL
+                    """,
+                    (now, user_id),
+                )
+                connection.execute(
+                    "DELETE FROM auth_tokens WHERE user_id = ?",
+                    (user_id,),
+                )
+                connection.execute(
+                    "DELETE FROM user_presets WHERE user_id = ?",
+                    (user_id,),
+                )
+                connection.execute(
+                    "DELETE FROM users WHERE id = ?",
+                    (user_id,),
+                )
+                connection.commit()
+                return deleted_user
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="USER_DELETE_ERROR",
+                message="Unable to delete the selected user account.",
+                status=500,
+                details={
+                    "reason": str(error),
+                    "userId": user_id,
+                    "actingAdminUserId": acting_admin_user_id,
+                },
+            ) from error
+
     def upsert_admin(
         self,
         *,

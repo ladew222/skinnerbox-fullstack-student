@@ -1,5 +1,5 @@
 # Copy this file to /etc/systemd/system/skinnerbox-backend.service on the Pi.
-# Update User= and WorkingDirectory= if your checkout is not in /home/pi.
+# Update WorkingDirectory= if your checkout is not in /home/ladew222.
 
 [Unit]
 Description=SkinnerBox backend
@@ -8,12 +8,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/skinnerbox-fullstack-student/backend
+User=ladew222
+WorkingDirectory=/home/ladew222/skinnerbox-fullstack-student/backend
 Environment=GPIO_MODE=auto
 Environment=OLED_MODE=auto
 Environment=FLASK_RUN_PORT=5000
-ExecStart=/bin/bash /home/pi/skinnerbox-fullstack-student/backend/run_backend.sh
+ExecStart=/bin/bash /home/ladew222/skinnerbox-fullstack-student/backend/run_backend.sh
 Restart=on-failure
 RestartSec=5
 

@@ -12,6 +12,12 @@ describe('trial form validation', () => {
     expect(validationFunctions.testTrialDurtion('0.5').error).toBe('');
   });
 
+  test('allows subject tracking to be left blank and validates it only when provided', () => {
+    expect(validationFunctions.testSubjectID('').error).toBe('');
+    expect(validationFunctions.testSubjectID('0').error).toMatch(/greater than 0 when used/i);
+    expect(validationFunctions.testSubjectID('12').error).toBe('');
+  });
+
   test('requires goal for test to be at least goal for trial', () => {
     const result = validateTrialForm({
       testName: 'Lever Training',

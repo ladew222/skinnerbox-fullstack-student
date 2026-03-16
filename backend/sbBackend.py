@@ -1083,6 +1083,208 @@ class SQLiteTestRepository:
 
         return self._row_to_maintenance_record(row)
 
+    def save_lever_debounce_setting(
+        self,
+        debounce_seconds: float,
+        *,
+        note_text: str = "",
+        conducted_by: ConductedBySnapshot | None = None,
+    ) -> dict[str, object]:
+        """Persist one lever-debounce configuration change for maintenance tracking."""
+
+        created_at = self._timestamp()
+
+        try:
+            with self.connect() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO maintenance_records (
+                        record_type,
+                        duration_seconds,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "lever_debounce",
+                        debounce_seconds,
+                        note_text,
+                        conducted_by.user_id if conducted_by else None,
+                        conducted_by.email if conducted_by else "",
+                        conducted_by.display_name if conducted_by else "",
+                        created_at,
+                    ),
+                )
+                connection.commit()
+
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_id = ?
+                    """,
+                    (cursor.lastrowid,),
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="LEVER_DEBOUNCE_SAVE_ERROR",
+                message="Unable to save the lever debounce setting.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        return self._row_to_maintenance_record(row)
+
+    def save_lever_release_requirement_setting(
+        self,
+        require_release_before_count: bool,
+        *,
+        note_text: str = "",
+        conducted_by: ConductedBySnapshot | None = None,
+    ) -> dict[str, object]:
+        """Persist whether the lever must be released before a new press can count."""
+
+        created_at = self._timestamp()
+        stored_value = 1 if require_release_before_count else 0
+
+        try:
+            with self.connect() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO maintenance_records (
+                        record_type,
+                        duration_seconds,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "lever_release_requirement",
+                        stored_value,
+                        note_text,
+                        conducted_by.user_id if conducted_by else None,
+                        conducted_by.email if conducted_by else "",
+                        conducted_by.display_name if conducted_by else "",
+                        created_at,
+                    ),
+                )
+                connection.commit()
+
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_id = ?
+                    """,
+                    (cursor.lastrowid,),
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="LEVER_RELEASE_REQUIREMENT_SAVE_ERROR",
+                message="Unable to save the lever release requirement.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        return self._row_to_maintenance_record(row)
+
+    def save_reward_pulse_setting(
+        self,
+        reward_pulse_seconds: float,
+        *,
+        note_text: str = "",
+        conducted_by: ConductedBySnapshot | None = None,
+    ) -> dict[str, object]:
+        """Persist one automatic reward-pulse setting for later maintenance review."""
+
+        created_at = self._timestamp()
+
+        try:
+            with self.connect() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO maintenance_records (
+                        record_type,
+                        duration_seconds,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "reward_pulse",
+                        reward_pulse_seconds,
+                        note_text,
+                        conducted_by.user_id if conducted_by else None,
+                        conducted_by.email if conducted_by else "",
+                        conducted_by.display_name if conducted_by else "",
+                        created_at,
+                    ),
+                )
+                connection.commit()
+
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_id = ?
+                    """,
+                    (cursor.lastrowid,),
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="REWARD_PULSE_SAVE_ERROR",
+                message="Unable to save the automatic reward pulse setting.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        return self._row_to_maintenance_record(row)
+
     def get_latest_pump_calibration(self) -> dict[str, object] | None:
         """Return the most recent pump calibration record, if one exists."""
 
@@ -1113,6 +1315,120 @@ class SQLiteTestRepository:
             raise ApiError(
                 code="CALIBRATION_READ_ERROR",
                 message="Unable to load the latest pump calibration.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        if row is None:
+            return None
+        return self._row_to_maintenance_record(row)
+
+    def get_latest_lever_debounce_setting(self) -> dict[str, object] | None:
+        """Return the most recent saved lever debounce configuration, if one exists."""
+
+        try:
+            with self.connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_type = 'lever_debounce'
+                    ORDER BY created_at DESC, record_id DESC
+                    LIMIT 1
+                    """
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="LEVER_DEBOUNCE_READ_ERROR",
+                message="Unable to load the latest lever debounce setting.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        if row is None:
+            return None
+        return self._row_to_maintenance_record(row)
+
+    def get_latest_reward_pulse_setting(self) -> dict[str, object] | None:
+        """Return the most recent saved automatic reward pulse configuration, if one exists."""
+
+        try:
+            with self.connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_type = 'reward_pulse'
+                    ORDER BY created_at DESC, record_id DESC
+                    LIMIT 1
+                    """
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="REWARD_PULSE_READ_ERROR",
+                message="Unable to load the latest automatic reward pulse setting.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        if row is None:
+            return None
+        return self._row_to_maintenance_record(row)
+
+    def get_latest_lever_release_requirement_setting(self) -> dict[str, object] | None:
+        """Return the most recent saved lever release requirement, if one exists."""
+
+        try:
+            with self.connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_type = 'lever_release_requirement'
+                    ORDER BY created_at DESC, record_id DESC
+                    LIMIT 1
+                    """
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="LEVER_RELEASE_REQUIREMENT_READ_ERROR",
+                message="Unable to load the lever release requirement.",
                 status=500,
                 details={"reason": str(error)},
             ) from error
@@ -1440,15 +1756,23 @@ class SkinnerHardware:
     """Wrap GPIO devices so routes and test logic do not manipulate pins directly."""
 
     STIMULUS_TONE_FREQUENCY_HZ = 523.25
+    DEFAULT_WATER_REWARD_SECONDS = 0.03
     END_CHIME_GAP_SECONDS = 0.05
     ERROR_BLINK_INTERVAL_SECONDS = 0.25
     STARTUP_IP_DISPLAY_SECONDS = 10
+    DEFAULT_LEVER_DEBOUNCE_SECONDS = 0.15
+    DEFAULT_REQUIRE_LEVER_RELEASE_BEFORE_COUNT = False
     LEVER_INPUT_GPIO = 23
     NOSE_POKE_INPUT_GPIO = 16
 
     def __init__(self) -> None:
         # Input devices used to detect user interactions inside the box.
-        self.lever_button = Button(self.LEVER_INPUT_GPIO, pull_up=False, bounce_time=0.15)
+        self.lever_debounce_seconds = self.DEFAULT_LEVER_DEBOUNCE_SECONDS
+        self.lever_button = Button(
+            self.LEVER_INPUT_GPIO,
+            pull_up=False,
+            bounce_time=self.lever_debounce_seconds,
+        )
 
         # The nose-poke distance sensor is wired as a simple digital trigger, so
         # the backend can treat it like the other GPIO input callbacks.
@@ -1459,6 +1783,7 @@ class SkinnerHardware:
         self.blue_led = LED(25, active_high=False)
         self.orange_led = LED(24)
         self.water_pump = OutputDevice(17)
+        self.reward_pulse_seconds = self.DEFAULT_WATER_REWARD_SECONDS
 
         # Box-status indicators that show program health outside the experiment.
         self.running_led = LED(5)
@@ -1498,10 +1823,11 @@ class SkinnerHardware:
 
         self._status_refresh_callback = refresh_callback
 
-    def register_callbacks(self, on_lever_press, on_nose_poke) -> None:
+    def register_callbacks(self, on_lever_press, on_lever_release, on_nose_poke) -> None:
         """Attach backend callbacks to the physical or mocked button inputs."""
         try:
             self.lever_button.when_pressed = on_lever_press
+            self.lever_button.when_released = on_lever_release
             self.nose_poke_button.when_pressed = on_nose_poke
         except Exception as error:
             self._raise_hardware_error(
@@ -1509,6 +1835,52 @@ class SkinnerHardware:
                 message="Unable to register hardware callbacks.",
                 error=error,
             )
+
+    def set_lever_debounce_seconds(self, debounce_seconds: float) -> float:
+        """Apply the currently configured lever debounce to the live button input."""
+
+        try:
+            normalized_seconds = round(max(float(debounce_seconds), 0), 3)
+        except (TypeError, ValueError) as error:
+            raise ApiError(
+                code="LEVER_DEBOUNCE_INVALID",
+                message="Lever debounce must be a number of seconds.",
+                status=400,
+            ) from error
+
+        try:
+            self.lever_button.bounce_time = normalized_seconds
+            self.lever_debounce_seconds = normalized_seconds
+            return normalized_seconds
+        except Exception as error:
+            self._raise_hardware_error(
+                code="LEVER_DEBOUNCE_APPLY_ERROR",
+                message="Unable to apply the lever debounce setting.",
+                error=error,
+                device="lever_button",
+            )
+
+    def set_reward_pulse_seconds(self, reward_pulse_seconds: float) -> float:
+        """Apply the current automatic water reward duration used during trials."""
+
+        try:
+            normalized_seconds = round(max(float(reward_pulse_seconds), 0), 4)
+        except (TypeError, ValueError) as error:
+            raise ApiError(
+                code="REWARD_PULSE_INVALID",
+                message="Reward pulse must be a number of seconds.",
+                status=400,
+            ) from error
+
+        if normalized_seconds <= 0:
+            raise ApiError(
+                code="REWARD_PULSE_INVALID",
+                message="Reward pulse must be greater than zero seconds.",
+                status=400,
+            )
+
+        self.reward_pulse_seconds = normalized_seconds
+        return normalized_seconds
 
     def set_blue(self, enabled: bool) -> None:
         """Turn the blue cue light on or off and mirror that state in memory."""
@@ -1672,7 +2044,7 @@ class SkinnerHardware:
         try:
             if reward_type.lower() == "water":
                 self.water_pump.on()
-                self._sleep(0.03, stop_event)
+                self._sleep(self.reward_pulse_seconds, stop_event)
                 self.water_pump.off()
                 return
 
@@ -1981,9 +2353,37 @@ class TestSessionManager:
         # Stores stimulus-to-response timing values for future reporting/debugging.
         self.latencies: list[float] = []
         self._reset_runtime_state()
-        self.hardware.register_callbacks(self.on_lever_press, self.on_nose_poke)
+        self._apply_saved_maintenance_settings()
+        self.hardware.register_callbacks(
+            self.on_lever_press,
+            self.on_lever_release,
+            self.on_nose_poke,
+        )
         self.hardware.register_status_refresh(self._refresh_status_display)
         self._refresh_status_display()
+
+    def _apply_saved_maintenance_settings(self) -> None:
+        """Restore saved maintenance settings like lever debounce on startup."""
+
+        latest_reward_pulse = self.repository.get_latest_reward_pulse_setting()
+        if latest_reward_pulse is not None:
+            self.hardware.set_reward_pulse_seconds(
+                latest_reward_pulse["durationSeconds"]
+            )
+
+        latest_lever_debounce = self.repository.get_latest_lever_debounce_setting()
+        if latest_lever_debounce is not None:
+            self.hardware.set_lever_debounce_seconds(
+                latest_lever_debounce["durationSeconds"]
+            )
+
+        latest_lever_release_requirement = (
+            self.repository.get_latest_lever_release_requirement_setting()
+        )
+        if latest_lever_release_requirement is not None:
+            self.set_require_lever_release_before_count(
+                latest_lever_release_requirement["durationSeconds"] >= 0.5
+            )
 
     def configure_test(
         self,
@@ -2016,6 +2416,7 @@ class TestSessionManager:
                 self.test_running = False
                 self.test_paused = False
                 self.stimulus_active = False
+                self.lever_ready_for_press = True
                 self.elapsed_before_pause = 0.0
                 self.run_started_at = None
                 self.last_stimulus_started_at = 0.0
@@ -2430,10 +2831,214 @@ class TestSessionManager:
             )
             raise api_error from error
 
+    def save_lever_debounce(
+        self,
+        payload: dict | None = None,
+        current_user: AuthenticatedUser | None = None,
+    ) -> dict[str, object]:
+        """Store and apply a lever debounce value for live hardware testing."""
+
+        payload = payload or {}
+        try:
+            with self.lock:
+                if self.test_running:
+                    raise ApiError(
+                        code="LEVER_DEBOUNCE_BLOCKED",
+                        message="Stop the current test before changing lever debounce.",
+                        status=409,
+                        details={"testRunning": True},
+                    )
+
+            debounce_milliseconds = _coerce_float(
+                payload.get("debounceMilliseconds"),
+                "debounceMilliseconds",
+                default=0,
+            )
+            note_text = _coerce_text(payload.get("noteText"), "noteText", default="").strip()
+
+            if debounce_milliseconds < 10:
+                raise ApiError(
+                    code="LEVER_DEBOUNCE_TOO_LOW",
+                    message="Lever debounce must be at least 10 milliseconds.",
+                    status=400,
+                )
+            if debounce_milliseconds > 2000:
+                raise ApiError(
+                    code="LEVER_DEBOUNCE_TOO_HIGH",
+                    message="Lever debounce must be 2000 milliseconds or less.",
+                    status=400,
+                )
+
+            debounce_seconds = round(debounce_milliseconds / 1000, 3)
+            applied_seconds = self.hardware.set_lever_debounce_seconds(debounce_seconds)
+            conducted_by = (
+                ConductedBySnapshot.from_authenticated_user(current_user)
+                if current_user is not None
+                else None
+            )
+            lever_debounce = self.repository.save_lever_debounce_setting(
+                applied_seconds,
+                note_text=note_text,
+                conducted_by=conducted_by,
+            )
+            return {
+                "message": "Lever debounce saved successfully.",
+                "leverDebounce": lever_debounce,
+            }
+        except ApiError:
+            raise
+        except Exception as error:
+            api_error = ApiError(
+                code="LEVER_DEBOUNCE_SAVE_ERROR",
+                message="Unable to save the lever debounce setting.",
+                status=500,
+                details={"reason": str(error)},
+            )
+            raise api_error from error
+
+    def set_require_lever_release_before_count(self, required: bool) -> bool:
+        """Apply whether a lever must return to rest before another press is counted."""
+
+        with self.lock:
+            self.require_lever_release_before_count = bool(required)
+            self.lever_ready_for_press = True
+            return self.require_lever_release_before_count
+
+    def save_lever_release_requirement(
+        self,
+        payload: dict | None = None,
+        current_user: AuthenticatedUser | None = None,
+    ) -> dict[str, object]:
+        """Store whether lever counts must wait for a release before another press."""
+
+        payload = payload or {}
+        try:
+            with self.lock:
+                if self.test_running:
+                    raise ApiError(
+                        code="LEVER_RELEASE_REQUIREMENT_BLOCKED",
+                        message="Stop the current test before changing the lever count mode.",
+                        status=409,
+                        details={"testRunning": True},
+                    )
+
+            require_release_before_count = _coerce_bool(
+                payload.get("requireReleaseBeforeCount"),
+                "requireReleaseBeforeCount",
+                default=False,
+            )
+            note_text = _coerce_text(payload.get("noteText"), "noteText", default="").strip()
+            applied_value = self.set_require_lever_release_before_count(
+                require_release_before_count
+            )
+            conducted_by = (
+                ConductedBySnapshot.from_authenticated_user(current_user)
+                if current_user is not None
+                else None
+            )
+            lever_release_requirement = (
+                self.repository.save_lever_release_requirement_setting(
+                    applied_value,
+                    note_text=note_text,
+                    conducted_by=conducted_by,
+                )
+            )
+            return {
+                "message": "Lever count mode saved successfully.",
+                "leverReleaseRequirement": lever_release_requirement,
+            }
+        except ApiError:
+            raise
+        except Exception as error:
+            api_error = ApiError(
+                code="LEVER_RELEASE_REQUIREMENT_SAVE_ERROR",
+                message="Unable to save the lever count mode.",
+                status=500,
+                details={"reason": str(error)},
+            )
+            raise api_error from error
+
+    def save_reward_pulse(
+        self,
+        payload: dict | None = None,
+        current_user: AuthenticatedUser | None = None,
+    ) -> dict[str, object]:
+        """Store and apply the automatic water reward pulse used during trials."""
+
+        payload = payload or {}
+        try:
+            with self.lock:
+                if self.test_running:
+                    raise ApiError(
+                        code="REWARD_PULSE_BLOCKED",
+                        message="Stop the current test before changing the automatic reward pulse.",
+                        status=409,
+                        details={"testRunning": True},
+                    )
+
+            reward_pulse_milliseconds = _coerce_float(
+                payload.get("rewardPulseMilliseconds"),
+                "rewardPulseMilliseconds",
+                default=0,
+            )
+            note_text = _coerce_text(payload.get("noteText"), "noteText", default="").strip()
+
+            if reward_pulse_milliseconds < 10:
+                raise ApiError(
+                    code="REWARD_PULSE_TOO_LOW",
+                    message="Automatic reward pulse must be at least 10 milliseconds.",
+                    status=400,
+                )
+            if reward_pulse_milliseconds > 5000:
+                raise ApiError(
+                    code="REWARD_PULSE_TOO_HIGH",
+                    message="Automatic reward pulse must be 5000 milliseconds or less.",
+                    status=400,
+                )
+
+            reward_pulse_seconds = round(reward_pulse_milliseconds / 1000, 4)
+            applied_seconds = self.hardware.set_reward_pulse_seconds(reward_pulse_seconds)
+            conducted_by = (
+                ConductedBySnapshot.from_authenticated_user(current_user)
+                if current_user is not None
+                else None
+            )
+            reward_pulse = self.repository.save_reward_pulse_setting(
+                applied_seconds,
+                note_text=note_text,
+                conducted_by=conducted_by,
+            )
+            return {
+                "message": "Automatic reward pulse saved successfully.",
+                "rewardPulse": reward_pulse,
+            }
+        except ApiError:
+            raise
+        except Exception as error:
+            api_error = ApiError(
+                code="REWARD_PULSE_SAVE_ERROR",
+                message="Unable to save the automatic reward pulse.",
+                status=500,
+                details={"reason": str(error)},
+            )
+            raise api_error from error
+
     def get_maintenance_status(self) -> dict[str, object]:
         """Return maintenance and calibration status for the Test I/O page."""
 
         latest_calibration = self.repository.get_latest_pump_calibration()
+        latest_reward_pulse = self.repository.get_latest_reward_pulse_setting()
+        latest_lever_debounce = self.repository.get_latest_lever_debounce_setting()
+        latest_lever_release_requirement = (
+            self.repository.get_latest_lever_release_requirement_setting()
+        )
+        reward_pulse_seconds = self.hardware.reward_pulse_seconds
+        estimated_reward_volume_ml = None
+        if latest_calibration is not None:
+            estimated_reward_volume_ml = round(
+                latest_calibration["derivedRateMlPerSecond"] * reward_pulse_seconds,
+                4,
+            )
         with self.lock:
             return {
                 "gpioMode": os.getenv("GPIO_MODE", "auto"),
@@ -2446,12 +3051,47 @@ class TestSessionManager:
                 "errorIndicatorBlinking": self.hardware.error_blinking,
                 "lightOn": self.hardware.light_on,
                 "latestPumpCalibration": latest_calibration,
+                "latestRewardPulse": latest_reward_pulse,
+                "latestLeverDebounce": latest_lever_debounce,
+                "latestLeverReleaseRequirement": latest_lever_release_requirement,
+                "rewardPulseSeconds": reward_pulse_seconds,
+                "defaultRewardPulseMilliseconds": int(
+                    round(self.hardware.DEFAULT_WATER_REWARD_SECONDS * 1000)
+                ),
+                "activeRewardPulseMilliseconds": int(
+                    round(self.hardware.reward_pulse_seconds * 1000)
+                ),
+                "estimatedRewardVolumeMl": estimated_reward_volume_ml,
+                "defaultLeverDebounceMilliseconds": int(
+                    round(self.hardware.DEFAULT_LEVER_DEBOUNCE_SECONDS * 1000)
+                ),
+                "activeLeverDebounceMilliseconds": int(
+                    round(self.hardware.lever_debounce_seconds * 1000)
+                ),
+                "defaultRequireLeverReleaseBeforeCount": (
+                    self.hardware.DEFAULT_REQUIRE_LEVER_RELEASE_BEFORE_COUNT
+                ),
+                "activeRequireLeverReleaseBeforeCount": (
+                    self.require_lever_release_before_count
+                ),
             }
 
     def on_lever_press(self) -> None:
         """Callback entry point for real or simulated lever presses."""
 
+        with self.lock:
+            if self.require_lever_release_before_count and not self.lever_ready_for_press:
+                return
+            if self.require_lever_release_before_count:
+                self.lever_ready_for_press = False
+
         self._record_interaction("Lever")
+
+    def on_lever_release(self) -> None:
+        """Callback entry point for real or simulated lever releases."""
+
+        with self.lock:
+            self.lever_ready_for_press = True
 
     def on_nose_poke(self) -> None:
         """Callback entry point for real or simulated nose pokes."""
@@ -2718,6 +3358,10 @@ class TestSessionManager:
         self.last_error = None
         self.active_conducted_by: ConductedBySnapshot | None = None
         self.current_event_timeline: list[dict[str, object]] = []
+        self.require_lever_release_before_count = (
+            self.hardware.DEFAULT_REQUIRE_LEVER_RELEASE_BEFORE_COUNT
+        )
+        self.lever_ready_for_press = True
 
     def _advance_sequence_locked(self, interaction: str, configured_interaction: str) -> bool:
         """Check whether the latest input completes the configured interaction pattern."""
@@ -3368,6 +4012,23 @@ def reset_admin_user_password(user_id: int):
     ), 200
 
 
+@app.route("/api/auth/admin/users/<int:user_id>", methods=["DELETE"])
+@require_authenticated_user(admin_only=True)
+def delete_admin_user(user_id: int):
+    """Allow a signed-in admin to permanently remove a non-admin user account."""
+
+    deleted_user = auth_repository.delete_user(
+        user_id=user_id,
+        acting_admin_user_id=g.current_user.user_id,
+    )
+    return jsonify(
+        {
+            "message": "User account deleted successfully.",
+            "user": deleted_user,
+        }
+    ), 200
+
+
 @app.route("/api/presets", methods=["GET"])
 @require_authenticated_user()
 def get_presets():
@@ -3538,6 +4199,42 @@ def save_pump_calibration():
     return jsonify(result), 200
 
 
+@app.route("/api/maintenance/lever-debounce", methods=["POST"])
+@require_authenticated_user()
+def save_lever_debounce():
+    """Save and apply the lever debounce setting from the maintenance page."""
+
+    result = session_manager.save_lever_debounce(
+        request.get_json(silent=True) or {},
+        current_user=g.current_user,
+    )
+    return jsonify(result), 200
+
+
+@app.route("/api/maintenance/lever-release-requirement", methods=["POST"])
+@require_authenticated_user()
+def save_lever_release_requirement():
+    """Save whether the lever must be released before another press can count."""
+
+    result = session_manager.save_lever_release_requirement(
+        request.get_json(silent=True) or {},
+        current_user=g.current_user,
+    )
+    return jsonify(result), 200
+
+
+@app.route("/api/maintenance/reward-pulse", methods=["POST"])
+@require_authenticated_user()
+def save_reward_pulse():
+    """Save and apply the automatic water reward pulse from the maintenance page."""
+
+    result = session_manager.save_reward_pulse(
+        request.get_json(silent=True) or {},
+        current_user=g.current_user,
+    )
+    return jsonify(result), 200
+
+
 @app.route("/api/test/information", methods=["POST"])
 @require_authenticated_user()
 def get_information():
@@ -3624,6 +4321,15 @@ def simulate_lever_press():
 
     session_manager.on_lever_press()
     return jsonify({"status": "simulated lever press"}), 200
+
+
+@app.route("/api/input/lever/release", methods=["POST"])
+@require_authenticated_user()
+def simulate_lever_release():
+    """Simulate a lever release so release-latch counting can be tested."""
+
+    session_manager.on_lever_release()
+    return jsonify({"status": "simulated lever release"}), 200
 
 
 @app.route("/api/input/nosepoke", methods=["POST"])

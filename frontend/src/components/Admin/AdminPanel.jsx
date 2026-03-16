@@ -18,7 +18,12 @@ import {
   Typography,
 } from '@mui/material';
 
-import { getAdminUsers, resetAdminUserPassword, updateAdminUserStatus } from '../../utilities/api';
+import {
+  deleteAdminUser,
+  getAdminUsers,
+  resetAdminUserPassword,
+  updateAdminUserStatus,
+} from '../../utilities/api';
 
 
 const AdminPanel = () => {
@@ -32,6 +37,7 @@ const AdminPanel = () => {
   const [resetDialogUser, setResetDialogUser] = useState(null);
   const [resetPassword, setResetPassword] = useState('');
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState(null);
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -113,6 +119,32 @@ const AdminPanel = () => {
     }
   };
 
+  const handleDeleteUser = async (user) => {
+    const confirmed = window.confirm(
+      `Delete ${user.displayName} (${user.email})? This permanently removes the account and its saved presets. Historical trial results remain.`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingUserId(user.id);
+      const response = await deleteAdminUser(user.id);
+      setUsers((currentUsers) => currentUsers.filter((existingUser) => existingUser.id !== user.id));
+      setFeedback({
+        severity: 'success',
+        message: response.message,
+      });
+    } catch (error) {
+      setFeedback({
+        severity: 'error',
+        message: error.message,
+      });
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
   const pendingUsers = users.filter((user) => user.status === 'pending');
   const managedUsers = users.filter((user) => user.status !== 'pending');
 
@@ -183,6 +215,14 @@ const AdminPanel = () => {
                             </Button>
                             <Button
                               variant="outlined"
+                              color="error"
+                              onClick={() => handleDeleteUser(user)}
+                              disabled={deletingUserId === user.id}
+                            >
+                              {deletingUserId === user.id ? 'Deleting...' : 'Delete User'}
+                            </Button>
+                            <Button
+                              variant="outlined"
                               color="warning"
                               onClick={() => handleStatusChange(user.id, 'disabled')}
                             >
@@ -239,6 +279,14 @@ const AdminPanel = () => {
                               onClick={() => openResetDialog(user)}
                             >
                               Reset Password
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              onClick={() => handleDeleteUser(user)}
+                              disabled={deletingUserId === user.id}
+                            >
+                              {deletingUserId === user.id ? 'Deleting...' : 'Delete User'}
                             </Button>
                             <Button
                               variant={user.status === 'approved' ? 'outlined' : 'contained'}

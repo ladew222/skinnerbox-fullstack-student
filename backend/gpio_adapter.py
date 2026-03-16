@@ -80,6 +80,8 @@ else:
         def __init__(self, *args, **kwargs):
             print("[GPIO MOCK] Button initialized")
             self.when_pressed = None
+            self.when_released = None
+            self.bounce_time = kwargs.get("bounce_time")
 
     class OutputDevice:
         def __init__(self, *args, **kwargs):

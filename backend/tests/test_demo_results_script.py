@@ -41,7 +41,7 @@ class DemoResultsScriptTest(unittest.TestCase):
             )
 
             self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
-            self.assertIn("Seeded 5 demo trial(s)", completed.stdout)
+            self.assertIn("Seeded 5 demo trial(s) and 1 demo preset", completed.stdout)
 
             connection = sqlite3.connect(database_path)
             connection.row_factory = sqlite3.Row
@@ -52,17 +52,59 @@ class DemoResultsScriptTest(unittest.TestCase):
             event_count = connection.execute(
                 "SELECT COUNT(*) AS count FROM test_events"
             ).fetchone()["count"]
+            average_total_interactions = connection.execute(
+                """
+                SELECT AVG(COALESCE(lever_press, 0) + COALESCE(nose_poke, 0)) AS average_total
+                FROM Active_Test
+                """
+            ).fetchone()["average_total"]
             note_count = connection.execute(
                 "SELECT COUNT(*) AS count FROM test_events WHERE event_type = 'note'"
             ).fetchone()["count"]
             operator_count = connection.execute(
                 "SELECT COUNT(*) AS count FROM users WHERE email LIKE 'demo.operator%@example.com'"
             ).fetchone()["count"]
+            validation_admin_count = connection.execute(
+                "SELECT COUNT(*) AS count FROM users WHERE email = 'admin@example.com' AND role = 'admin'"
+            ).fetchone()["count"]
+            legacy_demo_admin_count = connection.execute(
+                "SELECT COUNT(*) AS count FROM users WHERE email = 'demo.admin@example.com'"
+            ).fetchone()["count"]
+            preset_count = connection.execute(
+                "SELECT COUNT(*) AS count FROM user_presets"
+            ).fetchone()["count"]
+            preset_row = connection.execute(
+                """
+                SELECT name, test_name, stimulus_type, reward_type
+                FROM user_presets
+                WHERE name = 'Demo Preset - Training'
+                """
+            ).fetchone()
+            max_trial_event_count = connection.execute(
+                """
+                SELECT MAX(events_per_trial) AS max_count
+                FROM (
+                    SELECT COUNT(*) AS events_per_trial
+                    FROM test_events
+                    GROUP BY test_id
+                )
+                """
+            ).fetchone()["max_count"]
 
             self.assertEqual(active_test_count, 5)
             self.assertGreater(event_count, 5)
+            self.assertGreaterEqual(average_total_interactions, 11)
+            self.assertLessEqual(average_total_interactions, 19)
             self.assertGreaterEqual(note_count, 1)
             self.assertGreaterEqual(operator_count, 1)
+            self.assertEqual(validation_admin_count, 1)
+            self.assertEqual(legacy_demo_admin_count, 0)
+            self.assertEqual(preset_count, 1)
+            self.assertIsNotNone(preset_row)
+            self.assertEqual(preset_row["test_name"], "Demo Training Run")
+            self.assertEqual(preset_row["stimulus_type"], "Light + Tone")
+            self.assertEqual(preset_row["reward_type"], "Water")
+            self.assertGreaterEqual(max_trial_event_count, 12)
 
     def test_script_can_clear_all_saved_results_without_reseeding(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -55,3 +55,16 @@ jest.mock('@mui/x-charts/PieChart', () => {
       }),
   };
 });
+
+jest.mock('@mui/x-charts/LineChart', () => {
+  const React = require('react');
+
+  return {
+    __esModule: true,
+    LineChart: (props) =>
+      React.createElement('div', {
+        'data-testid': 'mui-line-chart',
+        'data-series-count': Array.isArray(props?.series) ? props.series.length : 0,
+      }),
+  };
+});

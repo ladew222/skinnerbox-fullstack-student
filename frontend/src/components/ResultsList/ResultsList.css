@@ -392,6 +392,81 @@
   margin-top: 22px;
 }
 
+.download-button {
+  border: none;
+  background: #0f74bd;
+  color: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.download-button.secondary {
+  background: #385980;
+}
+
+.download-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.results-detail-note {
+  margin: 12px 0 0 0;
+  color: #526173;
+}
+
+.results-trend-panel {
+  margin-top: 22px;
+  padding: 18px 20px;
+  border: 1px solid #d7dee6;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.results-trend-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.results-trend-header h3 {
+  margin: 0;
+  color: #1d4f78;
+}
+
+.results-trend-header p {
+  margin: 6px 0 0 0;
+  color: #526173;
+}
+
+.results-trend-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.results-trend-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #dfe7ef;
+  background: white;
+}
+
+.results-trend-stats strong {
+  font-size: 1.05rem;
+}
+
+.results-trend-stats span {
+  color: #526173;
+  font-size: 0.9rem;
+}
+
 .close-button {
   float: right;
   background: red;
@@ -444,7 +519,8 @@
   }
 
   .results-analytics-grid,
-  .chart-stat-row {
+  .chart-stat-row,
+  .results-trend-stats {
     grid-template-columns: 1fr;
   }
 }

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./TestManager.css";
-import { runTest, stopTest, finishTest, getCounts, getTestInformation, getTestStatus } from "../../utilities/api";
+import { addTestNote, runTest, stopTest, finishTest, getCounts, getTestInformation, getTestStatus } from "../../utilities/api";
 import { DEFAULT_END_CHIME_PATTERN, PRESET_STORAGE_EVENT, loadUserPresets, upsertUserPreset } from "../../utilities/presets";
 import {
+  buildEventTimelineCsv,
+  formatEndChimeStatus,
   buildStimulusSummary,
   buildTraditionalCsv,
   formatSecondsForDisplay,
@@ -43,7 +45,7 @@ const FIELD_HELP_TEXT = {
   testName:
     "This name appears in saved results, preset lists, CSV exports, and the backend status display while the trial is configured or running.",
   subjectID:
-    "Use the numeric animal or subject identifier you want saved with this run so results can be matched back later.",
+    "Leave this blank if you do not want to track a subject for the run. If you use it, enter the numeric animal or subject identifier you want saved with the results.",
   trialDuration:
     "This is the maximum length of the trial in minutes. The backend timer runs the test and will stop early if the test goal is reached first.",
   goalForTrial:
@@ -63,9 +65,9 @@ const FIELD_HELP_TEXT = {
   stimulusType:
     "Choose whether each trial cycle begins with the box light, the passive buzzer tone, or both at the same time.",
   endChimeEnabled:
-    "Turn this on if you want the passive buzzer to play one short custom pattern after the trial finishes.",
+    "Turn this on if you want the passive buzzer to play a short completion chime after the trial finishes.",
   endChimePattern:
-    "Enter the finish pattern as frequency:seconds pairs separated by commas, for example 523:0.12,659:0.12.",
+    "The system uses the built-in completion chime pattern when this option is active.",
 };
 
 
@@ -103,6 +105,10 @@ const TestManager = () => {
 
   const [rewardCount, setRewardCount] = useState(0);
   const [presetSaveMessage, setPresetSaveMessage] = useState("");
+  const [eventTimeline, setEventTimeline] = useState([]);
+  const [operatorNote, setOperatorNote] = useState("");
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [noteFeedback, setNoteFeedback] = useState("");
 
   const [uiError, setUiError] = useState({
     open: false,
@@ -119,7 +125,6 @@ const TestManager = () => {
   const [StimTimeOnError, setStimTimeOnError] = useState('');
   const [coolDownError, setCoolDownError] = useState('');
   const [subjectIDError, setSubjectIDError] = useState('');
-  const [endChimePatternError, setEndChimePatternError] = useState('');
   const previousFinishedRef = useRef(false);
 
   const selectedPreset = userPresets.find((preset) => preset.id === presetValue) || null;
@@ -155,7 +160,7 @@ const TestManager = () => {
 
   const effectiveLightColor = normalizeLightColorForStimulus(stimulusType);
   const stimulusSummary = buildStimulusSummary(stimulusType, effectiveLightColor);
-  const chimeSummary = endChimeEnabled ? endChimePattern : "Disabled";
+  const chimeSummary = formatEndChimeStatus(endChimeEnabled);
   const remainingTimeSeconds = configuredDurationSeconds > 0
     ? Math.max(configuredDurationSeconds - elapsedTime, 0)
     : 0;
@@ -230,7 +235,6 @@ const TestManager = () => {
     setRewaStimTimeError(errors.RewaStimTime || "");
     setStimTimeOnError(errors.StimTimeOn || "");
     setCoolDownError(errors.cooldown || "");
-    setEndChimePatternError(errors.endChimePattern || "");
   };
 
   const clearValidationErrors = () => {
@@ -377,6 +381,7 @@ const TestManager = () => {
 
           // ADDED: Poll the backend to check if the test was stopped because the goal was reached
           const status = await getTestStatus();
+          setEventTimeline(Array.isArray(status.eventTimeline) ? status.eventTimeline : []);
           if (status.error) {
             setTestRunning(false);
             setTestPaused(false);
@@ -426,6 +431,8 @@ const TestManager = () => {
         });
         setTestPaused(false);
         setTestRunning(true);
+        const status = await getTestStatus();
+        setEventTimeline(Array.isArray(status.eventTimeline) ? status.eventTimeline : []);
     } catch (error) {
         console.error("Error resuming test:", error);
         setTestRunning(false);
@@ -458,6 +465,9 @@ const TestManager = () => {
     setNosePokeCount(0);
     setLightOn(false);
     setRewardCount(0);
+    setEventTimeline([]);
+    setOperatorNote("");
+    setNoteFeedback("");
 
     const normalizedValues = validation.normalizedValues;
     const testSettings = { 
@@ -489,6 +499,8 @@ const TestManager = () => {
       // Then start the hardware test and only flip the UI into running mode after success.
       console.log("Starting hardware test...");
       await runTest(testSettings);
+      const status = await getTestStatus();
+      setEventTimeline(Array.isArray(status.eventTimeline) ? status.eventTimeline : []);
       setTestRunning(true);
     } catch (error) {
       console.error("Error running test sequence:", error);
@@ -501,7 +513,9 @@ const TestManager = () => {
     try {
       await stopTest();
       const finalCounts = await getCounts();
+      const status = await getTestStatus();
       applyCountsToUi(finalCounts);
+      setEventTimeline(Array.isArray(status.eventTimeline) ? status.eventTimeline : []);
       setTestRunning(false);
       setTestPaused(true);
       setTestFinished(false);
@@ -515,7 +529,9 @@ const TestManager = () => {
     try {
       await finishTest();
       const finalCounts = await getCounts();
+      const status = await getTestStatus();
       applyCountsToUi(finalCounts);
+      setEventTimeline(Array.isArray(status.eventTimeline) ? status.eventTimeline : []);
       setTestRunning(false);
       setTestPaused(false);
       setTestFinished(true);
@@ -551,8 +567,8 @@ const TestManager = () => {
       stimulusType,
       stimulusDescription: stimulusSummary,
       lightColor: effectiveLightColor,
-      endChimeEnabled,
-      endChimePattern,
+      endChimeEnabled: formatEndChimeStatus(endChimeEnabled),
+      endChimePattern: "",
       leverPressCount: Number(testResults.lever_press_count || 0),
       nosePokeCount: Number(testResults.nose_poke_count || 0),
       totalInteractions: Number(testResults.lever_press_count || 0) + Number(testResults.nose_poke_count || 0),
@@ -565,6 +581,48 @@ const TestManager = () => {
     const a = document.createElement("a");
     a.href = url;
     a.download = `${testName.replace(/\s+/g, "_")}_results.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleSaveOperatorNote = async () => {
+    const trimmedNote = operatorNote.trim();
+    if (!trimmedNote) {
+      showUiError(
+        { code: "NOTE_TEXT_REQUIRED", message: "Enter a note before saving it to the active trial." },
+      );
+      return;
+    }
+
+    try {
+      setNoteBusy(true);
+      const response = await addTestNote(trimmedNote);
+      setOperatorNote("");
+      setNoteFeedback(response.message || "Operator note saved.");
+      if (Array.isArray(response.eventTimeline)) {
+        setEventTimeline(response.eventTimeline);
+      }
+    } catch (error) {
+      showUiError(error, "Unable to save the operator note.");
+    } finally {
+      setNoteBusy(false);
+    }
+  };
+
+  const handleDownloadTimeline = () => {
+    const timelineCsv = buildEventTimelineCsv({
+      testName,
+      subjectId: subjectID,
+      conductedByDisplayName: user?.displayName || "",
+      conductedByEmail: user?.email || "",
+      events: eventTimeline,
+    });
+    const blob = new Blob([timelineCsv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${testName.replace(/\s+/g, "_")}_timeline.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -788,7 +846,7 @@ const handlePreset = (event) => {
                   <InputLabel htmlFor="subjectIdentification">Subject Identification:</InputLabel>
                   <Input
                     id="txtSubjectID"
-                    placeholder="Enter Subject ID (numeric)"
+                    placeholder="Enter Subject ID (optional numeric)"
                     required
                     value={subjectID}
                     onChange={(e) => {
@@ -1020,48 +1078,26 @@ const handlePreset = (event) => {
                   <InputLabel id="endChimeEnabled">End-of-Test Chime:</InputLabel>
                   <Select
                     id="selectEndChimeEnabled"
-                    value={endChimeEnabled ? "enabled" : "disabled"}
+                    value={endChimeEnabled ? "active" : "inactive"}
                     onChange={(e) => {
-                      const nextEnabled = e.target.value === "enabled";
+                      const nextEnabled = e.target.value === "active";
                       setEndChimeEnabled(nextEnabled);
+                      setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
                       validateCurrentTrialForm({ endChimeEnabled: nextEnabled });
                     }}
                   >
-                    <MenuItem value={"disabled"}>Disabled</MenuItem>
-                    <MenuItem value={"enabled"}>Enabled</MenuItem>
+                    <MenuItem value={"inactive"}>Inactive</MenuItem>
+                    <MenuItem value={"active"}>Active</MenuItem>
                   </Select>
                   <FormHelperText>{FIELD_HELP_TEXT.endChimeEnabled}</FormHelperText>
                 </FormControl>
               </div>
 
-              {endChimeEnabled ? (
-                <div className="input-group">
-                  <FormControl fullWidth error={Boolean(endChimePatternError)}>
-                    <InputLabel htmlFor="endChimePattern">End Chime Pattern:</InputLabel>
-                    <Input
-                      id="txtEndChimePattern"
-                      placeholder="523:0.12,659:0.12,784:0.24"
-                      value={endChimePattern}
-                      onChange={(e) => {
-                        const { value } = validationFunctions.testEndChimePattern(
-                          e.target.value,
-                          endChimeEnabled,
-                        );
-                        setEndChimePattern(value);
-                        const validation = validateCurrentTrialForm({ endChimePattern: value });
-                        setEndChimePatternError(validation.errors.endChimePattern || "");
-                      }}
-                    />
-                    <FormHelperText>
-                      {endChimePatternError || FIELD_HELP_TEXT.endChimePattern}
-                    </FormHelperText>
-                  </FormControl>
-                </div>
-              ) : (
-                <div className="stimulus-note">
-                  Leave this disabled if you want the trial to end silently. Enable it only when you want a short finish pattern after the run completes.
-                </div>
-              )}
+              <div className="stimulus-note">
+                {endChimeEnabled
+                  ? "Active means the box will play the built-in completion chime when the trial finishes."
+                  : "Leave this inactive if you want the trial to end silently."}
+              </div>
             </div>
 
             <div className="trial-action-panel">
@@ -1101,16 +1137,73 @@ const handlePreset = (event) => {
           <div className="test-screen">
             {/* Dynamic title based on test completion state */}
             <h1>{testFinished ? "Test Completed" : "Test in Progress"}</h1>
-            <p>Time Remaining: {formatSecondsForDisplay(remainingTimeSeconds)}</p>
-            <p>Elapsed Time: {formatSecondsForDisplay(elapsedTime)}</p>
-            <p>Configured Duration: {formatSecondsForDisplay(configuredDurationSeconds)}</p>
-            <p>Lever Presses: {leverPressCount}</p>
-            <p>Nose Pokes: {nosePokeCount}</p>
-            <p>Rewards Given: {rewardCount}</p>
-            <p>Stimulus: {stimulusSummary}</p>
-            <p>End Chime: {chimeSummary}</p>
-            <p>Light Status: {lightOn ? "ON" : "OFF"}</p>
-            <p>Browser Alert: This page will play a short completion chime when the run finishes.</p>
+            <div className="test-screen-layout">
+              <div className="test-screen-summary">
+                <p>Time Remaining: {formatSecondsForDisplay(remainingTimeSeconds)}</p>
+                <p>Elapsed Time: {formatSecondsForDisplay(elapsedTime)}</p>
+                <p>Configured Duration: {formatSecondsForDisplay(configuredDurationSeconds)}</p>
+                <p>Lever Presses: {leverPressCount}</p>
+                <p>Nose Pokes: {nosePokeCount}</p>
+                <p>Rewards Given: {rewardCount}</p>
+                <p>Stimulus: {stimulusSummary}</p>
+                <p>End Chime: {chimeSummary}</p>
+                <p>Light Status: {lightOn ? "ON" : "OFF"}</p>
+                <p>Browser Alert: This page will play a short completion chime when the run finishes.</p>
+              </div>
+
+              <div className="test-screen-sidebar">
+                {!testFinished && (
+                  <div className="trial-note-panel">
+                    <h3>Operator Notes</h3>
+                    <p>Add a short note to the saved timeline while the trial is running or paused.</p>
+                    <textarea
+                      value={operatorNote}
+                      onChange={(event) => setOperatorNote(event.target.value)}
+                      placeholder="Example: adjusted nose-poke sensor at 2:10."
+                      rows={4}
+                    />
+                    <button
+                      type="button"
+                      className="note-button"
+                      onClick={handleSaveOperatorNote}
+                      disabled={noteBusy}
+                    >
+                      {noteBusy ? "Saving..." : "Save Note"}
+                    </button>
+                    {noteFeedback && <p className="trial-note-feedback">{noteFeedback}</p>}
+                  </div>
+                )}
+
+                <div className="timeline-panel">
+                  <div className="timeline-panel-header">
+                    <h3>Event Timeline</h3>
+                    <button
+                      type="button"
+                      className="timeline-download-button"
+                      onClick={handleDownloadTimeline}
+                      disabled={!eventTimeline.length}
+                    >
+                      Download Timeline CSV
+                    </button>
+                  </div>
+                  {eventTimeline.length ? (
+                    <ul className="timeline-list">
+                      {eventTimeline.slice().reverse().map((event) => (
+                        <li key={event.id} className="timeline-item">
+                          <div className="timeline-item-meta">
+                            <strong>{event.label}</strong>
+                            <span>{formatSecondsForDisplay(event.elapsedSeconds)}</span>
+                          </div>
+                          {event.detailText && <p>{event.detailText}</p>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="timeline-empty">No saved events yet. The timeline will fill as the backend records trial activity.</p>
+                  )}
+                </div>
+              </div>
+            </div>
 
             <div className="button-group">
               {testRunning && <button className="stop-button" onClick={handleStopTest}>Stop Test</button>}
@@ -1125,6 +1218,9 @@ const handlePreset = (event) => {
               {testFinished && (
                 <>
                   <button className="download-button" onClick={handleDownloadResults}>Download Results</button>
+                  <button className="download-button" onClick={handleDownloadTimeline} disabled={!eventTimeline.length}>
+                    Download Timeline
+                  </button>
                   <button className="return-button" onClick={() => { setTestFinished(false); setTestResults(null); }}>Return to Test Setup</button>
                 </>
               )}

@@ -394,7 +394,7 @@ The app is designed to be reachable on your network, so test control and results
 - registration creates a `pending` account in SQLite
 - an approved admin must grant access before that user can log in
 - login returns a bearer token that the React frontend stores locally and sends on API requests
-- protected pages include Trial, Results, Test I/O, Preset Manager, and Admin
+- protected pages include Trial, Results, I/O Config, Preset Manager, and Admin
 - presets are saved per approved user account and are available from both Trial and Preset Manager after sign-in
 
 Admin accounts are managed locally with the backend reset script instead of through the web UI.
@@ -405,6 +405,8 @@ The bundled [backend/testdatabase.db](/Users/egweinberg/Documents/skinnerbox-ful
 
 - email: `admin@example.com`
 - password: `AdminPass123`
+
+The demo-data seeder also reuses this same admin account when it needs to approve demo operators. It does not create a separate demo-only admin anymore.
 
 This is meant for validation only. Reset or replace it before exposing the system on a broader network.
 
@@ -559,6 +561,15 @@ cd frontend
 FRONTEND_BUILD_ON_START=0 ./run_frontend.sh
 ```
 
+For a more production-like Pi setup, build once after a frontend change:
+
+```bash
+cd frontend
+npm run build
+```
+
+Then let the service serve that built output without rebuilding on boot.
+
 ### Boot services on Ubuntu / Raspberry Pi
 
 The updated launchers are designed for `systemd`:
@@ -581,12 +592,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/skinnerbox-fullstack-student/backend
+User=ladew222
+WorkingDirectory=/home/ladew222/skinnerbox-fullstack-student/backend
 Environment=GPIO_MODE=auto
 Environment=OLED_MODE=auto
 Environment=FLASK_RUN_PORT=5000
-ExecStart=/bin/bash /home/pi/skinnerbox-fullstack-student/backend/run_backend.sh
+ExecStart=/bin/bash /home/ladew222/skinnerbox-fullstack-student/backend/run_backend.sh
 Restart=on-failure
 RestartSec=5
 
@@ -604,13 +615,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/skinnerbox-fullstack-student/frontend
+User=ladew222
+WorkingDirectory=/home/ladew222/skinnerbox-fullstack-student/frontend
 Environment=BACKEND_HOST=localhost
 Environment=BACKEND_PORT=5000
 Environment=FRONTEND_PORT=3000
-Environment=FRONTEND_BUILD_ON_START=1
-ExecStart=/bin/bash /home/pi/skinnerbox-fullstack-student/frontend/run_frontend.sh
+Environment=FRONTEND_BUILD_ON_START=0
+ExecStart=/bin/bash /home/ladew222/skinnerbox-fullstack-student/frontend/run_frontend.sh
 Restart=on-failure
 RestartSec=5
 
@@ -618,7 +629,7 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-Update `User=` and the `/home/pi/...` paths if your Pi uses a different account or repository location.
+These examples now assume the Pi user is `ladew222`. If your repository lives somewhere else, update the `WorkingDirectory=` and `ExecStart=` paths before enabling the services.
 
 After copying those files into `/etc/systemd/system`, run:
 
@@ -638,6 +649,8 @@ sudo systemctl status skinnerbox-frontend.service
 tail -f logs/backend.log logs/backend.error.log
 tail -f logs/frontend.log logs/frontend.error.log
 ```
+
+If you do want the Pi to rebuild the frontend automatically after a pull, temporarily set `FRONTEND_BUILD_ON_START=1` in the service, restart it once, and then switch it back to `0`.
 
 ## Changing Ports
 
@@ -855,6 +868,44 @@ npm run build
 ```
 
 ### 4. Manual smoke checks
+
+Demo data for Results and Presets:
+
+From the repository root:
+
+```bash
+cd /Users/egweinberg/Documents/skinnerbox-fullstack-student
+backend/.venv/bin/python scripts/generate_demo_results.py --database backend/testdatabase.db --count 18 --reset-demo
+```
+
+What this does:
+
+- removes older demo trials first when `--reset-demo` is used
+- seeds fake saved trials for the Results page
+- creates or updates one preset named `Demo Preset - Training`
+- stores that preset under the validation admin account `admin@example.com`
+
+How to use it after loading:
+
+1. Start or restart the backend so it is using the same `backend/testdatabase.db` file.
+2. Sign in as `admin@example.com` with password `AdminPass123`.
+3. Open `/Results` to view the seeded demo trials and charts.
+4. Search for `Demo Trial` if you want the charts to summarize only the seeded demo runs.
+5. Open `/Trial` or `/PresetManager` to find the preset `Demo Preset - Training`.
+
+Useful variations:
+
+- create more demo runs:
+
+```bash
+backend/.venv/bin/python scripts/generate_demo_results.py --database backend/testdatabase.db --count 30 --reset-demo
+```
+
+- clear all saved results without reseeding:
+
+```bash
+backend/.venv/bin/python scripts/generate_demo_results.py --database backend/testdatabase.db --clear-all-results --clear-only
+```
 
 Backend health:
 

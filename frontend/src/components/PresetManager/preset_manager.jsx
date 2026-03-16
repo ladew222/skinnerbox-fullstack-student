@@ -14,6 +14,7 @@ import {
   upsertUserPreset,
 } from '../../utilities/presets';
 import {
+  formatEndChimeStatus,
   SINGLE_LIGHT_LABEL,
   normalizeLightColorForStimulus,
   normalizeStimulusType,
@@ -391,32 +392,24 @@ const PresetManager = () => {
             <InputLabel id="endChimeEnabledLabel">End-of-Test Chime:</InputLabel>
             <Select
               id="endChimeEnabled"
-              value={form.endChimeEnabled ? 'enabled' : 'disabled'}
-              onChange={(e) => updateFormField('endChimeEnabled', e.target.value === 'enabled')}
+              value={form.endChimeEnabled ? 'active' : 'inactive'}
+              onChange={(e) => {
+                const nextEnabled = e.target.value === 'active';
+                updateFormField('endChimeEnabled', nextEnabled);
+                updateFormField('endChimePattern', DEFAULT_END_CHIME_PATTERN);
+              }}
             >
-              <MenuItem value="disabled">Disabled</MenuItem>
-              <MenuItem value="enabled">Enabled</MenuItem>
+              <MenuItem value="inactive">Inactive</MenuItem>
+              <MenuItem value="active">Active</MenuItem>
             </Select>
           </FormControl>
         </div>
 
-        {form.endChimeEnabled ? (
-          <div className="input-group">
-            <FormControl fullWidth>
-              <InputLabel htmlFor="endChimePatternLabel">End Chime Pattern:</InputLabel>
-              <Input
-                id="endChimePattern"
-                placeholder="523:0.12,659:0.12,784:0.24"
-                value={form.endChimePattern}
-                onChange={(e) => updateFormField('endChimePattern', e.target.value)}
-              />
-            </FormControl>
-          </div>
-        ) : (
-          <div className="stimulus-note">
-            The default end chime pattern stays saved with this preset and is only used when the option is enabled.
-          </div>
-        )}
+        <div className="stimulus-note">
+          {form.endChimeEnabled
+            ? 'Active means this preset will use the built-in completion chime.'
+            : 'Leave this inactive if runs using this preset should end silently.'}
+        </div>
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2 }}>
           <Button className="save-button" variant="contained" onClick={handlePresetSave}>
@@ -442,7 +435,7 @@ const PresetManager = () => {
                       {preset.interactionType} / {preset.stimulusType}
                     </p>
                     <p>
-                      End chime: {preset.endChimeEnabled ? preset.endChimePattern : 'Disabled'}
+                      End chime: {formatEndChimeStatus(preset.endChimeEnabled)}
                     </p>
                   </div>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>

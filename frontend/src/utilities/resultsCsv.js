@@ -88,6 +88,11 @@ export const buildStimulusSummary = (stimulusType) => {
 };
 
 
+export const formatEndChimeStatus = (endChimeEnabled) => {
+  return endChimeEnabled ? 'Active' : 'Inactive';
+};
+
+
 export const buildTraditionalCsv = (record) => {
   const headers = CSV_COLUMNS.map((column) => escapeCsvValue(column.label)).join(',');
   const row = CSV_COLUMNS.map((column) => escapeCsvValue(record[column.key])).join(',');

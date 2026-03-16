@@ -236,6 +236,11 @@ describe('ResultsList', () => {
     expect(screen.getByText(/operator notes/i)).toBeInTheDocument();
     expect(screen.getAllByText(/animal paused near the lever/i).length).toBeGreaterThanOrEqual(2);
 
+    fireEvent.click(screen.getByRole('button', { name: /show timeline trends/i }));
+
+    expect(screen.getByRole('heading', { name: /timeline trends/i })).toBeInTheDocument();
+    expect(screen.getByTestId('mui-line-chart')).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /download timeline/i }));
 
     expect(window.URL.createObjectURL).toHaveBeenCalledTimes(1);

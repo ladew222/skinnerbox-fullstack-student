@@ -25,6 +25,35 @@ beforeEach(() => {
       return Promise.resolve({ data: { presets: [] } });
     }
 
+    if (url === '/api/counts') {
+      return Promise.resolve({ data: { lever_press_count: 0, nose_poke_count: 0 } });
+    }
+
+    if (url === '/api/maintenance/status') {
+      return Promise.resolve({
+        data: {
+          gpioMode: 'mock',
+          oledMode: 'mock',
+          programOk: true,
+          runningIndicatorOn: false,
+          errorIndicatorBlinking: false,
+          lightOn: false,
+          rewardPulseSeconds: 0.03,
+          defaultRewardPulseMilliseconds: 30,
+          activeRewardPulseMilliseconds: 30,
+          latestRewardPulse: null,
+          estimatedRewardVolumeMl: null,
+          defaultLeverDebounceMilliseconds: 150,
+          activeLeverDebounceMilliseconds: 150,
+          latestLeverDebounce: null,
+          defaultRequireLeverReleaseBeforeCount: false,
+          activeRequireLeverReleaseBeforeCount: false,
+          latestLeverReleaseRequirement: null,
+          latestPumpCalibration: null,
+        },
+      });
+    }
+
     return Promise.resolve({ data: {} });
   });
 });
@@ -82,7 +111,7 @@ test('renders the trial setup for an authenticated operator', async () => {
   expect(screen.getByText(/the backend owns the timing, counts, rewards/i)).toBeInTheDocument();
 });
 
-test('renders the real-time pump prime controls on the I/O testing page', async () => {
+test('renders the real-time pump prime controls on the I/O config page', async () => {
   sessionStorage.setItem('skinnerbox.authToken', 'test-token');
   sessionStorage.setItem(
     'skinnerbox.authUser',
@@ -100,9 +129,18 @@ test('renders the real-time pump prime controls on the I/O testing page', async 
     </MemoryRouter>
   );
 
-  expect(await screen.findByRole('heading', { name: /i\/o testing/i })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: /i\/o config/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /play buzzer test/i })).toBeInTheDocument();
   expect(screen.getByText(/confirm the passive buzzer can be heard/i)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /prime now/i })).toBeInTheDocument();
-  expect(screen.getByText(/does not start, queue, or change a test/i)).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /manual run pump/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /run pump test/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /save pump calibration/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /reset lever baseline/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /reset nose poke baseline/i })).toBeInTheDocument();
+  expect(screen.getByText(/they only reset the “since baseline” counters/i)).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /maintenance status/i })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /current default values/i })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /pump calibration/i })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /lever input settings/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /save lever count mode/i })).toBeInTheDocument();
 });

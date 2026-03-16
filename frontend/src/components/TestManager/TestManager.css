@@ -339,6 +339,124 @@
   margin: 0;
 }
 
+.test-screen-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.test-screen-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.test-screen-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trial-note-panel,
+.timeline-panel {
+  padding: 18px 20px;
+  border: 1px solid #d7dee6;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.trial-note-panel h3,
+.timeline-panel h3 {
+  margin: 0 0 10px 0;
+  color: #184d7a;
+}
+
+.trial-note-panel p,
+.timeline-panel p {
+  color: #4b6477;
+}
+
+.trial-note-panel textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #bfcddb;
+  border-radius: 10px;
+  padding: 12px 14px;
+  resize: vertical;
+  min-height: 96px;
+  font: inherit;
+  margin-top: 8px;
+}
+
+.note-button,
+.timeline-download-button {
+  border: none;
+  border-radius: 10px;
+  padding: 11px 16px;
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.note-button {
+  background: #197a37;
+  margin-top: 12px;
+}
+
+.timeline-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.timeline-download-button {
+  background: #0f74bd;
+}
+
+.timeline-download-button:disabled,
+.note-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.timeline-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.timeline-item {
+  padding: 12px 14px;
+  border: 1px solid #dfe7ef;
+  border-radius: 10px;
+  background: white;
+}
+
+.timeline-item-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.timeline-item p,
+.timeline-empty {
+  margin-top: 8px;
+}
+
+.trial-note-feedback {
+  margin-top: 10px;
+  font-weight: 600;
+  color: #1b5a86;
+}
+
 @media (max-width: 720px) {
   .trial-settings {
     padding: 20px 16px;
@@ -365,6 +483,15 @@
   }
 
   .pump-prime-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .test-screen-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-panel-header {
     flex-direction: column;
     align-items: stretch;
   }

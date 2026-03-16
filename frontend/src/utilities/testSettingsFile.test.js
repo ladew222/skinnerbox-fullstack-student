@@ -1,4 +1,5 @@
 import {
+  DEFAULT_END_CHIME_PATTERN,
   SINGLE_LIGHT_LABEL,
   buildTestSettingsText,
   parseTestSettingsText,
@@ -37,7 +38,30 @@ test('round-trips the current settings file format', () => {
   expect(parsed.stimulusType).toBe('Light');
   expect(parsed.lightColor).toBe(SINGLE_LIGHT_LABEL);
   expect(parsed.endChimeEnabled).toBe(true);
-  expect(parsed.endChimePattern).toBe('523:0.10,659:0.10');
+  expect(parsed.endChimePattern).toBe(DEFAULT_END_CHIME_PATTERN);
+});
+
+
+test('round-trips a blank subject field so subject tracking can stay optional', () => {
+  const fileText = buildTestSettingsText({
+    appliedPresetName: 'No Subject',
+    testName: 'Optional Subject Trial',
+    subjectID: '',
+    trialDuration: '10',
+    goalForTrial: '1',
+    goalForTest: '4',
+    RewaStimTime: '0',
+    StimTimeOn: '1',
+    cooldown: '0',
+    rewardType: 'Water',
+    interactionType: 'Lever',
+    stimulusType: 'Light',
+    endChimeEnabled: false,
+  });
+
+  const parsed = parseTestSettingsText(fileText);
+
+  expect(parsed.subjectID).toBe('');
 });
 
 

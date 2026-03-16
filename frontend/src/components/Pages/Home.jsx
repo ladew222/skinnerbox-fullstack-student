@@ -31,7 +31,7 @@ function Home() {
                                         Run a Trial
                                     </Link>
                                     <Link className="home-secondary-link" to="/IoTesting">
-                                        Test I/O
+                                        I/O Config
                                     </Link>
                                 </>
                             ) : (
@@ -64,7 +64,7 @@ function Home() {
                         <p className="home-eyebrow">How To Use The System</p>
                         <h2>One workflow from setup to saved results</h2>
                         <p className="home-directions-lead">
-                            Start by signing in with an approved account. Use <strong>Test I/O</strong> to confirm sensors, lights,
+                            Start by signing in with an approved account. Use <strong>I/O Config</strong> to confirm sensors, lights,
                             buzzer, and pump behavior before a live trial. Then move to <strong>Trial</strong> to load a preset or enter
                             the settings for the run you want to perform.
                         </p>

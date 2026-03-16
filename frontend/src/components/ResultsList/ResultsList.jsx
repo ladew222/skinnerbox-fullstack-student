@@ -3,12 +3,14 @@ import "./ResultsList.css";
 import { deleteResult, deleteResults, getResults } from "../../utilities/api";
 import { useAuth } from "../../context/AuthContext";
 import { BarChart } from "@mui/x-charts/BarChart";
+import { LineChart } from "@mui/x-charts/LineChart";
 import { PieChart } from "@mui/x-charts/PieChart";
 import {
   buildEventTimelineCsv,
   buildStimulusSummary,
   buildTraditionalCsv,
   buildTraditionalCsvRows,
+  formatEndChimeStatus,
   formatSecondsForDisplay,
 } from "../../utilities/resultsCsv";
 
@@ -25,6 +27,47 @@ const truncateChartLabel = (value, maxLength = 16) => {
   return `${normalizedValue.slice(0, maxLength - 1)}…`;
 };
 
+const buildTimelineTrendPoints = (events = []) => {
+  const normalizedEvents = (Array.isArray(events) ? events : [])
+    .map((event) => ({
+      ...event,
+      elapsedSeconds: Number.isFinite(Number(event?.elapsedSeconds))
+        ? Math.max(Number(event.elapsedSeconds), 0)
+        : 0,
+    }))
+    .sort((left, right) => left.elapsedSeconds - right.elapsedSeconds);
+
+  let leverPresses = 0;
+  let nosePokes = 0;
+  let rewards = 0;
+
+  const points = [{
+    elapsedSeconds: 0,
+    leverPresses: 0,
+    nosePokes: 0,
+    rewards: 0,
+  }];
+
+  normalizedEvents.forEach((event) => {
+    if (event.type === "lever_press") {
+      leverPresses += 1;
+    } else if (event.type === "nose_poke") {
+      nosePokes += 1;
+    } else if (event.type === "reward_delivered") {
+      rewards += 1;
+    }
+
+    points.push({
+      elapsedSeconds: event.elapsedSeconds,
+      leverPresses,
+      nosePokes,
+      rewards,
+    });
+  });
+
+  return points;
+};
+
 const ResultsList = () => {
   const { isAdmin } = useAuth();
   const [selectedTest, setSelectedTest] = useState(null);
@@ -35,6 +78,7 @@ const ResultsList = () => {
   const [testData, setTestData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleteBusyIds, setDeleteBusyIds] = useState([]);
+  const [showTimelineTrends, setShowTimelineTrends] = useState(false);
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -124,6 +168,40 @@ const ResultsList = () => {
   const selectedComparisonTests = selectedTestIds.length
     ? testData.filter((test) => selectedTestIds.includes(String(test.id)))
     : [];
+  const selectedTimelineEvents = Array.isArray(selectedTest?.eventTimeline)
+    ? selectedTest.eventTimeline
+    : [];
+  const hasSelectedTimeline = selectedTimelineEvents.length > 0;
+  const timelineTrendPoints = hasSelectedTimeline
+    ? buildTimelineTrendPoints(selectedTimelineEvents)
+    : [];
+  const timelineTrendXAxis = timelineTrendPoints.map((point) => point.elapsedSeconds);
+  const timelineTrendMaxCount = timelineTrendPoints.length
+    ? Math.max(
+      ...timelineTrendPoints.map((point) =>
+        Math.max(point.leverPresses, point.nosePokes, point.rewards)
+      ),
+      1
+    )
+    : 1;
+  const selectedTimelineSummary = selectedTimelineEvents.reduce((summary, event) => {
+    const nextSummary = { ...summary };
+    if (event?.type === "lever_press") {
+      nextSummary.leverPresses += 1;
+    } else if (event?.type === "nose_poke") {
+      nextSummary.nosePokes += 1;
+    } else if (event?.type === "reward_delivered") {
+      nextSummary.rewards += 1;
+    } else if (event?.type === "note") {
+      nextSummary.notes += 1;
+    }
+    return nextSummary;
+  }, {
+    leverPresses: 0,
+    nosePokes: 0,
+    rewards: 0,
+    notes: 0,
+  });
 
   const buildCsvRecord = (test) => ({
     exportedAt: new Date().toISOString(),
@@ -149,8 +227,8 @@ const ResultsList = () => {
     stimulusType: test.stimulusType,
     stimulusDescription: test.stimulusDescription,
     lightColor: test.lightColor,
-    endChimeEnabled: test.endChimeEnabled,
-    endChimePattern: test.endChimePattern,
+    endChimeEnabled: formatEndChimeStatus(test.endChimeEnabled),
+    endChimePattern: '',
     leverPressCount: test.leverPressCount,
     nosePokeCount: test.nosePokeCount,
     totalInteractions: test.totalPresses,
@@ -424,7 +502,14 @@ const ResultsList = () => {
         ) : (
           <ul>
             {filteredTests.map((test) => (
-              <li key={test.id} onClick={() => setSelectedTest(test)} className="test-item">
+              <li
+                key={test.id}
+                onClick={() => {
+                  setSelectedTest(test);
+                  setShowTimelineTrends(false);
+                }}
+                className="test-item"
+              >
                 <input
                   type="checkbox"
                   className="trial-select-checkbox"
@@ -516,6 +601,7 @@ const ResultsList = () => {
                     {
                       scaleType: "band",
                       data: averageResponseChartLabels,
+                      label: "Response Metric",
                       tickLabelStyle: {
                         angle: -20,
                         textAnchor: "end",
@@ -523,7 +609,13 @@ const ResultsList = () => {
                       },
                     },
                   ]}
-                  yAxis={[{ min: 0, max: Math.max(maxAverageMetric, 1) + 1 }]}
+                  yAxis={[
+                    {
+                      min: 0,
+                      max: Math.max(maxAverageMetric, 1) + 1,
+                      label: "Average Count",
+                    },
+                  ]}
                   series={[
                     {
                       data: averageResponseChartData,
@@ -531,7 +623,7 @@ const ResultsList = () => {
                       valueFormatter: (value) => formatAverageValue(value),
                     },
                   ]}
-                  margin={{ top: 10, bottom: 50, left: 36, right: 12 }}
+                  margin={{ top: 10, bottom: 72, left: 68, right: 12 }}
                 />
               </div>
 
@@ -545,11 +637,17 @@ const ResultsList = () => {
                     {
                       scaleType: "band",
                       data: interactionsChartLabels,
+                      label: "Trial",
                       tickLabelStyle: {
                         angle: -18,
                         textAnchor: "end",
                         fontSize: 11,
                       },
+                    },
+                  ]}
+                  yAxis={[
+                    {
+                      label: "Interaction Count",
                     },
                   ]}
                   series={[
@@ -559,7 +657,7 @@ const ResultsList = () => {
                       valueFormatter: (value) => `${value ?? 0} interactions`,
                     },
                   ]}
-                  margin={{ top: 10, bottom: 54, left: 40, right: 12 }}
+                  margin={{ top: 10, bottom: 76, left: 72, right: 12 }}
                 />
               </div>
 
@@ -632,7 +730,13 @@ const ResultsList = () => {
                 </thead>
                 <tbody>
                   {selectedComparisonTests.map((test) => (
-                    <tr key={test.id}>
+                    <tr
+                      key={test.id}
+                      onClick={() => {
+                        setSelectedTest(test);
+                        setShowTimelineTrends(false);
+                      }}
+                    >
                       <td>{test.name}</td>
                       <td>{formatSubjectId(test)}</td>
                       <td>{formatTrialDate(test)}</td>
@@ -652,7 +756,15 @@ const ResultsList = () => {
 
         {selectedTest && (
           <div className="test-details">
-            <button className="close-button" onClick={() => setSelectedTest(null)}>X</button>
+            <button
+              className="close-button"
+              onClick={() => {
+                setSelectedTest(null);
+                setShowTimelineTrends(false);
+              }}
+            >
+              X
+            </button>
             <h2>{selectedTest.name} Summary</h2>
             <div className="test-summary">
               <p><strong>Saved:</strong> {formatTrialDate(selectedTest)}</p>
@@ -671,11 +783,8 @@ const ResultsList = () => {
               <p><strong>Reward Type:</strong> {selectedTest.rewardType}</p>
               <p><strong>Stimulus:</strong> {selectedTest.stimulusDescription || buildStimulusSummary(selectedTest.stimulusType, selectedTest.lightColor)}</p>
               <p><strong>Interaction Type:</strong> {selectedTest.interactionType}</p>
-              <p><strong>End Chime:</strong> {selectedTest.endChimeEnabled ? 'Enabled' : 'Disabled'}</p>
+              <p><strong>End Chime:</strong> {formatEndChimeStatus(selectedTest.endChimeEnabled)}</p>
               <p><strong>Event Count:</strong> {selectedTest.eventCount || 0}</p>
-              {selectedTest.endChimeEnabled && (
-                <p><strong>End Chime Pattern:</strong> {selectedTest.endChimePattern}</p>
-              )}
             </div>
             {selectedTest.notes?.length ? (
               <div className="results-notes-panel">
@@ -711,11 +820,94 @@ const ResultsList = () => {
               <button
                 className="download-button"
                 onClick={handleDownloadTimeline}
-                disabled={!selectedTest.eventTimeline?.length}
+                disabled={!hasSelectedTimeline}
               >
                 Download Timeline
               </button>
+              <button
+                className="download-button secondary"
+                onClick={() => setShowTimelineTrends((currentValue) => !currentValue)}
+                disabled={!hasSelectedTimeline}
+              >
+                {showTimelineTrends ? "Hide Timeline Trends" : "Show Timeline Trends"}
+              </button>
             </div>
+            {!hasSelectedTimeline && (
+              <p className="results-detail-note">
+                No event timeline is saved for this trial yet, so there is nothing to download or chart.
+              </p>
+            )}
+            {showTimelineTrends && hasSelectedTimeline && (
+              <div className="results-trend-panel">
+                <div className="results-trend-header">
+                  <div>
+                    <h3>Timeline Trends</h3>
+                    <p>Cumulative responses and rewards across the saved event timeline.</p>
+                  </div>
+                </div>
+                <LineChart
+                  height={300}
+                  skipAnimation
+                  xAxis={[
+                    {
+                      data: timelineTrendXAxis,
+                      scaleType: "linear",
+                      label: "Elapsed Time (seconds)",
+                      valueFormatter: (value) => `${Math.round(Number(value || 0))}s`,
+                    },
+                  ]}
+                  yAxis={[
+                    {
+                      min: 0,
+                      max: timelineTrendMaxCount + 1,
+                      label: "Cumulative Count",
+                    },
+                  ]}
+                  series={[
+                    {
+                      id: "lever",
+                      label: "Lever Presses",
+                      data: timelineTrendPoints.map((point) => point.leverPresses),
+                      color: "#0f74bd",
+                      showMark: false,
+                    },
+                    {
+                      id: "nose",
+                      label: "Nose Pokes",
+                      data: timelineTrendPoints.map((point) => point.nosePokes),
+                      color: "#2851a3",
+                      showMark: false,
+                    },
+                    {
+                      id: "reward",
+                      label: "Rewards",
+                      data: timelineTrendPoints.map((point) => point.rewards),
+                      color: "#5d8c1f",
+                      showMark: false,
+                    },
+                  ]}
+                  margin={{ top: 18, bottom: 62, left: 72, right: 22 }}
+                />
+                <div className="results-trend-stats">
+                  <div>
+                    <strong>{selectedTimelineSummary.leverPresses}</strong>
+                    <span>Lever events</span>
+                  </div>
+                  <div>
+                    <strong>{selectedTimelineSummary.nosePokes}</strong>
+                    <span>Nose poke events</span>
+                  </div>
+                  <div>
+                    <strong>{selectedTimelineSummary.rewards}</strong>
+                    <span>Reward events</span>
+                  </div>
+                  <div>
+                    <strong>{selectedTimelineSummary.notes}</strong>
+                    <span>Operator notes</span>
+                  </div>
+                </div>
+              </div>
+            )}
             {isAdmin && (
               <button
                 className="delete-trial-button details-delete-button"
