@@ -567,20 +567,20 @@ npm install
 ./run_frontend.sh
 ```
 
-`run_frontend.sh` builds the React app with the current backend URL and then serves the built files with a small Node/Express server that works well under `systemd`.
+`run_frontend.sh` now builds the React app to use relative `/api` requests by default and serves the built files with a small Node/Express server that proxies `/api/*` to the configured backend. That means browsers on other machines can use the Pi frontend without baking the Pi IP into the bundle.
 
-If the frontend is running on another machine instead of the Pi, set the backend URL explicitly:
+If the frontend server is running on another machine instead of the Pi, point its runtime proxy at the Pi backend:
 
 ```bash
 cd frontend
-REACT_APP_BACKEND_URL=http://<pi-ip>:5000 ./run_frontend.sh
+BACKEND_HOST=<pi-ip> BACKEND_PORT=5000 ./run_frontend.sh
 ```
 
-If the Pi backend is using a non-default port, include that port in the frontend URL:
+If the Pi backend is using a non-default port, include that port in the frontend proxy target:
 
 ```bash
 cd frontend
-REACT_APP_BACKEND_URL=http://<pi-ip>:5001 ./run_frontend.sh
+BACKEND_HOST=<pi-ip> BACKEND_PORT=5001 ./run_frontend.sh
 ```
 
 If you already built the frontend and do not want to rebuild on every service start, disable the automatic build step:
@@ -604,7 +604,7 @@ Then let the service serve that built output without rebuilding on boot.
 The updated launchers are designed for `systemd`:
 
 - [backend/run_backend.sh](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/run_backend.sh) activates the virtual environment, forces a single Flask process without the reloader, and writes logs to [logs/backend.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/backend.log) and [logs/backend.error.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/backend.error.log).
-- [frontend/run_frontend.sh](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/run_frontend.sh) builds the frontend with the chosen backend URL, serves the built files through [frontend/server.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/server.js), and writes logs to [logs/frontend.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/frontend.log) and [logs/frontend.error.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/frontend.error.log).
+- [frontend/run_frontend.sh](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/run_frontend.sh) builds the frontend with same-origin `/api` requests by default, serves the built files through [frontend/server.js](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/server.js), proxies `/api/*` to the configured backend target, and writes logs to [logs/frontend.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/frontend.log) and [logs/frontend.error.log](/Users/egweinberg/Documents/skinnerbox-fullstack-student/logs/frontend.error.log).
 
 Ready-to-copy unit files are included here:
 
@@ -698,9 +698,10 @@ Backend:
 
 Frontend:
 
-- if the backend stays on `5000`, `./run_frontend.sh` defaults to `http://localhost:5000`
-- if the backend uses another port, start the frontend with `REACT_APP_BACKEND_URL=http://localhost:<port> ./run_frontend.sh`
-- if the frontend is on another machine, use `REACT_APP_BACKEND_URL=http://<backend-host>:<port> ./run_frontend.sh`
+- `./run_frontend.sh` proxies `/api` to `http://localhost:5000` by default
+- if the backend uses another port on the same machine, start the frontend with `BACKEND_PORT=<port> ./run_frontend.sh`
+- if the frontend server is on another machine, use `BACKEND_HOST=<backend-host> BACKEND_PORT=<port> ./run_frontend.sh`
+- only set `REACT_APP_BACKEND_URL=http://<backend-host>:<port>` when the built frontend will be served by something that cannot proxy `/api`
 - if you want the frontend service itself on another port, set `FRONTEND_PORT=<port>`
 
 Postman:
@@ -721,7 +722,7 @@ GPIO_MODE=mock OLED_MODE=mock FLASK_APP=sbBackend.py flask run --host=0.0.0.0 --
 
 ```bash
 cd frontend
-REACT_APP_BACKEND_URL=http://localhost:5001 ./run_frontend.sh
+BACKEND_PORT=5001 ./run_frontend.sh
 ```
 
 - Pi backend on `5001`, frontend on another computer:
@@ -734,7 +735,7 @@ FLASK_RUN_PORT=5001 GPIO_MODE=auto OLED_MODE=auto ./run_backend.sh
 
 ```bash
 cd frontend
-REACT_APP_BACKEND_URL=http://<pi-ip>:5001 ./run_frontend.sh
+BACKEND_HOST=<pi-ip> BACKEND_PORT=5001 ./run_frontend.sh
 ```
 
 ## Basic Workflow

@@ -36,13 +36,16 @@ export BROWSER=none
 BACKEND_SCHEME="${BACKEND_SCHEME:-http}"
 BACKEND_HOST="${BACKEND_HOST:-localhost}"
 BACKEND_PORT="${BACKEND_PORT:-5000}"
+BACKEND_TARGET="${BACKEND_SCHEME}://${BACKEND_HOST}:${BACKEND_PORT}"
 
-# The React build reads the backend URL at build time, so the launcher sets a
-# sensible default here before rebuilding and starting the static server.
-export REACT_APP_BACKEND_URL="${REACT_APP_BACKEND_URL:-${BACKEND_SCHEME}://${BACKEND_HOST}:${BACKEND_PORT}}"
+# By default the production frontend uses relative /api requests, and server.js
+# proxies those requests to the configured backend target at runtime. Only set
+# REACT_APP_BACKEND_URL when you intentionally want the built bundle to call an
+# absolute backend URL directly.
+export REACT_APP_BACKEND_URL="${REACT_APP_BACKEND_URL:-}"
 export FRONTEND_BUILD_ON_START="${FRONTEND_BUILD_ON_START:-1}"
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Frontend port=${FRONTEND_PORT} backend=${REACT_APP_BACKEND_URL} build_on_start=${FRONTEND_BUILD_ON_START}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Frontend port=${FRONTEND_PORT} proxy_backend=${BACKEND_TARGET} build_api_base=${REACT_APP_BACKEND_URL:-same-origin} build_on_start=${FRONTEND_BUILD_ON_START}"
 
 if [ "${FRONTEND_BUILD_ON_START}" = "1" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Building frontend bundle"

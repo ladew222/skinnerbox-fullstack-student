@@ -13,7 +13,9 @@ CI=true npm test -- --watch=false
 npm run build
 ```
 
-If you are running the frontend against a backend on another machine, set:
+When you use `npm start`, CRA's dev server proxies `/api` to `http://localhost:5000`
+by default because of the `proxy` setting in [package.json](/Users/egweinberg/Documents/skinnerbox-fullstack-student/frontend/package.json).
+If your backend is on another machine during local development, set:
 
 ```bash
 REACT_APP_BACKEND_URL=http://<backend-host>:5000 npm start
