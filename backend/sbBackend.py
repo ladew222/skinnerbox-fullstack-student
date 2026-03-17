@@ -328,6 +328,10 @@ class SQLiteTestRepository:
                 nose_poke INTEGER DEFAULT 0,
                 lever_press INTEGER DEFAULT 0,
                 reward_count INTEGER DEFAULT 0,
+                valid_lever_press INTEGER DEFAULT 0,
+                invalid_lever_press INTEGER DEFAULT 0,
+                valid_nose_poke INTEGER DEFAULT 0,
+                invalid_nose_poke INTEGER DEFAULT 0,
                 elapsed_seconds REAL DEFAULT 0,
                 end_chime_enabled INTEGER DEFAULT 0,
                 end_chime_pattern TEXT DEFAULT '',
@@ -360,6 +364,10 @@ class SQLiteTestRepository:
             "nose_poke": "INTEGER DEFAULT 0",
             "lever_press": "INTEGER DEFAULT 0",
             "reward_count": "INTEGER DEFAULT 0",
+            "valid_lever_press": "INTEGER DEFAULT 0",
+            "invalid_lever_press": "INTEGER DEFAULT 0",
+            "valid_nose_poke": "INTEGER DEFAULT 0",
+            "invalid_nose_poke": "INTEGER DEFAULT 0",
             "elapsed_seconds": "REAL DEFAULT 0",
             "end_chime_enabled": "INTEGER DEFAULT 0",
             "end_chime_pattern": "TEXT DEFAULT ''",
@@ -404,6 +412,8 @@ class SQLiteTestRepository:
                 event_type TEXT NOT NULL,
                 event_label TEXT DEFAULT '',
                 detail_text TEXT DEFAULT '',
+                response_validity TEXT DEFAULT '',
+                response_reason TEXT DEFAULT '',
                 detail_value REAL,
                 occurred_at TEXT,
                 elapsed_seconds REAL DEFAULT 0
@@ -451,6 +461,8 @@ class SQLiteTestRepository:
             "event_type": "TEXT NOT NULL DEFAULT ''",
             "event_label": "TEXT DEFAULT ''",
             "detail_text": "TEXT DEFAULT ''",
+            "response_validity": "TEXT DEFAULT ''",
+            "response_reason": "TEXT DEFAULT ''",
             "detail_value": "REAL",
             "occurred_at": "TEXT",
             "elapsed_seconds": "REAL DEFAULT 0",
@@ -578,6 +590,10 @@ class SQLiteTestRepository:
                         nose_poke,
                         lever_press,
                         reward_count,
+                        valid_lever_press,
+                        invalid_lever_press,
+                        valid_nose_poke,
+                        invalid_nose_poke,
                         elapsed_seconds,
                         end_chime_enabled,
                         end_chime_pattern,
@@ -589,7 +605,7 @@ class SQLiteTestRepository:
                         camera_snapshot_captured_at,
                         created_at,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(testID) DO UPDATE SET
                         subjectID = excluded.subjectID,
                         Name = excluded.Name,
@@ -607,6 +623,10 @@ class SQLiteTestRepository:
                         nose_poke = excluded.nose_poke,
                         lever_press = excluded.lever_press,
                         reward_count = excluded.reward_count,
+                        valid_lever_press = excluded.valid_lever_press,
+                        invalid_lever_press = excluded.invalid_lever_press,
+                        valid_nose_poke = excluded.valid_nose_poke,
+                        invalid_nose_poke = excluded.invalid_nose_poke,
                         elapsed_seconds = excluded.elapsed_seconds,
                         end_chime_enabled = excluded.end_chime_enabled,
                         end_chime_pattern = excluded.end_chime_pattern,
@@ -636,6 +656,10 @@ class SQLiteTestRepository:
                         counts["nose_poke_count"],
                         counts["lever_press_count"],
                         counts["reward_count"],
+                        counts["valid_lever_press_count"],
+                        counts["invalid_lever_press_count"],
+                        counts["valid_nose_poke_count"],
+                        counts["invalid_nose_poke_count"],
                         counts.get("elapsed_seconds", 0),
                         int(configuration.end_chime_enabled),
                         configuration.end_chime_pattern,
@@ -680,6 +704,10 @@ class SQLiteTestRepository:
                         SET nose_poke = ?,
                             lever_press = ?,
                             reward_count = ?,
+                            valid_lever_press = ?,
+                            invalid_lever_press = ?,
+                            valid_nose_poke = ?,
+                            invalid_nose_poke = ?,
                             elapsed_seconds = ?,
                             updated_at = ?
                         WHERE testID = ?
@@ -688,6 +716,10 @@ class SQLiteTestRepository:
                             counts["nose_poke_count"],
                             counts["lever_press_count"],
                             counts["reward_count"],
+                            counts["valid_lever_press_count"],
+                            counts["invalid_lever_press_count"],
+                            counts["valid_nose_poke_count"],
+                            counts["invalid_nose_poke_count"],
                             counts.get("elapsed_seconds", 0),
                             self._timestamp(),
                             test_id,
@@ -700,6 +732,10 @@ class SQLiteTestRepository:
                         SET nose_poke = ?,
                             lever_press = ?,
                             reward_count = ?,
+                            valid_lever_press = ?,
+                            invalid_lever_press = ?,
+                            valid_nose_poke = ?,
+                            invalid_nose_poke = ?,
                             elapsed_seconds = ?,
                             testStatus = ?,
                             updated_at = ?
@@ -709,6 +745,10 @@ class SQLiteTestRepository:
                             counts["nose_poke_count"],
                             counts["lever_press_count"],
                             counts["reward_count"],
+                            counts["valid_lever_press_count"],
+                            counts["invalid_lever_press_count"],
+                            counts["valid_nose_poke_count"],
+                            counts["invalid_nose_poke_count"],
                             counts.get("elapsed_seconds", 0),
                             status,
                             self._timestamp(),
@@ -751,6 +791,10 @@ class SQLiteTestRepository:
                         nose_poke,
                         lever_press,
                         reward_count,
+                        valid_lever_press,
+                        invalid_lever_press,
+                        valid_nose_poke,
+                        invalid_nose_poke,
                         elapsed_seconds,
                         end_chime_enabled,
                         end_chime_pattern,
@@ -781,6 +825,8 @@ class SQLiteTestRepository:
                             event_type,
                             event_label,
                             detail_text,
+                            response_validity,
+                            response_reason,
                             detail_value,
                             occurred_at,
                             elapsed_seconds
@@ -1060,6 +1106,8 @@ class SQLiteTestRepository:
         event_label: str,
         *,
         detail_text: str = "",
+        response_validity: str = "",
+        response_reason: str = "",
         detail_value: float | None = None,
         elapsed_seconds: float = 0,
     ) -> dict[str, object]:
@@ -1075,16 +1123,20 @@ class SQLiteTestRepository:
                         event_type,
                         event_label,
                         detail_text,
+                        response_validity,
+                        response_reason,
                         detail_value,
                         occurred_at,
                         elapsed_seconds
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         test_id,
                         event_type,
                         event_label,
                         detail_text,
+                        response_validity,
+                        response_reason,
                         detail_value,
                         occurred_at,
                         elapsed_seconds,
@@ -1107,6 +1159,8 @@ class SQLiteTestRepository:
             "type": event_type,
             "label": event_label,
             "detailText": detail_text,
+            "responseValidity": response_validity,
+            "responseReason": response_reason,
             "detailValue": detail_value,
             "occurredAt": occurred_at,
             "elapsedSeconds": round(float(elapsed_seconds or 0), 3),
@@ -1125,6 +1179,8 @@ class SQLiteTestRepository:
                         event_type,
                         event_label,
                         detail_text,
+                        response_validity,
+                        response_reason,
                         detail_value,
                         occurred_at,
                         elapsed_seconds
@@ -1897,6 +1953,10 @@ class SQLiteTestRepository:
             "nosePokeCount": int(row["nose_poke"] or 0),
             "totalPresses": total_interactions,
             "rewardCount": reward_count,
+            "validLeverPressCount": int(row["valid_lever_press"] or 0),
+            "invalidLeverPressCount": int(row["invalid_lever_press"] or 0),
+            "validNosePokeCount": int(row["valid_nose_poke"] or 0),
+            "invalidNosePokeCount": int(row["invalid_nose_poke"] or 0),
             "successfulAttempts": successful_attempts,
             "unsuccessfulAttempts": unsuccessful_attempts,
             "configuredDurationMinutes": float(row["Duration"] or 0),
@@ -1935,6 +1995,8 @@ class SQLiteTestRepository:
             "type": row["event_type"] or "",
             "label": row["event_label"] or "",
             "detailText": row["detail_text"] or "",
+            "responseValidity": row["response_validity"] or "",
+            "responseReason": row["response_reason"] or "",
             "detailValue": row["detail_value"],
             "occurredAt": row["occurred_at"],
             "elapsedSeconds": round(float(row["elapsed_seconds"] or 0), 3),
@@ -2399,6 +2461,14 @@ class SkinnerHardware:
         """Expose whether any light output is currently active for UI display."""
 
         return self.blue_on
+
+    @property
+    def trial_buzzer_on(self) -> bool:
+        """Expose whether the trial buzzer path is currently active."""
+
+        if self.stimulus_buzzer_mode == "active":
+            return self.active_buzzer_output_on
+        return bool(getattr(self.buzzer, "is_active", False))
 
     def _start_trial_buzzer(self) -> None:
         if self.stimulus_buzzer_mode == "active":
@@ -3438,6 +3508,8 @@ class TestSessionManager:
         reward_due = False
         reward_type = "Water"
         should_finish = False
+        response_validity = "valid"
+        response_reason = ""
 
         with self.lock:
             if interaction == "Lever":
@@ -3447,8 +3519,21 @@ class TestSessionManager:
 
             self.last_response_at = time.time()
             active_test = self.active_test
+            cue_active = self.hardware.light_on or self.hardware.trial_buzzer_on
 
-            if active_test and self.test_running and not self.stimulus_active:
+            if cue_active:
+                response_validity = "invalid"
+                response_reason = "stimulus_active"
+                if interaction == "Lever":
+                    self.invalid_lever_press_count += 1
+                else:
+                    self.invalid_nose_poke_count += 1
+            elif interaction == "Lever":
+                self.valid_lever_press_count += 1
+            else:
+                self.valid_nose_poke_count += 1
+
+            if active_test and self.test_running and response_validity == "valid":
                 if self._advance_sequence_locked(interaction, active_test.interaction_type):
                     self.valid_interaction_count += 1
                     self.response_event.set()
@@ -3473,6 +3558,13 @@ class TestSessionManager:
             self._log_test_event(
                 "lever_press" if interaction == "Lever" else "nose_poke",
                 "Lever press" if interaction == "Lever" else "Nose poke",
+                detail_text=(
+                    "Counted while no light or trial buzzer was active."
+                    if response_validity == "valid"
+                    else "Ignored because the light or trial buzzer was active."
+                ),
+                response_validity=response_validity,
+                response_reason=response_reason,
                 elapsed_seconds=counts.get("elapsed_seconds", 0),
             )
 
@@ -3674,6 +3766,10 @@ class TestSessionManager:
         self.lever_press_count = 0
         self.nose_poke_count = 0
         self.reward_count = 0
+        self.valid_lever_press_count = 0
+        self.invalid_lever_press_count = 0
+        self.valid_nose_poke_count = 0
+        self.invalid_nose_poke_count = 0
 
         # Interaction sequencing state for multi-step test types.
         self.valid_interaction_count = 0
@@ -3746,6 +3842,10 @@ class TestSessionManager:
             "lever_press_count": self.lever_press_count,
             "nose_poke_count": self.nose_poke_count,
             "reward_count": self.reward_count,
+            "valid_lever_press_count": self.valid_lever_press_count,
+            "invalid_lever_press_count": self.invalid_lever_press_count,
+            "valid_nose_poke_count": self.valid_nose_poke_count,
+            "invalid_nose_poke_count": self.invalid_nose_poke_count,
             "light_on": self.hardware.light_on,
             "elapsed_seconds": round(self._elapsed_seconds_locked(), 2),
             "configured_duration_seconds": configured_duration_seconds,
@@ -3928,6 +4028,8 @@ class TestSessionManager:
         event_label: str,
         *,
         detail_text: str = "",
+        response_validity: str = "",
+        response_reason: str = "",
         detail_value: float | None = None,
         elapsed_seconds: float | None = None,
     ) -> dict[str, object] | None:
@@ -3948,6 +4050,8 @@ class TestSessionManager:
             event_type,
             event_label,
             detail_text=detail_text,
+            response_validity=response_validity,
+            response_reason=response_reason,
             detail_value=detail_value,
             elapsed_seconds=resolved_elapsed_seconds,
         )

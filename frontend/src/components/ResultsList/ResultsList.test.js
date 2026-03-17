@@ -248,6 +248,39 @@ describe('ResultsList', () => {
     expect(clickSpy).toHaveBeenCalledTimes(1);
   });
 
+  test('shows valid and invalid interaction counts in the selected result summary', async () => {
+    useAuth.mockReturnValue({ isAdmin: false });
+    getResults.mockResolvedValue([
+      {
+        id: 'trial-validity',
+        name: 'Validity Trial',
+        updatedAt: '2026-03-15T12:34:00Z',
+        createdAt: '2026-03-15T12:00:00Z',
+        leverPressCount: 3,
+        validLeverPressCount: 2,
+        invalidLeverPressCount: 1,
+        nosePokeCount: 4,
+        validNosePokeCount: 1,
+        invalidNosePokeCount: 3,
+        conductedBy: {
+          id: 7,
+          email: 'operator@example.com',
+          displayName: 'Operator User',
+        },
+      },
+    ]);
+
+    render(<ResultsList />);
+
+    const trialCheckbox = await screen.findByLabelText(/select validity trial/i);
+    fireEvent.click(trialCheckbox.closest('li'));
+
+    expect(screen.getByText((_, element) => element?.textContent === 'Valid Lever Presses: 2')).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === 'Invalid Lever Presses: 1')).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === 'Valid Nose Pokes: 1')).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === 'Invalid Nose Pokes: 3')).toBeInTheDocument();
+  });
+
   test('shows the attached camera snapshot when a saved result includes one', async () => {
     useAuth.mockReturnValue({ isAdmin: false });
     getResults.mockResolvedValue([

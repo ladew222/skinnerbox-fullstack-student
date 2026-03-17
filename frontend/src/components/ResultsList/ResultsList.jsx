@@ -238,7 +238,11 @@ const ResultsList = () => {
     endChimeEnabled: formatEndChimeStatus(test.endChimeEnabled),
     endChimePattern: '',
     leverPressCount: test.leverPressCount,
+    validLeverPressCount: test.validLeverPressCount ?? 0,
+    invalidLeverPressCount: test.invalidLeverPressCount ?? 0,
     nosePokeCount: test.nosePokeCount,
+    validNosePokeCount: test.validNosePokeCount ?? 0,
+    invalidNosePokeCount: test.invalidNosePokeCount ?? 0,
     totalInteractions: test.totalPresses,
     rewardCount: test.rewardCount,
     createdAt: test.createdAt ?? "",
@@ -782,7 +786,11 @@ const ResultsList = () => {
               <p><strong>Goal For Trial:</strong> {selectedTest.goalForTrial}</p>
               <p><strong>Goal For Test:</strong> {selectedTest.goalForTest}</p>
               <p><strong>Lever Presses:</strong> {selectedTest.leverPressCount}</p>
+              <p><strong>Valid Lever Presses:</strong> {selectedTest.validLeverPressCount ?? 0}</p>
+              <p><strong>Invalid Lever Presses:</strong> {selectedTest.invalidLeverPressCount ?? 0}</p>
               <p><strong>Nose Pokes:</strong> {selectedTest.nosePokeCount}</p>
+              <p><strong>Valid Nose Pokes:</strong> {selectedTest.validNosePokeCount ?? 0}</p>
+              <p><strong>Invalid Nose Pokes:</strong> {selectedTest.invalidNosePokeCount ?? 0}</p>
               <p><strong>Total Interactions:</strong> {selectedTest.totalPresses}</p>
               <p><strong>Rewards Given:</strong> {selectedTest.rewardCount}</p>
               <p><strong>Configured Duration:</strong> {formatSecondsForDisplay(selectedTest.configuredDurationSeconds)}</p>

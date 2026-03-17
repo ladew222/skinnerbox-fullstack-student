@@ -817,6 +817,56 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertIn("reward_delivered", event_types)
         self.assertIn("finished", event_types)
 
+    def test_results_track_valid_and_invalid_interactions_based_on_active_stimulus(self):
+        payload = self._base_payload(
+            testName="Validity Tracking Trial",
+            goalForTest=1,
+            stimulusType="Light",
+            StimTimeOn=0.4,
+        )
+
+        configure_response = self.client.post(
+            "/api/test/information",
+            json=payload,
+            headers=self.auth_headers,
+        )
+        self.assertEqual(configure_response.status_code, 200)
+
+        run_response = self.client.post("/api/test/run", json=payload, headers=self.auth_headers)
+        self.assertEqual(run_response.status_code, 200)
+
+        time.sleep(0.05)
+        pause_response = self.client.post("/api/test/stop", headers=self.auth_headers)
+        self.assertEqual(pause_response.status_code, 200)
+
+        sbBackend.session_manager.hardware.set_blue(True)
+        invalid_press_response = self.client.post("/api/input/lever", headers=self.auth_headers)
+        self.assertEqual(invalid_press_response.status_code, 200)
+
+        sbBackend.session_manager.hardware.set_blue(False)
+        valid_press_response = self.client.post("/api/input/lever", headers=self.auth_headers)
+        self.assertEqual(valid_press_response.status_code, 200)
+
+        finish_response = self.client.post("/api/test/finish", headers=self.auth_headers)
+        self.assertEqual(finish_response.status_code, 200)
+
+        results = self.client.get("/api/results", headers=self.auth_headers).get_json()
+        self.assertEqual(results[0]["name"], "Validity Tracking Trial")
+        self.assertEqual(results[0]["leverPressCount"], 2)
+        self.assertEqual(results[0]["validLeverPressCount"], 1)
+        self.assertEqual(results[0]["invalidLeverPressCount"], 1)
+        self.assertEqual(results[0]["validNosePokeCount"], 0)
+        self.assertEqual(results[0]["invalidNosePokeCount"], 0)
+
+        lever_events = [
+            event for event in results[0]["eventTimeline"] if event["type"] == "lever_press"
+        ]
+        self.assertEqual(len(lever_events), 2)
+        self.assertEqual(lever_events[0]["responseValidity"], "invalid")
+        self.assertEqual(lever_events[0]["responseReason"], "stimulus_active")
+        self.assertEqual(lever_events[1]["responseValidity"], "valid")
+        self.assertEqual(lever_events[1]["responseReason"], "")
+
     def test_subject_tracking_can_be_left_blank(self):
         payload = self._base_payload(
             testName="No Subject Trial",
@@ -1046,6 +1096,10 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
                 "nose_poke",
                 "lever_press",
                 "reward_count",
+                "valid_lever_press",
+                "invalid_lever_press",
+                "valid_nose_poke",
+                "invalid_nose_poke",
                 "elapsed_seconds",
                 "conducted_by_user_id",
                 "conducted_by_email",
