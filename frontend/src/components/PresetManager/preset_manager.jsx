@@ -368,7 +368,7 @@ const PresetManager = () => {
               <MenuItem value="Light + Tone">Light + Tone</MenuItem>
             </Select>
             <FormHelperText>
-              Choose whether the saved preset uses the box light, the buzzer tone, or both together.
+              Choose whether the saved preset uses the box light, the configured trial buzzer output, or both together.
             </FormHelperText>
           </FormControl>
         </div>
@@ -383,7 +383,7 @@ const PresetManager = () => {
           </div>
         ) : (
           <div className="stimulus-note">
-            Light + Tone selected. This preset will use the box light and the passive buzzer together.
+            Light + Tone selected. This preset will use the box light and the saved trial buzzer output together.
           </div>
         )}
 

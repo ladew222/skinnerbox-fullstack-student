@@ -6,6 +6,7 @@ import {
   saveLeverDebounce,
   saveLeverReleaseRequirement,
   saveRewardPulse,
+  saveStimulusBuzzerMode,
   setBlueLight,
   testBuzzer,
 } from '../../utilities/api';
@@ -23,9 +24,11 @@ const IoTestingGrid = () => {
   const [rewardPulseBusy, setRewardPulseBusy] = useState(false);
   const [leverDebounceBusy, setLeverDebounceBusy] = useState(false);
   const [leverReleaseBusy, setLeverReleaseBusy] = useState(false);
+  const [stimulusBuzzerBusy, setStimulusBuzzerBusy] = useState(false);
   const [buzzerBusy, setBuzzerBusy] = useState(false);
   const [leverBaselineCount, setLeverBaselineCount] = useState(0);
   const [nosePokeBaselineCount, setNosePokeBaselineCount] = useState(0);
+  const [stimulusBuzzerMode, setStimulusBuzzerMode] = useState('passive');
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -85,6 +88,11 @@ const IoTestingGrid = () => {
         Boolean(maintenanceStatus.activeRequireLeverReleaseBeforeCount)
       );
     }
+    setStimulusBuzzerMode(
+      maintenanceStatus.activeStimulusBuzzerMode
+        || maintenanceStatus.defaultStimulusBuzzerMode
+        || 'passive'
+    );
   }, [
     maintenanceStatus,
     leverDebounceMs,
@@ -108,6 +116,31 @@ const IoTestingGrid = () => {
       setMessage(`Stimulus light turned ${result.blue}`);
     } catch (error) {
       setMessage('Failed to control the stimulus light.');
+    }
+  };
+
+  const handleSaveStimulusBuzzerMode = async () => {
+    try {
+      setStimulusBuzzerBusy(true);
+      const result = await saveStimulusBuzzerMode({
+        stimulusBuzzerMode,
+      });
+      setMaintenanceStatus((currentStatus) => ({
+        ...(currentStatus || {}),
+        latestStimulusBuzzerMode: result.record,
+        activeStimulusBuzzerMode: result.stimulusBuzzerMode,
+      }));
+      setMessage(
+        `Trial buzzer output saved: ${
+          stimulusBuzzerMode === 'active'
+            ? 'active buzzer on GPIO 13'
+            : 'passive tone buzzer on GPIO 27'
+        }.`
+      );
+    } catch (error) {
+      setMessage(error?.message || 'Unable to save the trial buzzer output.');
+    } finally {
+      setStimulusBuzzerBusy(false);
     }
   };
 
@@ -267,6 +300,36 @@ const IoTestingGrid = () => {
         </button>
       </div>
 
+      <div className="io-buzzer-panel">
+        <h3>Trial Buzzer Output</h3>
+        <p>
+          Choose which physical buzzer line the live trial should use for tone stimuli. This does not
+          change the passive end-of-test chime.
+        </p>
+        <div className="calibration-controls">
+          <label htmlFor="stimulus-buzzer-mode">Trial Tone Output</label>
+          <select
+            id="stimulus-buzzer-mode"
+            value={stimulusBuzzerMode}
+            onChange={(event) => setStimulusBuzzerMode(event.target.value)}
+          >
+            <option value="passive">Passive buzzer (GPIO 27)</option>
+            <option value="active">Active buzzer line (GPIO 13)</option>
+          </select>
+          <button
+            type="button"
+            className="prime-button"
+            onClick={handleSaveStimulusBuzzerMode}
+            disabled={stimulusBuzzerBusy}
+          >
+            {stimulusBuzzerBusy ? 'Saving...' : 'Save Trial Buzzer Output'}
+          </button>
+        </div>
+        <p className="calibration-summary">
+          Current saved default: {maintenanceStatus?.activeStimulusBuzzerMode || 'passive'}
+        </p>
+      </div>
+
       <div className="io-prime-panel">
         <h3>Manual Run Pump</h3>
         <p>Run the pump right now for a one-off pulse in milliseconds.</p>
@@ -305,6 +368,7 @@ const IoTestingGrid = () => {
           <p><strong>Current Pump Calibration:</strong> {maintenanceStatus?.activeRewardPulseMilliseconds || maintenanceStatus?.defaultRewardPulseMilliseconds || '--'} ms</p>
           <p><strong>Current Lever Debounce:</strong> {maintenanceStatus?.activeLeverDebounceMilliseconds || maintenanceStatus?.defaultLeverDebounceMilliseconds || '--'} ms</p>
           <p><strong>Require Lever Release:</strong> {maintenanceStatus?.activeRequireLeverReleaseBeforeCount ? 'Yes' : 'No'}</p>
+          <p><strong>Trial Buzzer Output:</strong> {maintenanceStatus?.activeStimulusBuzzerMode || maintenanceStatus?.defaultStimulusBuzzerMode || '--'}</p>
         </div>
 
         <div className="io-calibration-panel">
@@ -320,6 +384,8 @@ const IoTestingGrid = () => {
             <p><strong>Active Lever Debounce:</strong> {maintenanceStatus?.activeLeverDebounceMilliseconds || maintenanceStatus?.defaultLeverDebounceMilliseconds || 150} ms</p>
             <p><strong>Built-in Lever Count Mode:</strong> {maintenanceStatus?.defaultRequireLeverReleaseBeforeCount ? 'Release required' : 'Debounce only'}</p>
             <p><strong>Active Lever Count Mode:</strong> {maintenanceStatus?.activeRequireLeverReleaseBeforeCount ? 'Release required' : 'Debounce only'}</p>
+            <p><strong>Built-in Trial Buzzer Output:</strong> {maintenanceStatus?.defaultStimulusBuzzerMode || 'passive'}</p>
+            <p><strong>Active Trial Buzzer Output:</strong> {maintenanceStatus?.activeStimulusBuzzerMode || maintenanceStatus?.defaultStimulusBuzzerMode || 'passive'}</p>
           </div>
         </div>
 

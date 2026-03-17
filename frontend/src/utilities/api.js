@@ -349,6 +349,22 @@ export const saveLeverReleaseRequirement = async ({ requireReleaseBeforeCount })
   }
 };
 
+export const saveStimulusBuzzerMode = async ({ stimulusBuzzerMode }) => {
+  try {
+    const response = await apiClient.post('/api/maintenance/stimulus-buzzer-mode', {
+      stimulusBuzzerMode,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error saving trial buzzer output:', error);
+    rethrowNormalizedError(
+      error,
+      'STIMULUS_BUZZER_MODE_SAVE_ERROR',
+      'Unable to save the trial buzzer output.'
+    );
+  }
+};
+
 export const saveRewardPulse = async ({ rewardPulseMilliseconds }) => {
   try {
     const response = await apiClient.post('/api/maintenance/reward-pulse', {

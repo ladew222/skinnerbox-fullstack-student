@@ -59,6 +59,9 @@ beforeEach(() => {
           defaultRequireLeverReleaseBeforeCount: false,
           activeRequireLeverReleaseBeforeCount: false,
           latestLeverReleaseRequirement: null,
+          defaultStimulusBuzzerMode: 'passive',
+          activeStimulusBuzzerMode: 'passive',
+          latestStimulusBuzzerMode: null,
           latestPumpCalibration: null,
         },
       });
@@ -164,6 +167,8 @@ test('renders the real-time pump prime controls on the I/O config page', async (
   expect(await screen.findByRole('heading', { name: /i\/o config/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /play buzzer test/i })).toBeInTheDocument();
   expect(screen.getByText(/confirm the passive buzzer can be heard/i)).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /trial buzzer output/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /save trial buzzer output/i })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: /manual run pump/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /run pump test/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /save pump calibration/i })).toBeInTheDocument();

@@ -1573,6 +1573,112 @@ class SQLiteTestRepository:
             return None
         return self._row_to_maintenance_record(row)
 
+    def save_stimulus_buzzer_mode_setting(
+        self,
+        stimulus_buzzer_mode: str,
+        *,
+        note_text: str = "",
+        conducted_by: ConductedBySnapshot | None = None,
+    ) -> dict[str, object]:
+        """Persist whether trial tones use the passive or active buzzer path."""
+
+        created_at = self._timestamp()
+        stored_value = 1 if stimulus_buzzer_mode == "active" else 0
+
+        try:
+            with self.connect() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO maintenance_records (
+                        record_type,
+                        duration_seconds,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "stimulus_buzzer_mode",
+                        stored_value,
+                        note_text,
+                        conducted_by.user_id if conducted_by else None,
+                        conducted_by.email if conducted_by else "",
+                        conducted_by.display_name if conducted_by else "",
+                        created_at,
+                    ),
+                )
+                connection.commit()
+
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_id = ?
+                    """,
+                    (cursor.lastrowid,),
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="STIMULUS_BUZZER_MODE_SAVE_ERROR",
+                message="Unable to save the trial buzzer output.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        return self._row_to_maintenance_record(row)
+
+    def get_latest_stimulus_buzzer_mode_setting(self) -> dict[str, object] | None:
+        """Return the most recent saved trial buzzer output choice, if one exists."""
+
+        try:
+            with self.connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_type = 'stimulus_buzzer_mode'
+                    ORDER BY created_at DESC, record_id DESC
+                    LIMIT 1
+                    """
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="STIMULUS_BUZZER_MODE_READ_ERROR",
+                message="Unable to load the trial buzzer output setting.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        if row is None:
+            return None
+        return self._row_to_maintenance_record(row)
+
     def list_presets(self, user_id: int) -> list[dict[str, object]]:
         """Return the saved presets for one authenticated user."""
 
@@ -1919,9 +2025,10 @@ class SkinnerHardware:
         # Trial hardware that affects the experiment itself.
         self.buzzer = PassiveBuzzer(27)
         self.blue_led = LED(25, active_high=False)
-        self.orange_led = LED(24)
+        self.active_buzzer_output = OutputDevice(13)
         self.water_pump = OutputDevice(17)
         self.reward_pulse_seconds = self.DEFAULT_WATER_REWARD_SECONDS
+        self.stimulus_buzzer_mode = "passive"
 
         # Box-status indicators that show program health outside the experiment.
         self.running_led = LED(5)
@@ -1931,7 +2038,7 @@ class SkinnerHardware:
 
         # Cached light state is returned to the frontend in `/api/counts`.
         self.blue_on = False
-        self.orange_on = False
+        self.active_buzzer_output_on = False
         self.rgb_state = (0, 0, 0)
         self.running_on = False
         self.program_ok = False
@@ -2036,21 +2143,34 @@ class SkinnerHardware:
                 device="blue_light",
             )
 
-    def set_orange(self, enabled: bool) -> None:
-        """Turn the orange auxiliary light on or off."""
+    def set_active_buzzer_output(self, enabled: bool) -> None:
+        """Turn the digital active-buzzer output on or off."""
         try:
-            self.orange_on = enabled
+            self.active_buzzer_output_on = enabled
             if enabled:
-                self.orange_led.on()
+                self.active_buzzer_output.on()
             else:
-                self.orange_led.off()
+                self.active_buzzer_output.off()
         except Exception as error:
             self._raise_hardware_error(
-                code="ORANGE_LIGHT_ERROR",
-                message="Unable to control the orange light.",
+                code="ACTIVE_BUZZER_OUTPUT_ERROR",
+                message="Unable to control the active buzzer output.",
                 error=error,
-                device="orange_light",
+                device="active_buzzer_output",
             )
+
+    def set_stimulus_buzzer_mode(self, mode: str) -> str:
+        """Choose whether trial tones use the passive or active buzzer output."""
+
+        normalized_mode = str(mode or "").strip().lower()
+        if normalized_mode not in {"passive", "active"}:
+            raise ApiError(
+                code="INVALID_STIMULUS_BUZZER_MODE",
+                message="Stimulus buzzer mode must be passive or active.",
+                status=400,
+            )
+        self.stimulus_buzzer_mode = normalized_mode
+        return normalized_mode
 
     def set_rgb(self, red: bool, green: bool, blue: bool) -> None:
         """Retain the legacy RGB API contract without using the repurposed status pins."""
@@ -2151,16 +2271,16 @@ class SkinnerHardware:
             stimulus_type = stimulus_type.lower()
 
             if stimulus_type == "tone":
-                self.buzzer.play(self.STIMULUS_TONE_FREQUENCY_HZ)
+                self._start_trial_buzzer()
                 self._sleep(duration_seconds, stop_event)
-                self.buzzer.stop()
+                self._stop_trial_buzzer()
                 return
 
             if stimulus_type == "light + tone":
                 self.set_blue(True)
-                self.buzzer.play(self.STIMULUS_TONE_FREQUENCY_HZ)
+                self._start_trial_buzzer()
                 self._sleep(duration_seconds, stop_event)
-                self.buzzer.stop()
+                self._stop_trial_buzzer()
                 self.set_blue(False)
                 return
 
@@ -2186,9 +2306,9 @@ class SkinnerHardware:
                 self.water_pump.off()
                 return
 
-            self.set_orange(True)
+            self.set_active_buzzer_output(True)
             self._sleep(1, stop_event)
-            self.set_orange(False)
+            self.set_active_buzzer_output(False)
         except ApiError:
             raise
         except Exception as error:
@@ -2261,7 +2381,7 @@ class SkinnerHardware:
         """Fail-safe used by stop/finish paths to leave every output off."""
         try:
             self.set_blue(False)
-            self.set_orange(False)
+            self.set_active_buzzer_output(False)
             self.set_running_indicator(False)
             self.water_pump.off()
             self.buzzer.stop()
@@ -2278,7 +2398,19 @@ class SkinnerHardware:
     def light_on(self) -> bool:
         """Expose whether any light output is currently active for UI display."""
 
-        return self.blue_on or self.orange_on
+        return self.blue_on
+
+    def _start_trial_buzzer(self) -> None:
+        if self.stimulus_buzzer_mode == "active":
+            self.set_active_buzzer_output(True)
+            return
+        self.buzzer.play(self.STIMULUS_TONE_FREQUENCY_HZ)
+
+    def _stop_trial_buzzer(self) -> None:
+        if self.stimulus_buzzer_mode == "active":
+            self.set_active_buzzer_output(False)
+            return
+        self.buzzer.stop()
 
     def show_waiting_status(
         self,
@@ -2521,6 +2653,16 @@ class TestSessionManager:
         if latest_lever_release_requirement is not None:
             self.set_require_lever_release_before_count(
                 latest_lever_release_requirement["durationSeconds"] >= 0.5
+            )
+
+        latest_stimulus_buzzer_mode = (
+            self.repository.get_latest_stimulus_buzzer_mode_setting()
+        )
+        if latest_stimulus_buzzer_mode is not None:
+            self.hardware.set_stimulus_buzzer_mode(
+                "active"
+                if latest_stimulus_buzzer_mode["durationSeconds"] >= 0.5
+                else "passive"
             )
 
     def configure_test(
@@ -3161,6 +3303,54 @@ class TestSessionManager:
             )
             raise api_error from error
 
+    def save_stimulus_buzzer_mode(
+        self,
+        payload: dict | None = None,
+        current_user: AuthenticatedUser | None = None,
+    ) -> dict[str, object]:
+        """Store whether trial tones should use the passive or active buzzer line."""
+
+        payload = payload or {}
+        try:
+            with self.lock:
+                if self.test_running:
+                    raise ApiError(
+                        code="STIMULUS_BUZZER_MODE_BLOCKED",
+                        message="Stop the current test before changing the trial buzzer output.",
+                        status=409,
+                        details={"testRunning": True},
+                    )
+
+            stimulus_buzzer_mode = self.hardware.set_stimulus_buzzer_mode(
+                payload.get("stimulusBuzzerMode")
+            )
+            note_text = _coerce_text(payload.get("noteText"), "noteText", default="").strip()
+            conducted_by = (
+                ConductedBySnapshot.from_authenticated_user(current_user)
+                if current_user is not None
+                else None
+            )
+            saved_mode = self.repository.save_stimulus_buzzer_mode_setting(
+                stimulus_buzzer_mode,
+                note_text=note_text,
+                conducted_by=conducted_by,
+            )
+            return {
+                "message": "Trial buzzer output saved successfully.",
+                "stimulusBuzzerMode": stimulus_buzzer_mode,
+                "record": saved_mode,
+            }
+        except ApiError:
+            raise
+        except Exception as error:
+            api_error = ApiError(
+                code="STIMULUS_BUZZER_MODE_SAVE_ERROR",
+                message="Unable to save the trial buzzer output.",
+                status=500,
+                details={"reason": str(error)},
+            )
+            raise api_error from error
+
     def get_maintenance_status(self) -> dict[str, object]:
         """Return maintenance and calibration status for the Test I/O page."""
 
@@ -3169,6 +3359,9 @@ class TestSessionManager:
         latest_lever_debounce = self.repository.get_latest_lever_debounce_setting()
         latest_lever_release_requirement = (
             self.repository.get_latest_lever_release_requirement_setting()
+        )
+        latest_stimulus_buzzer_mode = (
+            self.repository.get_latest_stimulus_buzzer_mode_setting()
         )
         reward_pulse_seconds = self.hardware.reward_pulse_seconds
         estimated_reward_volume_ml = None
@@ -3192,6 +3385,7 @@ class TestSessionManager:
                 "latestRewardPulse": latest_reward_pulse,
                 "latestLeverDebounce": latest_lever_debounce,
                 "latestLeverReleaseRequirement": latest_lever_release_requirement,
+                "latestStimulusBuzzerMode": latest_stimulus_buzzer_mode,
                 "rewardPulseSeconds": reward_pulse_seconds,
                 "defaultRewardPulseMilliseconds": int(
                     round(self.hardware.DEFAULT_WATER_REWARD_SECONDS * 1000)
@@ -3212,6 +3406,8 @@ class TestSessionManager:
                 "activeRequireLeverReleaseBeforeCount": (
                     self.require_lever_release_before_count
                 ),
+                "defaultStimulusBuzzerMode": "passive",
+                "activeStimulusBuzzerMode": self.hardware.stimulus_buzzer_mode,
             }
 
     def on_lever_press(self) -> None:
@@ -4384,11 +4580,11 @@ def control_blue():
 @app.route("/api/light/orange", methods=["POST"])
 @require_authenticated_user()
 def control_orange():
-    """Allow the frontend I/O test page to toggle the orange light directly."""
+    """Allow the frontend I/O test page to toggle the GPIO 13 auxiliary output directly."""
 
     payload = request.get_json(silent=True) or {}
     action = _normalize_action(payload, "action")
-    hardware.set_orange(action == "on")
+    hardware.set_active_buzzer_output(action == "on")
     return jsonify({"status": "success", "orange": action}), 200
 
 
@@ -4465,6 +4661,18 @@ def save_reward_pulse():
     """Save and apply the automatic water reward pulse from the maintenance page."""
 
     result = session_manager.save_reward_pulse(
+        request.get_json(silent=True) or {},
+        current_user=g.current_user,
+    )
+    return jsonify(result), 200
+
+
+@app.route("/api/maintenance/stimulus-buzzer-mode", methods=["POST"])
+@require_authenticated_user()
+def save_stimulus_buzzer_mode():
+    """Save whether trial tones use the passive or active buzzer output."""
+
+    result = session_manager.save_stimulus_buzzer_mode(
         request.get_json(silent=True) or {},
         current_user=g.current_user,
     )

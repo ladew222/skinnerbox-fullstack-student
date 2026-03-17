@@ -73,7 +73,7 @@ const FIELD_HELP_TEXT = {
   interactionType:
     "This tells the backend what counts as one valid response: just a lever press, just a poke, or a required sequence of both.",
   stimulusType:
-    "Choose whether each trial cycle begins with the box light, the passive buzzer tone, or both at the same time.",
+    "Choose whether each trial cycle begins with the box light, the configured trial buzzer output, or both at the same time.",
   endChimeEnabled:
     "Turn this on if you want the passive buzzer to play a short completion chime after the trial finishes.",
   endChimePattern:
@@ -1151,11 +1151,11 @@ const handlePreset = (event) => {
               </div>
             ) : stimulusType === "Tone" ? (
               <div className="stimulus-note">
-                Tone stimulus selected. The backend will use the passive buzzer on each cycle instead of the trial light.
+                Tone stimulus selected. The backend will use the saved trial buzzer output on each cycle instead of the trial light.
               </div>
             ) : (
               <div className="stimulus-note">
-                Light + Tone selected. The backend will turn on the box light and play the passive buzzer together on each stimulus cycle.
+                Light + Tone selected. The backend will turn on the box light and play the saved trial buzzer output together on each stimulus cycle.
               </div>
             )}
           </div>

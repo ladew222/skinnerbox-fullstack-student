@@ -71,6 +71,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         sbBackend.hardware.stop_all()
         sbBackend.hardware.clear_error_state()
         sbBackend.hardware.last_chime_pattern = ()
+        sbBackend.hardware.set_stimulus_buzzer_mode("passive")
         sbBackend.hardware.startup_ip_address = ""
         sbBackend.hardware.startup_banner_deadline = time.monotonic() - 1
         sbBackend.hardware.status_display.clear()
@@ -385,6 +386,41 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertTrue(observed_outputs["light"])
         self.assertTrue(observed_outputs["tone"])
 
+    def test_active_trial_buzzer_mode_uses_gpio13_output_for_tone_stimulus(self):
+        original_set_active_buzzer_output = sbBackend.hardware.set_active_buzzer_output
+        original_buzzer_play = sbBackend.hardware.buzzer.play
+        observed_outputs = {
+            "active": False,
+            "passive": False,
+        }
+
+        def recording_set_active_buzzer_output(enabled):
+            if enabled:
+                observed_outputs["active"] = True
+            return original_set_active_buzzer_output(enabled)
+
+        def recording_buzzer_play(frequency_hz):
+            observed_outputs["passive"] = True
+            return original_buzzer_play(frequency_hz)
+
+        sbBackend.hardware.set_stimulus_buzzer_mode("active")
+        sbBackend.hardware.set_active_buzzer_output = recording_set_active_buzzer_output
+        sbBackend.hardware.buzzer.play = recording_buzzer_play
+        try:
+            sbBackend.hardware.play_stimulus(
+                "Tone",
+                "N/A",
+                0.01,
+                threading.Event(),
+            )
+        finally:
+            sbBackend.hardware.set_active_buzzer_output = original_set_active_buzzer_output
+            sbBackend.hardware.buzzer.play = original_buzzer_play
+            sbBackend.hardware.set_stimulus_buzzer_mode("passive")
+
+        self.assertTrue(observed_outputs["active"])
+        self.assertFalse(observed_outputs["passive"])
+
     def test_oled_shows_waiting_status_after_configuration(self):
         payload = self._base_payload(
             testName="OLED Waiting Trial",
@@ -628,6 +664,23 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
 
         error_payload = response.get_json()["error"]
         self.assertEqual(error_payload["code"], "BUZZER_TEST_BLOCKED")
+
+    def test_trial_buzzer_output_setting_can_be_saved_from_maintenance_page(self):
+        response = self.client.post(
+            "/api/maintenance/stimulus-buzzer-mode",
+            json={"stimulusBuzzerMode": "active"},
+            headers=self.auth_headers,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        payload = response.get_json()
+        self.assertEqual(payload["message"], "Trial buzzer output saved successfully.")
+        self.assertEqual(payload["stimulusBuzzerMode"], "active")
+
+        status_response = self.client.get("/api/maintenance/status", headers=self.auth_headers)
+        self.assertEqual(status_response.status_code, 200)
+        status_payload = status_response.get_json()
+        self.assertEqual(status_payload["activeStimulusBuzzerMode"], "active")
 
     def test_saved_results_show_dates_and_can_be_deleted_by_admin(self):
         payload = self._base_payload(
