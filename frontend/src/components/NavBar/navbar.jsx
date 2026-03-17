@@ -30,6 +30,11 @@ function NavBar() {
                   Home
                 </Link>
               </li>
+              <li className="nav-item">
+                <Link className="nav-link" aria-current="page" to="/Help">
+                  Help
+                </Link>
+              </li>
               {isAuthenticated && (
                 <>
                   <li className="nav-item">

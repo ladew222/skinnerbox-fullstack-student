@@ -92,7 +92,20 @@ test('renders the home page and primary navigation', () => {
   expect(screen.getByText(/run authenticated behavioral experiments from one place/i)).toBeInTheDocument();
   expect(screen.getAllByRole('link', { name: /log in/i }).length).toBeGreaterThan(0);
   expect(screen.getByRole('link', { name: /register/i })).toBeInTheDocument();
+  expect(screen.getAllByRole('link', { name: /help/i }).length).toBeGreaterThan(0);
   expect(screen.getAllByRole('link', { name: /about us/i }).length).toBeGreaterThan(0);
+});
+
+test('renders the in-app help page', () => {
+  render(
+    <MemoryRouter initialEntries={['/Help']}>
+      <App />
+    </MemoryRouter>
+  );
+
+  expect(screen.getByRole('heading', { name: /using skinnerbox/i })).toBeInTheDocument();
+  expect(screen.getByText(/operator help/i)).toBeInTheDocument();
+  expect(screen.getByText(/optional camera/i)).toBeInTheDocument();
 });
 
 test('renders the hawk works about page', () => {

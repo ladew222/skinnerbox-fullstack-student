@@ -44,6 +44,9 @@ function Home() {
                                     </Link>
                                 </>
                             )}
+                            <Link className="home-secondary-link" to="/Help">
+                                Help
+                            </Link>
                             <Link className="home-tertiary-link" to="/About">
                                 About Us
                             </Link>

@@ -8,6 +8,7 @@ import LogIn from '../Login/LogIn';
 import NavBar from '../NavBar/navbar';
 import Footer from '../Footer/Footer';
 import Home from '../Pages/Home';
+import Help from '../Pages/Help';
 import Contact from '../Pages/Contact';
 import Trial from '../Pages/Trial';
 import Results from '../Pages/Results';
@@ -26,6 +27,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/Home" element={<Home />} />
+            <Route path="/Help" element={<Help />} />
             <Route path="/About" element={<Contact />} />
             <Route path="/Contact" element={<Contact />} />
             <Route path="/LogIn" element={<LogIn />} />
