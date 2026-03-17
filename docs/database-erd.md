@@ -2,6 +2,16 @@
 
 This diagram shows the main SQLite tables used by SkinnerBox for auth, trial runtime/history, presets, and maintenance settings.
 
+## How The Tables Are Used
+
+- `users` is the main account table. It stores operator/admin identity, approval status, password hash, and basic audit timestamps.
+- The browser app now uses a server-set cookie session as the normal sign-in path. In other words, day-to-day web use does not require the frontend to store or send a bearer token manually.
+- `auth_tokens` still exists as a compatibility table for token-based auth flows, older tests, scripts, and API clients. It is no longer the primary browser authentication path, but it is still valid backend infrastructure.
+- `Active_Test` is the main experiment table. It stores the currently configured run and also acts as the historical results table after a run finishes.
+- `test_events` stores the timeline/details for one run, such as configuration, start/stop, notes, and interaction-related events.
+- `user_presets` stores saved trial presets per authenticated user.
+- `maintenance_records` stores operator-saved hardware and calibration settings over time, including pump calibration, reward pulse, lever debounce, lever release requirement, and trial buzzer output mode.
+
 Notes:
 - `Active_Test` is the project's historical name for the main trial/results table. It stores both the currently configured run and completed runs.
 - `maintenance_records.record_type` distinguishes saved pump calibration, reward pulse, lever debounce, lever release requirement, and trial buzzer output records.
