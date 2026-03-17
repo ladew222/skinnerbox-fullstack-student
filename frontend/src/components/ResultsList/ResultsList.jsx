@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
 import "./ResultsList.css";
-import { deleteResult, deleteResults, getResults } from "../../utilities/api";
+import {
+  buildResultSnapshotUrl,
+  deleteResult,
+  deleteResults,
+  getResults,
+} from "../../utilities/api";
 import { useAuth } from "../../context/AuthContext";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { LineChart } from "@mui/x-charts/LineChart";
@@ -171,6 +176,9 @@ const ResultsList = () => {
   const selectedTimelineEvents = Array.isArray(selectedTest?.eventTimeline)
     ? selectedTest.eventTimeline
     : [];
+  const selectedSnapshotUrl = selectedTest?.hasCameraSnapshot
+    ? buildResultSnapshotUrl(selectedTest.id, selectedTest.cameraSnapshotCapturedAt || Date.now())
+    : "";
   const hasSelectedTimeline = selectedTimelineEvents.length > 0;
   const timelineTrendPoints = hasSelectedTimeline
     ? buildTimelineTrendPoints(selectedTimelineEvents)
@@ -797,6 +805,19 @@ const ResultsList = () => {
                     </li>
                   ))}
                 </ul>
+              </div>
+            ) : null}
+            {selectedTest.hasCameraSnapshot ? (
+              <div className="results-camera-panel">
+                <h3>Attached Camera Snapshot</h3>
+                <p>
+                  One still image saved with this trial when the optional box camera was available.
+                </p>
+                <img
+                  className="results-camera-image"
+                  src={selectedSnapshotUrl}
+                  alt={`${selectedTest.name} camera snapshot`}
+                />
               </div>
             ) : null}
             {selectedTest.eventTimeline?.length ? (

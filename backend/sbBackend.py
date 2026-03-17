@@ -11,11 +11,12 @@ import socket
 import threading
 import time
 
-from flask import Flask, g, jsonify, request
+from flask import Flask, Response, g, jsonify, request
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
 from auth import AuthenticatedUser, SQLiteAuthRepository
+from camera_adapter import CameraManager, CameraUnavailableError
 from display_adapter import StatusDisplay
 from gpio_adapter import Button, LED, OutputDevice, PassiveBuzzer
 from shared_errors import ApiError, ConfigurationError
@@ -333,6 +334,9 @@ class SQLiteTestRepository:
                 conducted_by_user_id INTEGER,
                 conducted_by_email TEXT DEFAULT '',
                 conducted_by_display_name TEXT DEFAULT '',
+                camera_snapshot BLOB,
+                camera_snapshot_mime_type TEXT DEFAULT '',
+                camera_snapshot_captured_at TEXT,
                 created_at TEXT,
                 updated_at TEXT
             )
@@ -362,6 +366,9 @@ class SQLiteTestRepository:
             "conducted_by_user_id": "INTEGER",
             "conducted_by_email": "TEXT DEFAULT ''",
             "conducted_by_display_name": "TEXT DEFAULT ''",
+            "camera_snapshot": "BLOB",
+            "camera_snapshot_mime_type": "TEXT DEFAULT ''",
+            "camera_snapshot_captured_at": "TEXT",
             "created_at": "TEXT",
             "updated_at": "TEXT",
         }
@@ -577,9 +584,12 @@ class SQLiteTestRepository:
                         conducted_by_user_id,
                         conducted_by_email,
                         conducted_by_display_name,
+                        camera_snapshot,
+                        camera_snapshot_mime_type,
+                        camera_snapshot_captured_at,
                         created_at,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(testID) DO UPDATE SET
                         subjectID = excluded.subjectID,
                         Name = excluded.Name,
@@ -603,6 +613,9 @@ class SQLiteTestRepository:
                         conducted_by_user_id = excluded.conducted_by_user_id,
                         conducted_by_email = excluded.conducted_by_email,
                         conducted_by_display_name = excluded.conducted_by_display_name,
+                        camera_snapshot = excluded.camera_snapshot,
+                        camera_snapshot_mime_type = excluded.camera_snapshot_mime_type,
+                        camera_snapshot_captured_at = excluded.camera_snapshot_captured_at,
                         updated_at = excluded.updated_at
                     """,
                     (
@@ -629,6 +642,9 @@ class SQLiteTestRepository:
                         conducted_by.user_id if conducted_by else None,
                         conducted_by.email if conducted_by else "",
                         conducted_by.display_name if conducted_by else "",
+                        None,
+                        "",
+                        None,
                         now,
                         now,
                     ),
@@ -741,6 +757,12 @@ class SQLiteTestRepository:
                         conducted_by_user_id,
                         conducted_by_email,
                         conducted_by_display_name,
+                        CASE
+                            WHEN camera_snapshot IS NOT NULL AND LENGTH(camera_snapshot) > 0 THEN 1
+                            ELSE 0
+                        END AS has_camera_snapshot,
+                        camera_snapshot_mime_type,
+                        camera_snapshot_captured_at,
                         created_at,
                         updated_at
                     FROM Active_Test
@@ -798,6 +820,100 @@ class SQLiteTestRepository:
             results.append(result)
 
         return results
+
+    def save_result_snapshot(
+        self,
+        test_id: int,
+        snapshot_bytes: bytes,
+        *,
+        mimetype: str,
+    ) -> None:
+        """Attach one optional snapshot image to the saved test row."""
+
+        if not snapshot_bytes:
+            return
+
+        try:
+            with self.connect() as connection:
+                connection.execute(
+                    """
+                    UPDATE Active_Test
+                    SET camera_snapshot = ?,
+                        camera_snapshot_mime_type = ?,
+                        camera_snapshot_captured_at = ?,
+                        updated_at = ?
+                    WHERE testID = ?
+                    """,
+                    (
+                        sqlite3.Binary(snapshot_bytes),
+                        str(mimetype or "").strip() or "image/jpeg",
+                        self._timestamp(),
+                        self._timestamp(),
+                        test_id,
+                    ),
+                )
+                connection.commit()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="RESULT_SNAPSHOT_SAVE_ERROR",
+                message="Unable to attach the optional camera snapshot to the saved trial.",
+                status=500,
+                details={"reason": str(error), "testID": test_id},
+            ) from error
+
+    def get_result_snapshot(self, result_id: str) -> tuple[bytes, str]:
+        """Return the optional saved snapshot image for one saved result."""
+
+        normalized_result_id = str(result_id or "").strip()
+        if not normalized_result_id:
+            raise ApiError(
+                code="RESULT_NOT_FOUND",
+                message="The requested saved trial was not found.",
+                status=404,
+                details={"resultId": result_id},
+            )
+
+        try:
+            with self.connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT camera_snapshot, camera_snapshot_mime_type
+                    FROM Active_Test
+                    WHERE CAST(testID AS TEXT) = ?
+                    """,
+                    (normalized_result_id,),
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="RESULT_SNAPSHOT_READ_ERROR",
+                message="Unable to load the saved camera snapshot.",
+                status=500,
+                details={"reason": str(error), "resultId": normalized_result_id},
+            ) from error
+
+        if row is None:
+            raise ApiError(
+                code="RESULT_NOT_FOUND",
+                message="The requested saved trial was not found.",
+                status=404,
+                details={"resultId": normalized_result_id},
+            )
+
+        snapshot_bytes = row["camera_snapshot"]
+        if not snapshot_bytes:
+            raise ApiError(
+                code="RESULT_SNAPSHOT_NOT_FOUND",
+                message="No saved camera snapshot is attached to this trial.",
+                status=404,
+                details={"resultId": normalized_result_id},
+            )
+
+        mimetype = str(row["camera_snapshot_mime_type"] or "").strip() or "image/jpeg"
+        return bytes(snapshot_bytes), mimetype
 
     def delete_result(self, result_id: str) -> None:
         """Delete one saved test run by its stable test identifier."""
@@ -1697,6 +1813,8 @@ class SQLiteTestRepository:
                 "email": row["conducted_by_email"] or "",
                 "displayName": row["conducted_by_display_name"] or "",
             },
+            "hasCameraSnapshot": bool(row["has_camera_snapshot"]),
+            "cameraSnapshotCapturedAt": row["camera_snapshot_captured_at"],
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
         }
@@ -3332,14 +3450,15 @@ class TestSessionManager:
         if worker_thread and worker_thread.is_alive() and worker_thread is not threading.current_thread():
             worker_thread.join(timeout=1)
         self.repository.update_counts(test_id, counts, status="finished")
-        with self.lock:
-            self.test_finished = True
         if test_id is not None:
             self._log_test_event(
                 "finished",
                 "Test finished",
                 elapsed_seconds=counts.get("elapsed_seconds", 0),
             )
+            self._attach_optional_result_snapshot(test_id)
+        with self.lock:
+            self.test_finished = True
         self._refresh_status_display()
 
         if active_test and active_test.end_chime_enabled:
@@ -3382,6 +3501,29 @@ class TestSessionManager:
             self.hardware.DEFAULT_REQUIRE_LEVER_RELEASE_BEFORE_COUNT
         )
         self.lever_ready_for_press = True
+
+    def _attach_optional_result_snapshot(self, test_id: int) -> None:
+        """Best-effort camera snapshot capture that never blocks trial completion."""
+
+        try:
+            camera_status = camera_manager.get_status()
+        except Exception:
+            return
+
+        if not camera_status.get("available"):
+            return
+
+        try:
+            snapshot_bytes, mimetype = camera_manager.capture_frame()
+            self.repository.save_result_snapshot(
+                test_id,
+                snapshot_bytes,
+                mimetype=mimetype,
+            )
+        except CameraUnavailableError:
+            return
+        except Exception:
+            return
 
     def _advance_sequence_locked(self, interaction: str, configured_interaction: str) -> bool:
         """Check whether the latest input completes the configured interaction pattern."""
@@ -3835,6 +3977,7 @@ repository = SQLiteTestRepository(DATABASE_FILE)
 auth_repository = SQLiteAuthRepository(DATABASE_FILE)
 hardware = SkinnerHardware()
 session_manager = TestSessionManager(repository, hardware)
+camera_manager = CameraManager()
 
 
 @app.errorhandler(ApiError)
@@ -4145,6 +4288,40 @@ def get_maintenance_status():
     """Return backend mode and calibration information for the Test I/O page."""
 
     return jsonify(session_manager.get_maintenance_status()), 200
+
+
+@app.route("/api/camera/status", methods=["GET"])
+@require_authenticated_user()
+def get_camera_status():
+    """Report whether an optional camera preview is available for this box."""
+
+    return jsonify(camera_manager.get_status()), 200
+
+
+@app.route("/api/camera/frame", methods=["GET"])
+@require_authenticated_user()
+def get_camera_frame():
+    """Return one low-bandwidth still frame from the optional box camera."""
+
+    try:
+        frame_bytes, mimetype = camera_manager.capture_frame()
+    except CameraUnavailableError as error:
+        raise ApiError(
+            code="CAMERA_UNAVAILABLE",
+            message=str(error),
+            status=404,
+        ) from error
+
+    return Response(frame_bytes, mimetype=mimetype)
+
+
+@app.route("/api/results/<result_id>/snapshot", methods=["GET"])
+@require_authenticated_user()
+def get_result_snapshot(result_id: str):
+    """Return the optional saved camera snapshot attached to one saved trial."""
+
+    snapshot_bytes, mimetype = repository.get_result_snapshot(result_id)
+    return Response(snapshot_bytes, mimetype=mimetype)
 
 
 @app.route("/api/results/<result_id>", methods=["DELETE"])

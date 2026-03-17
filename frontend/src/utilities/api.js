@@ -287,6 +287,27 @@ export const getMaintenanceStatus = async () => {
   }
 };
 
+export const getCameraStatus = async () => {
+  try {
+    const response = await apiClient.get('/api/camera/status');
+    return response.data;
+  } catch (error) {
+    console.error('Error loading camera status:', error);
+    rethrowNormalizedError(error, 'CAMERA_STATUS_ERROR', 'Unable to load the optional camera preview status.');
+  }
+};
+
+export const buildCameraFrameUrl = (cacheBust = Date.now()) => {
+  const framePath = `/api/camera/frame?ts=${encodeURIComponent(String(cacheBust))}`;
+  return API_BASE_URL ? `${API_BASE_URL}${framePath}` : framePath;
+};
+
+export const buildResultSnapshotUrl = (resultId, cacheBust = Date.now()) => {
+  const normalizedResultId = encodeURIComponent(String(resultId ?? "").trim());
+  const snapshotPath = `/api/results/${normalizedResultId}/snapshot?ts=${encodeURIComponent(String(cacheBust))}`;
+  return API_BASE_URL ? `${API_BASE_URL}${snapshotPath}` : snapshotPath;
+};
+
 export const savePumpCalibration = async ({ durationMilliseconds, measuredVolumeMl }) => {
   try {
     const response = await apiClient.post('/api/maintenance/pump-calibration', {

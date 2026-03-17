@@ -17,12 +17,45 @@ os.environ.setdefault(
 import sbBackend
 
 
+class MockCameraManager:
+    def __init__(self, *, available: bool):
+        self.available = available
+        self.capture_calls = 0
+
+    def get_status(self):
+        if not self.available:
+            return {
+                "available": False,
+                "mode": "mock",
+                "reason": "No optional camera preview is available on this box.",
+                "refreshIntervalSeconds": 1.5,
+                "resolution": "320x240",
+            }
+
+        return {
+            "available": True,
+            "mode": "mock",
+            "deviceName": "Mock Camera",
+            "refreshIntervalSeconds": 1.5,
+            "resolution": "320x240",
+        }
+
+    def capture_frame(self):
+        if not self.available:
+            raise sbBackend.CameraUnavailableError(
+                "No optional camera preview is available on this box."
+            )
+        self.capture_calls += 1
+        return b"<svg></svg>", "image/svg+xml"
+
+
 class SkinnerBoxApiIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_repository = sbBackend.repository
         self.original_session_repository = sbBackend.session_manager.repository
         self.original_auth_repository = sbBackend.auth_repository
+        self.original_camera_manager = sbBackend.camera_manager
         self.original_startup_ip_address = sbBackend.hardware.startup_ip_address
         self.original_startup_banner_deadline = sbBackend.hardware.startup_banner_deadline
 
@@ -91,9 +124,78 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         sbBackend.repository = self.original_repository
         sbBackend.session_manager.repository = self.original_session_repository
         sbBackend.auth_repository = self.original_auth_repository
+        sbBackend.camera_manager = self.original_camera_manager
         sbBackend.hardware.startup_ip_address = self.original_startup_ip_address
         sbBackend.hardware.startup_banner_deadline = self.original_startup_banner_deadline
         self.temp_dir.cleanup()
+
+    def test_camera_status_reports_unavailable_when_no_optional_camera_is_connected(self):
+        sbBackend.camera_manager = MockCameraManager(available=False)
+
+        response = self.client.get("/api/camera/status", headers=self.auth_headers)
+        self.assertEqual(response.status_code, 200)
+
+        payload = response.get_json()
+        self.assertFalse(payload["available"])
+        self.assertEqual(payload["mode"], "mock")
+        self.assertIn("No optional camera preview", payload["reason"])
+
+    def test_camera_frame_returns_one_still_image_when_optional_camera_is_available(self):
+        sbBackend.camera_manager = MockCameraManager(available=True)
+
+        status_response = self.client.get("/api/camera/status", headers=self.auth_headers)
+        self.assertEqual(status_response.status_code, 200)
+        self.assertTrue(status_response.get_json()["available"])
+
+        frame_response = self.client.get("/api/camera/frame", headers=self.auth_headers)
+        self.assertEqual(frame_response.status_code, 200)
+        self.assertEqual(frame_response.mimetype, "image/svg+xml")
+        self.assertEqual(frame_response.data, b"<svg></svg>")
+
+    def test_finished_trial_can_save_and_delete_an_attached_camera_snapshot(self):
+        mock_camera = MockCameraManager(available=True)
+        sbBackend.camera_manager = mock_camera
+
+        payload = self._base_payload(
+            testName="Camera Snapshot Trial",
+            trialDuration=0.003,
+            goalForTest=999,
+        )
+
+        configure_response = self.client.post("/api/test/information", json=payload, headers=self.auth_headers)
+        self.assertEqual(configure_response.status_code, 200)
+
+        run_response = self.client.post("/api/test/run", json=payload, headers=self.auth_headers)
+        self.assertEqual(run_response.status_code, 200)
+
+        self._wait_for_status(lambda current: current["testFinished"] is True, timeout_seconds=3.0)
+
+        results_response = self.client.get("/api/results", headers=self.auth_headers)
+        self.assertEqual(results_response.status_code, 200)
+        results = results_response.get_json()
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0]["hasCameraSnapshot"])
+        self.assertEqual(mock_camera.capture_calls, 1)
+
+        snapshot_response = self.client.get(
+            f"/api/results/{results[0]['id']}/snapshot",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(snapshot_response.status_code, 200)
+        self.assertEqual(snapshot_response.mimetype, "image/svg+xml")
+        self.assertEqual(snapshot_response.data, b"<svg></svg>")
+
+        delete_response = self.client.delete(
+            f"/api/results/{results[0]['id']}",
+            headers=self.admin_headers,
+        )
+        self.assertEqual(delete_response.status_code, 200)
+
+        deleted_snapshot_response = self.client.get(
+            f"/api/results/{results[0]['id']}/snapshot",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(deleted_snapshot_response.status_code, 404)
 
     def test_simulated_lever_presses_are_reported_by_counts_endpoint(self):
         payload = self._base_payload(

@@ -526,6 +526,12 @@ bundled `systemd` service sets it explicitly. The Pi backend launcher now uses
 Gunicorn by default with a single worker so the hardware control process stays
 predictable while moving off Flask's development server.
 
+Optional USB camera preview support is also included in
+`requirements.pi.txt`. If a box has a supported USB camera attached, the Trial
+page can show a low-bandwidth still preview during a run, and finished trials
+can save one small snapshot with the result. Boxes without a camera keep
+working normally.
+
 Backend:
 
 ```bash
@@ -535,6 +541,40 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.pi.txt
 GPIO_MODE=auto OLED_MODE=auto ./run_backend.sh
+```
+
+If you want to confirm that the Pi sees an attached USB camera before starting
+the backend, check for a V4L device first:
+
+```bash
+ls /dev/video*
+```
+
+If you see `/dev/video0`, the box can usually use the default camera settings
+without any extra configuration.
+
+Optional camera environment settings:
+
+- `CAMERA_MODE=auto`: use a detected USB camera when one is available
+- `CAMERA_MODE=off`: disable camera preview and saved snapshots on boxes with no camera
+- `CAMERA_DEVICE_INDEX=0`: choose which `/dev/video*` device to use when more than one camera exists
+- `CAMERA_WIDTH=320` and `CAMERA_HEIGHT=240`: keep preview snapshots small to reduce CPU and network load
+- `CAMERA_REFRESH_INTERVAL_SECONDS=1.5`: control how often the Trial page refreshes the still preview
+
+Example Pi run with the optional USB camera enabled explicitly:
+
+```bash
+cd backend
+source .venv/bin/activate
+GPIO_MODE=auto OLED_MODE=auto CAMERA_MODE=auto ./run_backend.sh
+```
+
+Example Pi run with the camera feature turned off:
+
+```bash
+cd backend
+source .venv/bin/activate
+GPIO_MODE=auto OLED_MODE=auto CAMERA_MODE=off ./run_backend.sh
 ```
 
 `run_backend.sh` defaults to port `5000`. If you need another backend port on the Pi, override it when you start the backend:
@@ -632,6 +672,7 @@ Environment=OLED_MODE=auto
 Environment=GPIOZERO_PIN_FACTORY=lgpio
 Environment=BACKEND_SERVER=gunicorn
 Environment=GUNICORN_WORKERS=1
+Environment=CAMERA_MODE=auto
 Environment=FLASK_RUN_PORT=5000
 ExecStart=/bin/bash /home/ladew222/skinnerbox-fullstack-student/backend/run_backend.sh
 Restart=on-failure
@@ -686,6 +727,16 @@ sudo systemctl status skinnerbox-backend.service
 sudo systemctl status skinnerbox-frontend.service
 tail -f logs/backend.log logs/backend.error.log
 tail -f logs/frontend.log logs/frontend.error.log
+```
+
+If a box has an optional USB camera and you want to verify the backend can see
+it, start the services and then visit the Trial page. The camera card only
+appears when the backend reports an available camera. If it does not appear,
+check:
+
+```bash
+ls /dev/video*
+tail -f logs/backend.error.log
 ```
 
 If you do want the Pi to rebuild the frontend automatically after a pull, temporarily set `FRONTEND_BUILD_ON_START=1` in the service, restart it once, and then switch it back to `0`.

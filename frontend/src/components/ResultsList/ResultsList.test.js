@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import ResultsList from './ResultsList';
-import { deleteResult, deleteResults, getResults } from '../../utilities/api';
+import { buildResultSnapshotUrl, deleteResult, deleteResults, getResults } from '../../utilities/api';
 import { useAuth } from '../../context/AuthContext';
 
 
 jest.mock('../../utilities/api', () => ({
+  buildResultSnapshotUrl: jest.fn((resultId, cacheBust) => `/api/results/${resultId}/snapshot?ts=${cacheBust}`),
   deleteResult: jest.fn(),
   deleteResults: jest.fn(),
   getResults: jest.fn(),
@@ -245,6 +246,34 @@ describe('ResultsList', () => {
 
     expect(window.URL.createObjectURL).toHaveBeenCalledTimes(1);
     expect(clickSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows the attached camera snapshot when a saved result includes one', async () => {
+    useAuth.mockReturnValue({ isAdmin: false });
+    getResults.mockResolvedValue([
+      {
+        id: 'trial-camera',
+        name: 'Camera Trial',
+        updatedAt: '2026-03-15T12:34:00Z',
+        createdAt: '2026-03-15T12:00:00Z',
+        hasCameraSnapshot: true,
+        cameraSnapshotCapturedAt: '2026-03-15T12:34:30Z',
+        conductedBy: {
+          id: 7,
+          email: 'operator@example.com',
+          displayName: 'Operator User',
+        },
+      },
+    ]);
+
+    render(<ResultsList />);
+
+    const cameraCheckbox = await screen.findByLabelText(/select camera trial/i);
+    fireEvent.click(cameraCheckbox.closest('li'));
+
+    expect(screen.getByText(/attached camera snapshot/i)).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /camera trial camera snapshot/i })).toBeInTheDocument();
+    expect(buildResultSnapshotUrl).toHaveBeenCalledWith('trial-camera', '2026-03-15T12:34:30Z');
   });
 
   test('lets an admin delete multiple selected trials at once', async () => {

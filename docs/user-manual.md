@@ -20,7 +20,8 @@ Most users will use the program in this order:
 2.  Open `I/O Config` to confirm the lever, nose poke, pump, light, and buzzer behave correctly.
 3.  Open `Run a Trial` and load a preset or enter trial values manually.
 4.  Start the trial and watch the live status during the run.
-5.  Open `Results` to review the saved session, compare runs, and export data.
+5.  If that box has an optional USB camera, turn on the live preview when you want a quick visual check during the run.
+6.  Open `Results` to review the saved session, compare runs, export data, and view any attached camera snapshot.
 
 ![Home page after sign-in](./assets/user-manual/generated/02-home-page.png)
 
@@ -190,6 +191,7 @@ Use this page to:
 -   start a trial
 -   pause, resume, stop, or finish a trial
 -   watch the live trial state while it is running
+-   optionally show a low-bandwidth camera preview on boxes with a USB camera
 
 ![Trial configuration page](./assets/user-manual/generated/04-trial-page.png)
 
@@ -259,8 +261,25 @@ While the test runs, the page shows:
 -   current counts
 -   reward information
 -   trial state
+-   an optional `Show Camera` control on boxes with a connected USB camera
 
 The backend controls the timer and stop conditions. The page is showing backend state, not inventing its own copy of the timer.
+
+### Optional Camera Preview
+
+Some boxes may include a USB camera. When one is available, the Trial page can show a small still-image preview during the run.
+
+Use this when:
+
+-   you want a quick visual check during the session
+-   you want lower network use than full video streaming
+
+What to expect:
+
+-   the preview is off by default
+-   the image refreshes periodically instead of streaming full video
+-   boxes without a camera will not show this control
+-   camera problems should not stop the trial from running
 
 ### When The Trial Finishes
 
@@ -269,6 +288,7 @@ When the trial finishes:
 -   the run is saved
 -   the page can play the completion sound in the browser
 -   the run becomes available in Results
+-   if the optional camera was available, one small snapshot may be saved with the result
 
 ### Common Problems
 
@@ -312,6 +332,7 @@ Use it to:
 -   review operator notes
 -   download summary CSV files
 -   download event timeline CSV files
+-   view an attached camera snapshot when one was saved with the trial
 
 ![Results overview page](./assets/user-manual/generated/06-results-overview.png)
 
@@ -326,6 +347,8 @@ The left side of the page lists saved trials. Each row shows:
 -   operator
 
 Users can search the list to find specific runs more quickly.
+
+If a trial was saved on a box with the optional camera enabled, the detail panel may also include one attached still image from that run.
 
 ### Comparing Multiple Trials
 
@@ -356,6 +379,17 @@ Timeline data may include:
 -   other saved session events
 
 If no timeline was saved for a run, the page will tell you that there is nothing to download or chart.
+
+### Attached Camera Snapshot
+
+Some saved trials may include one small still image captured near the end of the run.
+
+This is useful when:
+
+-   you want a quick visual reference tied to the saved result
+-   you want lightweight image evidence without storing full video
+
+If a trial does not include a snapshot, no camera panel will appear in the detail view.
 
 ### Timeline Trends
 

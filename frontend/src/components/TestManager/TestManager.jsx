@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./TestManager.css";
-import { addTestNote, runTest, stopTest, finishTest, getCounts, getTestInformation, getTestStatus } from "../../utilities/api";
+import {
+  addTestNote,
+  buildCameraFrameUrl,
+  getCameraStatus,
+  runTest,
+  stopTest,
+  finishTest,
+  getCounts,
+  getTestInformation,
+  getTestStatus,
+} from "../../utilities/api";
 import { DEFAULT_END_CHIME_PATTERN, PRESET_STORAGE_EVENT, loadUserPresets, upsertUserPreset } from "../../utilities/presets";
 import {
   buildEventTimelineCsv,
@@ -109,6 +119,17 @@ const TestManager = () => {
   const [operatorNote, setOperatorNote] = useState("");
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteFeedback, setNoteFeedback] = useState("");
+  const [cameraStatus, setCameraStatus] = useState({
+    checked: false,
+    available: false,
+    reason: "",
+    resolution: "",
+    refreshIntervalSeconds: 1.5,
+    deviceName: "",
+  });
+  const [showCameraPreview, setShowCameraPreview] = useState(false);
+  const [cameraFrameUrl, setCameraFrameUrl] = useState("");
+  const [cameraPreviewError, setCameraPreviewError] = useState("");
 
   const [uiError, setUiError] = useState({
     open: false,
@@ -142,6 +163,37 @@ const TestManager = () => {
       return;
     }
     setUiError((currentError) => ({ ...currentError, open: false }));
+  };
+
+  const refreshCameraAvailability = async () => {
+    try {
+      const status = await getCameraStatus();
+      setCameraStatus({
+        checked: true,
+        available: Boolean(status.available),
+        reason: status.reason || "",
+        resolution: status.resolution || "",
+        refreshIntervalSeconds: Number(status.refreshIntervalSeconds || 1.5),
+        deviceName: status.deviceName || "",
+      });
+      if (!status.available) {
+        setShowCameraPreview(false);
+        setCameraFrameUrl("");
+        setCameraPreviewError("");
+      }
+    } catch (error) {
+      setCameraStatus({
+        checked: true,
+        available: false,
+        reason: error?.message || "Unable to load the optional camera preview status.",
+        resolution: "",
+        refreshIntervalSeconds: 1.5,
+        deviceName: "",
+      });
+      setShowCameraPreview(false);
+      setCameraFrameUrl("");
+      setCameraPreviewError("");
+    }
   };
 
   const applyCountsToUi = (counts) => {
@@ -199,6 +251,10 @@ const TestManager = () => {
   }, []); // Empty dependency array = run once on component mount
 
   useEffect(() => {
+    refreshCameraAvailability();
+  }, []);
+
+  useEffect(() => {
     if (testFinished && !previousFinishedRef.current) {
       playBrowserCompletionChime().catch(() => {
         // Ignore browser-audio errors so test completion UI still updates normally.
@@ -207,6 +263,32 @@ const TestManager = () => {
 
     previousFinishedRef.current = testFinished;
   }, [testFinished]);
+
+  useEffect(() => {
+    const canShowCamera = cameraStatus.available && showCameraPreview && !testFinished;
+    if (!canShowCamera) {
+      setCameraFrameUrl("");
+      setCameraPreviewError("");
+      return undefined;
+    }
+
+    const refreshFrame = () => {
+      setCameraFrameUrl(buildCameraFrameUrl(Date.now()));
+    };
+
+    refreshFrame();
+    const interval = window.setInterval(
+      refreshFrame,
+      Math.max(Number(cameraStatus.refreshIntervalSeconds || 1.5) * 1000, 750),
+    );
+
+    return () => window.clearInterval(interval);
+  }, [
+    cameraStatus.available,
+    cameraStatus.refreshIntervalSeconds,
+    showCameraPreview,
+    testFinished,
+  ]);
 
   const buildCurrentFormSnapshot = (overrides = {}) => ({
     testName,
@@ -507,6 +589,15 @@ const TestManager = () => {
       setTestRunning(false);
       showUiError(error, "Failed to start the test.");
     }
+  };
+
+  const handleToggleCameraPreview = () => {
+    if (!cameraStatus.available) {
+      return;
+    }
+
+    setCameraPreviewError("");
+    setShowCameraPreview((currentValue) => !currentValue);
   };
 
   const handleStopTest = async () => {
@@ -1151,6 +1242,51 @@ const handlePreset = (event) => {
               </div>
 
               <div className="test-screen-sidebar">
+                {cameraStatus.available && !testFinished && (
+                  <div className="camera-preview-panel">
+                    <div className="camera-preview-header">
+                      <div>
+                        <h3>Live Camera Preview</h3>
+                        <p>
+                          Optional low-bandwidth still preview from the USB camera on this box.
+                          It only refreshes while this panel is open.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="camera-toggle-button"
+                        onClick={handleToggleCameraPreview}
+                      >
+                        {showCameraPreview ? "Hide Camera" : "Show Camera"}
+                      </button>
+                    </div>
+                    <p className="camera-preview-meta">
+                      {cameraStatus.deviceName || "USB Camera"}
+                      {cameraStatus.resolution ? ` • ${cameraStatus.resolution}` : ""}
+                    </p>
+                    {showCameraPreview ? (
+                      <>
+                        <img
+                          className="camera-preview-image"
+                          src={cameraFrameUrl}
+                          alt="Live trial camera preview"
+                          onLoad={() => setCameraPreviewError("")}
+                          onError={() => {
+                            setCameraPreviewError(
+                              "The camera preview could not be refreshed. Check the USB camera connection and try again."
+                            );
+                          }}
+                        />
+                        {cameraPreviewError && <p className="camera-preview-error">{cameraPreviewError}</p>}
+                      </>
+                    ) : (
+                      <p className="camera-preview-empty">
+                        Camera preview is off to reduce network traffic during the trial.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {!testFinished && (
                   <div className="trial-note-panel">
                     <h3>Operator Notes</h3>

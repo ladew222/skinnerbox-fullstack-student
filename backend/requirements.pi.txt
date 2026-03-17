@@ -2,6 +2,7 @@
 gpiozero==2.0.1
 gunicorn
 lgpio
+opencv-python-headless
 RPi.GPIO
 rpi-ws281x
 spidev

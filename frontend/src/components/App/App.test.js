@@ -64,6 +64,17 @@ beforeEach(() => {
       });
     }
 
+    if (url === '/api/camera/status') {
+      return Promise.resolve({
+        data: {
+          available: false,
+          mode: 'mock',
+          refreshIntervalSeconds: 1.5,
+          resolution: '320x240',
+        },
+      });
+    }
+
     return Promise.resolve({ data: {} });
   });
 });

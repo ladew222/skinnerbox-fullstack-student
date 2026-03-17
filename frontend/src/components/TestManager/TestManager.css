@@ -359,7 +359,8 @@
 }
 
 .trial-note-panel,
-.timeline-panel {
+.timeline-panel,
+.camera-preview-panel {
   padding: 18px 20px;
   border: 1px solid #d7dee6;
   border-radius: 12px;
@@ -367,14 +368,66 @@
 }
 
 .trial-note-panel h3,
-.timeline-panel h3 {
+.timeline-panel h3,
+.camera-preview-panel h3 {
   margin: 0 0 10px 0;
   color: #184d7a;
 }
 
 .trial-note-panel p,
-.timeline-panel p {
+.timeline-panel p,
+.camera-preview-panel p {
   color: #4b6477;
+}
+
+.camera-preview-panel {
+  background: linear-gradient(180deg, #f9fbff 0%, #eef5fb 100%);
+}
+
+.camera-preview-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.camera-preview-header p {
+  margin-top: 4px;
+}
+
+.camera-toggle-button {
+  border: none;
+  border-radius: 10px;
+  padding: 11px 16px;
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+  background: #0f74bd;
+  flex-shrink: 0;
+}
+
+.camera-preview-meta {
+  margin-top: 10px;
+  font-weight: 600;
+}
+
+.camera-preview-image {
+  width: 100%;
+  display: block;
+  border-radius: 12px;
+  border: 1px solid #d4dfeb;
+  background: white;
+  margin-top: 12px;
+}
+
+.camera-preview-empty,
+.camera-preview-error {
+  margin-top: 12px;
+}
+
+.camera-preview-error {
+  color: #9f2d2d;
+  font-weight: 600;
 }
 
 .trial-note-panel textarea {
@@ -494,5 +547,13 @@
   .timeline-panel-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .camera-preview-header {
+    flex-direction: column;
+  }
+
+  .camera-toggle-button {
+    width: 100%;
   }
 }
