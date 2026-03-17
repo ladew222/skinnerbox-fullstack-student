@@ -58,8 +58,28 @@ class DemoResultsScriptTest(unittest.TestCase):
                 FROM Active_Test
                 """
             ).fetchone()["average_total"]
+            validity_summary = connection.execute(
+                """
+                SELECT
+                    SUM(COALESCE(valid_lever_press, 0)) AS valid_lever_total,
+                    SUM(COALESCE(invalid_lever_press, 0)) AS invalid_lever_total,
+                    SUM(COALESCE(valid_nose_poke, 0)) AS valid_nose_total,
+                    SUM(COALESCE(invalid_nose_poke, 0)) AS invalid_nose_total,
+                    SUM(COALESCE(lever_press, 0)) AS lever_total,
+                    SUM(COALESCE(nose_poke, 0)) AS nose_total
+                FROM Active_Test
+                """
+            ).fetchone()
             note_count = connection.execute(
                 "SELECT COUNT(*) AS count FROM test_events WHERE event_type = 'note'"
+            ).fetchone()["count"]
+            invalid_event_count = connection.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM test_events
+                WHERE response_validity = 'invalid'
+                  AND response_reason = 'stimulus_active'
+                """
             ).fetchone()["count"]
             operator_count = connection.execute(
                 "SELECT COUNT(*) AS count FROM users WHERE email LIKE 'demo.operator%@example.com'"
@@ -95,6 +115,15 @@ class DemoResultsScriptTest(unittest.TestCase):
             self.assertGreater(event_count, 5)
             self.assertGreaterEqual(average_total_interactions, 11)
             self.assertLessEqual(average_total_interactions, 19)
+            self.assertEqual(
+                validity_summary["valid_lever_total"] + validity_summary["invalid_lever_total"],
+                validity_summary["lever_total"],
+            )
+            self.assertEqual(
+                validity_summary["valid_nose_total"] + validity_summary["invalid_nose_total"],
+                validity_summary["nose_total"],
+            )
+            self.assertGreater(invalid_event_count, 0)
             self.assertGreaterEqual(note_count, 1)
             self.assertGreaterEqual(operator_count, 1)
             self.assertEqual(validation_admin_count, 1)

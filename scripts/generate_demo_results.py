@@ -44,6 +44,107 @@ MIN_TOTAL_INTERACTIONS = 7
 MAX_TOTAL_INTERACTIONS = 24
 
 
+def occurs_during_stimulus(time_point: float, windows: list[tuple[float, float]]) -> bool:
+    """Return whether one interaction lands while the stimulus is active."""
+
+    return any(start <= time_point <= end for start, end in windows)
+
+
+def inject_invalid_interaction_times(
+    *,
+    interaction_times: list[float],
+    stimulus_windows: list[tuple[float, float]],
+    elapsed_seconds: float,
+    rng: random.Random,
+) -> list[float]:
+    """Shift some demo interactions into active-stimulus windows so invalid examples appear."""
+
+    if not interaction_times or not stimulus_windows:
+        return sorted(interaction_times)
+
+    updated_times = list(interaction_times)
+    invalid_target = min(len(updated_times), max(1, round(len(updated_times) * 0.2)))
+    selected_indexes = list(range(len(updated_times)))
+    rng.shuffle(selected_indexes)
+
+    for interaction_index in selected_indexes[:invalid_target]:
+        window_start, window_end = rng.choice(stimulus_windows)
+        if window_end <= window_start:
+            updated_times[interaction_index] = round(window_start, 1)
+            continue
+
+        shifted_time = round(rng.uniform(window_start, window_end), 1)
+        updated_times[interaction_index] = max(0.0, min(elapsed_seconds, shifted_time))
+
+    updated_times.sort()
+    return updated_times
+
+
+def build_interaction_event_rows(
+    *,
+    lever_times: list[float],
+    nose_times: list[float],
+    stimulus_windows: list[tuple[float, float]],
+) -> tuple[list[tuple[float, str, str, str, str, str]], dict[str, int]]:
+    """Build event rows and saved summary counts for valid and invalid demo interactions."""
+
+    event_rows: list[tuple[float, str, str, str, str, str]] = []
+    summary_counts = {
+        "valid_lever_press_count": 0,
+        "invalid_lever_press_count": 0,
+        "valid_nose_poke_count": 0,
+        "invalid_nose_poke_count": 0,
+    }
+
+    for time_point in lever_times:
+        is_invalid = occurs_during_stimulus(time_point, stimulus_windows)
+        response_validity = "invalid" if is_invalid else "valid"
+        response_reason = "stimulus_active" if is_invalid else ""
+        if is_invalid:
+            summary_counts["invalid_lever_press_count"] += 1
+        else:
+            summary_counts["valid_lever_press_count"] += 1
+        event_rows.append(
+            (
+                time_point,
+                "lever_press",
+                "Lever press",
+                (
+                    "Ignored because the light or trial buzzer was active."
+                    if is_invalid
+                    else "Counted while no light or trial buzzer was active."
+                ),
+                response_validity,
+                response_reason,
+            )
+        )
+
+    for time_point in nose_times:
+        is_invalid = occurs_during_stimulus(time_point, stimulus_windows)
+        response_validity = "invalid" if is_invalid else "valid"
+        response_reason = "stimulus_active" if is_invalid else ""
+        if is_invalid:
+            summary_counts["invalid_nose_poke_count"] += 1
+        else:
+            summary_counts["valid_nose_poke_count"] += 1
+        event_rows.append(
+            (
+                time_point,
+                "nose_poke",
+                "Nose poke",
+                (
+                    "Ignored because the light or trial buzzer was active."
+                    if is_invalid
+                    else "Counted while no light or trial buzzer was active."
+                ),
+                response_validity,
+                response_reason,
+            )
+        )
+
+    return event_rows, summary_counts
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -454,7 +555,7 @@ def log_demo_timeline(
     nose_poke_count: int,
     reward_count: int,
     rng: random.Random,
-) -> None:
+) -> dict[str, int]:
     repository.clear_test_events(configuration.test_id)
     detail_text = (
         f"{configuration.test_name} prepared for subject {configuration.subject_id}."
@@ -564,26 +665,38 @@ def log_demo_timeline(
         )
         for time_point in stimulus_on_times
     ]
+    stimulus_windows = list(zip(stimulus_on_times, stimulus_off_times))
 
-    timeline_events: list[tuple[float, str, str, str]] = []
+    lever_times = inject_invalid_interaction_times(
+        interaction_times=lever_times,
+        stimulus_windows=stimulus_windows,
+        elapsed_seconds=elapsed_seconds,
+        rng=rng,
+    )
+    nose_times = inject_invalid_interaction_times(
+        interaction_times=nose_times,
+        stimulus_windows=stimulus_windows,
+        elapsed_seconds=elapsed_seconds,
+        rng=rng,
+    )
+    interaction_event_rows, validity_counts = build_interaction_event_rows(
+        lever_times=lever_times,
+        nose_times=nose_times,
+        stimulus_windows=stimulus_windows,
+    )
+
+    timeline_events: list[tuple[float, str, str, str, str, str]] = []
     timeline_events.extend(
-        (time_point, "stimulus_on", "Stimulus on", configuration.stimulus_type)
+        (time_point, "stimulus_on", "Stimulus on", configuration.stimulus_type, "", "")
         for time_point in stimulus_on_times
     )
     timeline_events.extend(
-        (time_point, "stimulus_off", "Stimulus off", configuration.stimulus_type)
+        (time_point, "stimulus_off", "Stimulus off", configuration.stimulus_type, "", "")
         for time_point in stimulus_off_times
     )
+    timeline_events.extend(interaction_event_rows)
     timeline_events.extend(
-        (time_point, "lever_press", "Lever press", "")
-        for time_point in lever_times
-    )
-    timeline_events.extend(
-        (time_point, "nose_poke", "Nose poke", "")
-        for time_point in nose_times
-    )
-    timeline_events.extend(
-        (time_point, "reward_delivered", "Reward delivered", "Water")
+        (time_point, "reward_delivered", "Reward delivered", "Water", "", "")
         for time_point in reward_times
     )
 
@@ -596,16 +709,18 @@ def log_demo_timeline(
             rng=rng,
         )[0]
         timeline_events.append(
-            (note_time, "note", "Operator note", rng.choice(DEMO_NOTE_OPTIONS))
+            (note_time, "note", "Operator note", rng.choice(DEMO_NOTE_OPTIONS), "", "")
         )
 
     timeline_events.sort(key=lambda item: (item[0], item[1]))
-    for time_point, event_type, event_label, detail_text in timeline_events:
+    for time_point, event_type, event_label, detail_text, response_validity, response_reason in timeline_events:
         repository.log_test_event(
             configuration.test_id,
             event_type,
             event_label,
             detail_text=detail_text,
+            response_validity=response_validity,
+            response_reason=response_reason,
             elapsed_seconds=time_point,
         )
 
@@ -625,6 +740,8 @@ def log_demo_timeline(
             detail_text="Paused before reaching the test goal.",
             elapsed_seconds=elapsed_seconds,
         )
+
+    return validity_counts
 
 
 def backdate_trial(
@@ -749,6 +866,10 @@ def main() -> int:
             "lever_press_count": lever_press_count,
             "nose_poke_count": nose_poke_count,
             "reward_count": reward_count,
+            "valid_lever_press_count": 0,
+            "invalid_lever_press_count": 0,
+            "valid_nose_poke_count": 0,
+            "invalid_nose_poke_count": 0,
             "elapsed_seconds": elapsed_seconds,
         }
 
@@ -758,7 +879,7 @@ def main() -> int:
             status,
             conducted_by,
         )
-        log_demo_timeline(
+        validity_counts = log_demo_timeline(
             repository,
             configuration,
             status=status,
@@ -768,6 +889,8 @@ def main() -> int:
             reward_count=reward_count,
             rng=rng,
         )
+        counts.update(validity_counts)
+        repository.update_counts(configuration.test_id, counts, status=status)
         backdate_trial(
             repository,
             test_id=configuration.test_id,
