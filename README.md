@@ -867,6 +867,7 @@ The backend stores active and completed test runs in SQLite:
 - default database file: [backend/testdatabase.db](/Users/egweinberg/Documents/skinnerbox-fullstack-student/backend/testdatabase.db)
 - optional override for tests or temporary runs: `SKINNERBOX_DB_PATH=/path/to/file.db`
 - auth tables in the same SQLite file: `users` and `auth_tokens`
+- database ERD: [docs/database-erd.md](/Users/egweinberg/Documents/skinnerbox-fullstack-student/docs/database-erd.md)
 
 The backend schema is auto-migrated on startup so older database files can still be used.
 
