@@ -4265,7 +4265,7 @@ def _describe_stimulus(stimulus_type: str, light_color: str) -> str:
         return "Tone"
     if normalized_type == "light + tone":
         return "Light + Tone"
-
+    
     return "Light"
 
 

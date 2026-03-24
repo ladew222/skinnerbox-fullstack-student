@@ -97,6 +97,7 @@ const TestManager = () => {
   const [rewardType, setRewardType] = useState(FIXED_REWARD_TYPE);
   const [interactionType, setInteractionType] = useState("Lever");
   const [stimulusType, setStimulusType] = useState("Light");
+  const [dual_stimulus, setDualStimulus] = useState("");
   const [endChimeEnabled, setEndChimeEnabled] = useState(false);
   const [endChimePattern, setEndChimePattern] = useState(DEFAULT_END_CHIME_PATTERN);
   const [userPresets, setUserPresets] = useState([]);
@@ -195,6 +196,8 @@ const TestManager = () => {
       setCameraPreviewError("");
     }
   };
+
+  const dual_stimulus = stimulusType === "Tone Then Light" || stimulusType === "Light Then Stimulus"
 
   const applyCountsToUi = (counts) => {
     if (!counts) {
@@ -413,6 +416,7 @@ const TestManager = () => {
         setRewardType(FIXED_REWARD_TYPE);
         setInteractionType(parsedSettings.interactionType || "Lever");
         setStimulusType(normalizeStimulusType(parsedSettings.stimulusType));
+        setDualStimulus(parsedSettings.dual_stimulus || null);
         setEndChimeEnabled(Boolean(parsedSettings.endChimeEnabled));
         setEndChimePattern(validation.normalizedValues.endChimePattern || DEFAULT_END_CHIME_PATTERN);
         syncValidationErrors(validation.errors);
@@ -439,6 +443,7 @@ const TestManager = () => {
     setRewardType(FIXED_REWARD_TYPE);
     setInteractionType("Lever");
     setStimulusType("Light");
+    setDualStimulus(null);
     setSubjectID("");
     setEndChimeEnabled(false);
     setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
@@ -796,6 +801,7 @@ const handlePreset = (event) => {
             setRewardType(FIXED_REWARD_TYPE);
         setInteractionType("Lever");
         setStimulusType("Light");
+        setDualStimulus(null);
         setEndChimeEnabled(false);
         setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
         setPresetSaveMessage("");
@@ -826,6 +832,7 @@ const handlePreset = (event) => {
         setRewardType(FIXED_REWARD_TYPE);
         setInteractionType(userPreset.interactionType || "Lever");
         setStimulusType(normalizeStimulusType(userPreset.stimulusType));
+        setDualStimulus(userPreset.dual_stimulus || null);
         setEndChimeEnabled(Boolean(userPreset.endChimeEnabled));
         setEndChimePattern(validation.normalizedValues.endChimePattern || DEFAULT_END_CHIME_PATTERN);
         syncValidationErrors(validation.errors);
@@ -1138,10 +1145,17 @@ const handlePreset = (event) => {
                     >
                       <MenuItem value={"Light"}>Light</MenuItem>
                       <MenuItem value={"Tone"}>Tone</MenuItem>
-                      <MenuItem value={"Light + Tone"}>Light + Tone</MenuItem>
+                      <MenuItem value={"Light Then Tone"}>Light Then Tone</MenuItem>
+                      <MenuItem value={"Tone Then Light"}>Tone Then Light</MenuItem>
                     </Select>
                     <FormHelperText>{FIELD_HELP_TEXT.stimulusType}</FormHelperText>
                 </FormControl>
+                {dual_stimulus && (
+                  <input type="text"
+                  placeholder="Enter time between stimuli."
+                  id="dualStimulusTimeBetween"
+                  onChange={(e) => setDualStimulus(e.target.value)}></input>
+                )}
               </div>
             </div>
 
@@ -1153,9 +1167,13 @@ const handlePreset = (event) => {
               <div className="stimulus-note">
                 Tone stimulus selected. The backend will use the saved trial buzzer output on each cycle instead of the trial light.
               </div>
+            ) : stimulusType === "Light Then Tone" ? (
+              <div className="stimulus-note">
+                Light Then Tone selected. The backend will turn on the box light then play the saved trial buzzer output after a set amount of seconds each stimulus cycle.
+              </div>
             ) : (
               <div className="stimulus-note">
-                Light + Tone selected. The backend will turn on the box light and play the saved trial buzzer output together on each stimulus cycle.
+                Tone Then Light selected. The backend will play the saved trial buzzer output then turn on the box light after a set amount of seconds each stimulus cycle.
               </div>
             )}
           </div>
