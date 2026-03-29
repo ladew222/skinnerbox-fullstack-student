@@ -10,13 +10,23 @@ function NavBar() { {/* Defining the NavBar component */}
         <div> {/* Wrapper div for the entire navbar */}
             <nav className="navbar navbar-expand-lg bg-body-tertiary" style={{ backgroundColor: '#e3f2fd' }}> 
                 {/* Bootstrap navbar with background color defined inline */}
-                <div className="container-fluid d-flex justify-content-between"> 
+                <div className="container-fluid d-flex align-items-center"> 
                     {/* Container to hold all navbar content, with 'd-flex' to align items horizontally */}
                     <a className="navbar-brand d-flex align-items-center" href="/">
                         {/* Navbar brand containing the logo, with 'd-flex' and 'align-items-center' to vertically center the content */}
                         <img className='NavBarLogo' src={logo} alt='Logo' /> 
                         {/* Image element to display the logo with alt text for accessibility */}
                     </a>
+
+                    {/* "Skinner Box" title centered in navbar */}
+                    <a className="navbar-brand mx-auto" href="/">
+                        Skinner Box
+                    </a>
+
+                    <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarTogglerDemo02" aria-controls="navbarTogglerDemo02" aria-expanded="false" aria-label="Toggle navigation">
+                        {/* Toggler button for collapsing and expanding the navbar on small screens */}
+                        <span className="navbar-toggler-icon"></span> {/* Icon displayed for the toggle button */}
+                    </button>
 
                     <div className="collapse navbar-collapse" id="navbarTogglerDemo02">
                         {/* Collapsible navbar content that will toggle on smaller screens */}
@@ -50,17 +60,6 @@ function NavBar() { {/* Defining the NavBar component */}
                             </li>
                         </ul>
                     </div>
-
-                    <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarTogglerDemo02" aria-controls="navbarTogglerDemo02" aria-expanded="false" aria-label="Toggle navigation">
-                        {/* Toggler button for collapsing and expanding the navbar on small screens */}
-                        <span className="navbar-toggler-icon"></span> {/* Icon displayed for the toggle button */}
-                    </button>
-
-                    {/* Centering "Skinner Box" with absolute positioning */}
-                    <a className="navbar-brand position-absolute start-50 translate-middle" href="/" style={{ top: '50%' }}>
-                        Skinner Box
-                    </a>
-                    {/* 'position-absolute' positions the link absolutely inside the parent, 'start-50' centers horizontally, 'translate-middle-x' shifts the element to center exactly */}
                 </div>
             </nav>
         </div>
