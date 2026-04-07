@@ -308,6 +308,7 @@ const TestManager = () => {
     rewardType,
     interactionType,
     stimulusType,
+    dual_stimulus,
     lightColor: effectiveLightColor,
     endChimeEnabled,
     endChimePattern,
@@ -348,6 +349,7 @@ const TestManager = () => {
       rewardType,
       interactionType,
       stimulusType,
+      dual_stimulus,
       lightColor: effectiveLightColor,
       endChimeEnabled,
       endChimePattern,
@@ -379,6 +381,7 @@ const TestManager = () => {
       rewardType,
       interactionType,
       stimulusType,
+      dual_stimulus,
       endChimeEnabled,
       endChimePattern: normalizedValues.endChimePattern,
     });
@@ -513,6 +516,7 @@ const TestManager = () => {
             rewardType,
             interactionType,
             stimulusType,
+            dual_stimulus,
             lightColor: effectiveLightColor,
             endChimeEnabled,
             endChimePattern,
@@ -571,7 +575,8 @@ const TestManager = () => {
       cooldown: normalizedValues.cooldown,
       rewardType, 
       interactionType, 
-      stimulusType, 
+      stimulusType,
+      dual_stimulus, 
       lightColor: effectiveLightColor,
       endChimeEnabled,
       endChimePattern: normalizedValues.endChimePattern,
@@ -665,6 +670,7 @@ const TestManager = () => {
       interactionType,
       stimulusType,
       stimulusDescription: stimulusSummary,
+      dual_stimulus,
       lightColor: effectiveLightColor,
       endChimeEnabled: formatEndChimeStatus(endChimeEnabled),
       endChimePattern: "",
@@ -763,6 +769,7 @@ const TestManager = () => {
         rewardType: FIXED_REWARD_TYPE,
         interactionType,
         stimulusType,
+        dual_stimulus,
         lightColor: effectiveLightColor,
         endChimeEnabled,
         endChimePattern: normalizedValues.endChimePattern,
@@ -1153,7 +1160,7 @@ const handlePreset = (event) => {
                     </Select>
                     <FormHelperText>{FIELD_HELP_TEXT.stimulusType}</FormHelperText>
                 </FormControl>
-                {dual_stimulus && (
+                {dual_stimulus == true && (
                   <input type="text"
                   placeholder="Enter time between stimuli."
                   id="dualStimulusTimeBetween"

@@ -144,7 +144,7 @@ class TestConfiguration:
             raise ConfigurationError("StimTimeOn cannot be negative.")
         if self.cooldown_seconds < 0:
             raise ConfigurationError("cooldown cannot be negative.")
-        if self.stimulus_type not in {"Light", "Tone", "Light + Tone"}:
+        if self.stimulus_type not in {"Light", "Tone", "Light Then Tone","Tone Then Light"}:
             raise ConfigurationError("stimulusType must be Light, Tone, or Light + Tone.")
 
     def to_response_payload(self) -> dict[str, object]:
@@ -2325,6 +2325,7 @@ class SkinnerHardware:
         stimulus_type: str,
         light_color: str,
         duration_seconds: float,
+        dual_stimulation_seconds: float,
         stop_event: threading.Event,
     ) -> None:
         """Play one stimulus cycle using the configured light, tone, or both."""
@@ -2338,11 +2339,14 @@ class SkinnerHardware:
                 self._stop_trial_buzzer()
                 return
 
-            if stimulus_type == "light + tone":
+            if stimulus_type == "light then tone":
                 self.set_blue(True)
                 self._start_trial_buzzer()
                 self._sleep(duration_seconds, stop_event)
                 self._stop_trial_buzzer()
+                self._sleep(dual_stimulation_seconds, stop_event)
+                self.set_blue(True)
+                self._sleep(duration_seconds, stop_event)
                 self.set_blue(False)
                 return
 
@@ -4263,9 +4267,10 @@ def _describe_stimulus(stimulus_type: str, light_color: str) -> str:
     normalized_type = stimulus_type.strip().lower()
     if normalized_type == "tone":
         return "Tone"
-    if normalized_type == "light + tone":
-        return "Light + Tone"
-    
+    if normalized_type == "light then tone":
+        return "Light Then Tone"
+    if normalized_type == "tone then light":
+        return "Tone Then Light"
     return "Light"
 
 
