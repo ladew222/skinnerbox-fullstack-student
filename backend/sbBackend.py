@@ -20,6 +20,7 @@ from camera_adapter import CameraManager, CameraUnavailableError
 from display_adapter import StatusDisplay
 from gpio_adapter import Button, LED, OutputDevice, PassiveBuzzer
 from shared_errors import ApiError, ConfigurationError
+from web_socket import init_socket, register_presence_routes
 
 
 # SQLite file used by the current student branch for saving active test runs.
@@ -4279,6 +4280,9 @@ hardware = SkinnerHardware()
 session_manager = TestSessionManager(repository, hardware)
 camera_manager = CameraManager()
 
+socketio = init_socket(app, session_manager)
+register_presence_routes(app)
+
 
 @app.errorhandler(ApiError)
 def handle_api_error(error: ApiError):
@@ -4889,8 +4893,17 @@ def simulate_nose_poke():
     return jsonify({"status": "simulated nose poke"}), 200
 
 
+# if __name__ == "__main__":
+#     app.run(
+#         debug=os.getenv("FLASK_DEBUG", "0") == "1",
+#         use_reloader=False,
+#         host="0.0.0.0",
+#         port=5000,
+#     )
+
 if __name__ == "__main__":
-    app.run(
+    socketio.run(
+        app,
         debug=os.getenv("FLASK_DEBUG", "0") == "1",
         use_reloader=False,
         host="0.0.0.0",

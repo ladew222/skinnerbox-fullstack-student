@@ -456,6 +456,7 @@ Backend:
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
+source .venv/Scripts/activate (Windows)
 pip install -r requirements.txt
 GPIO_MODE=mock OLED_MODE=mock FLASK_APP=sbBackend.py flask run --host=0.0.0.0 --port=5000
 ```
@@ -465,6 +466,7 @@ If port `5000` is already in use on your computer, choose another backend port s
 ```bash
 cd backend
 source .venv/bin/activate
+source .venv/Scripts/activate (Windows)
 GPIO_MODE=mock OLED_MODE=mock FLASK_APP=sbBackend.py flask run --host=0.0.0.0 --port=5001
 ```
 

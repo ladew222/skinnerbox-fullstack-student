@@ -17,8 +17,22 @@ import PresetManager from '../PresetManager/preset_manager';
 import NotFoundPage from '../404Page/404';
 import Register from '../Register/Register';
 import Admin from '../Pages/Admin';
+import { useEffect } from 'react';
+import {
+  connectPresenceSocket,
+  disconnectPresenceSocket,
+} from '../../utilities/presenceClient';
+
+
 
 function App() {
+  useEffect(() => {
+    connectPresenceSocket();
+    return () => {
+      disconnectPresenceSocket();
+    };
+  }, []);
+  
   return (
     <AuthProvider>
       <div className="app-shell">

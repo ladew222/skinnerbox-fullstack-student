@@ -1,4 +1,5 @@
 Flask==2.2.2
 Flask-Cors==3.0.10
+Flask-SocketIO==5.3.6
 Werkzeug==2.2.3
 openpyxl==3.0.9
