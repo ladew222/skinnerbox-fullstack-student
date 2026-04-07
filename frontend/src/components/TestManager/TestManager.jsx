@@ -197,7 +197,10 @@ const TestManager = () => {
     }
   };
 
-  const dual_stimulus = stimulusType === "Tone Then Light" || stimulusType === "Light Then Stimulus"
+  if (stimulusType === "Tone Then Light" || stimulusType === "Light Then Stimulus"){
+    dual_stimulus = true;
+    return;
+  }
 
   const applyCountsToUi = (counts) => {
     if (!counts) {
