@@ -7,6 +7,7 @@ import {
   saveLeverReleaseRequirement,
   saveRewardPulse,
   setBlueLight,
+  setWhiteLight,
   testBuzzer,
 } from '../../utilities/api';
 import './IoTestingGrid.css';
@@ -108,6 +109,15 @@ const IoTestingGrid = () => {
       setMessage(`Stimulus light turned ${result.blue}`);
     } catch (error) {
       setMessage('Failed to control the stimulus light.');
+    }
+  };
+
+  const handleWhiteLight = async (action) => {
+    try {
+      const result = await setWhiteLight(action);
+      setMessage(`White light turned ${result.white}`);
+    } catch (error) {
+      setMessage('Failed to control the white light.');
     }
   };
 
@@ -253,6 +263,15 @@ const IoTestingGrid = () => {
       <div className="button-group">
         <button className="bluelight-button" onClick={() => handleStimulusLight('on')}>Stimulus Light On</button>
         <button className="bluelight-button" onClick={() => handleStimulusLight('off')}>Stimulus Light Off</button>
+      </div>
+
+      <div className="io-white-light-panel">
+        <h3>White Light</h3>
+        <p>Manually turn the white light on or off. It will not activate on its own.</p>
+        <div className="button-group">
+          <button className="bluelight-button" onClick={() => handleWhiteLight('on')}>White Light On</button>
+          <button className="bluelight-button" onClick={() => handleWhiteLight('off')}>White Light Off</button>
+        </div>
       </div>
 
       <div className="io-buzzer-panel">

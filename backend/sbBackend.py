@@ -1827,6 +1827,7 @@ class SkinnerHardware:
 
         # Cached light state is returned to the frontend in `/api/counts`.
         self.blue_on = False
+        self.white_on = False
         self.orange_on = False
         self.rgb_state = (0, 0, 0)
         self.running_on = False
@@ -1930,6 +1931,22 @@ class SkinnerHardware:
                 message="Unable to control the blue light.",
                 error=error,
                 device="blue_light",
+            )
+
+    def set_white(self, enabled: bool) -> None:
+        """Turn the white house light on or off."""
+        try:
+            self.white_on = enabled
+            if enabled:
+                self.white_led.on()
+            else:
+                self.white_led.off()
+        except Exception as error:
+            self._raise_hardware_error(
+                code="WHITE_LIGHT_ERROR",
+                message="Unable to control the white light.",
+                error=error,
+                device="white_light",
             )
 
     def set_orange(self, enabled: bool) -> None:
@@ -2157,6 +2174,7 @@ class SkinnerHardware:
         """Fail-safe used by stop/finish paths to leave every output off."""
         try:
             self.set_blue(False)
+            self.set_white(False)
             self.set_orange(False)
             self.set_running_indicator(False)
             self.water_pump.off()
@@ -2174,7 +2192,7 @@ class SkinnerHardware:
     def light_on(self) -> bool:
         """Expose whether any light output is currently active for UI display."""
 
-        return self.blue_on or self.orange_on
+        return self.blue_on or self.white_on or self.orange_on
 
     def show_waiting_status(
         self,
@@ -3129,10 +3147,6 @@ class TestSessionManager:
 
     def on_nose_poke(self) -> None:
         """Callback entry point for real or simulated nose pokes."""
-        with self.lock:
-            if self.stimulus_active:
-                return
-
         self._record_interaction("Poke")
 
     def _record_interaction(self, interaction: str) -> None:
@@ -4230,6 +4244,17 @@ def control_orange():
     action = _normalize_action(payload, "action")
     hardware.set_orange(action == "on")
     return jsonify({"status": "success", "orange": action}), 200
+
+
+@app.route("/api/light/white", methods=["POST"])
+@require_authenticated_user()
+def control_white():
+    """Allow the frontend I/O test page to toggle the white light directly."""
+
+    payload = request.get_json(silent=True) or {}
+    action = _normalize_action(payload, "action")
+    hardware.set_white(action == "on")
+    return jsonify({"status": "success", "white": action}), 200
 
 
 @app.route("/api/light/rgb", methods=["POST"])

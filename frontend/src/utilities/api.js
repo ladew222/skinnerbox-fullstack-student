@@ -245,6 +245,16 @@ export const setOrangeLight = async (action) => {
   }
 };
 
+export const setWhiteLight = async (action) => {
+  try {
+    const response = await apiClient.post('/api/light/white', { action });
+    return response.data;
+  } catch (error) {
+    console.error('Error controlling white LED:', error);
+    rethrowNormalizedError(error, 'WHITE_LIGHT_ERROR', 'Unable to control the white light.');
+  }
+};
+
 export const setRGBLight = async (red, green, blue) => {
   try {
     const response = await apiClient.post('/api/light/rgb', { red, green, blue });
