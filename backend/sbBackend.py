@@ -1811,9 +1811,10 @@ class SkinnerHardware:
 
         # Trial hardware that affects the experiment itself.
         self.buzzer = PassiveBuzzer(27)
-        self.blue_led = LED(25, active_high=False)
+        self.blue_led = LED(6, active_high=False)
         # TODO: Added GPIO WHITE LIGHT
-        self.white_led = LED(36, active_high = False); 
+        self.white_led = LED(13, active_high=False)
+        self.white_led.off()
         self.orange_led = LED(24)
         self.water_pump = OutputDevice(17)
         self.reward_pulse_seconds = self.DEFAULT_WATER_REWARD_SECONDS
