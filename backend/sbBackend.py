@@ -2176,11 +2176,10 @@ class SkinnerHardware:
     DEFAULT_REQUIRE_LEVER_RELEASE_BEFORE_COUNT = False
     LEVER_INPUT_GPIO = 23
     NOSE_POKE_INPUT_GPIO = 16
-    # GPIO pins for the three on-board LEDs that previously showed
-    # running/error/program-OK status to the operator. They are now wired
-    # together as the visual stimulus presented to the rat during trials.
-    # Operator status info has moved to the OLED display only.
-    STIMULUS_LIGHT_GPIOS = (5, 6, 26)
+    # GPIO 6 now drives the dedicated visual stimulus light used during
+    # trials. Keep this to one output for now until the alternate board
+    # light wiring is finalized.
+    STIMULUS_LIGHT_GPIOS = (6,)
 
     def __init__(self) -> None:
         # Input devices used to detect user interactions inside the box.
@@ -2207,8 +2206,9 @@ class SkinnerHardware:
         # repurposed board LEDs are the visual stimulus). It remains wired
         # so the I/O test page can still exercise GPIO 25 directly.
         self.blue_led = LED(25, active_high=False)
-        # Three ganged stimulus lights driven together as the rat's visual
-        # cue. Order matches STIMULUS_LIGHT_GPIOS.
+        # One dedicated stimulus light driven during cue windows. The tuple
+        # keeps the implementation uniform if more validated outputs are
+        # added later.
         self.stimulus_lights = tuple(LED(pin) for pin in self.STIMULUS_LIGHT_GPIOS)
         self.stimulus_light_on = False
         self.active_buzzer_output = OutputDevice(13)
@@ -2401,7 +2401,7 @@ class SkinnerHardware:
         self.rgb_state = (int(red), int(green), int(blue))
 
     def set_stimulus_lights(self, enabled: bool) -> None:
-        """Drive the three repurposed board LEDs together as the rat stimulus."""
+        """Drive the configured visual stimulus light output."""
         try:
             self.stimulus_light_on = bool(enabled)
             for light in self.stimulus_lights:
@@ -4920,6 +4920,17 @@ def control_blue():
     action = _normalize_action(payload, "action")
     hardware.set_blue(action == "on")
     return jsonify({"status": "success", "blue": action}), 200
+
+
+@app.route("/api/light/stimulus", methods=["POST"])
+@require_authenticated_user()
+def control_stimulus_light():
+    """Allow the frontend I/O test page to toggle the active trial light directly."""
+
+    payload = request.get_json(silent=True) or {}
+    action = _normalize_action(payload, "action")
+    hardware.set_stimulus_lights(action == "on")
+    return jsonify({"status": "success", "stimulus": action}), 200
 
 
 @app.route("/api/light/orange", methods=["POST"])

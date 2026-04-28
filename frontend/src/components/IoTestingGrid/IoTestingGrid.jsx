@@ -7,7 +7,7 @@ import {
   saveLeverReleaseRequirement,
   saveRewardPulse,
   saveStimulusBuzzerMode,
-  setBlueLight,
+  setStimulusLight,
   testBuzzer,
 } from '../../utilities/api';
 import './IoTestingGrid.css';
@@ -112,8 +112,8 @@ const IoTestingGrid = () => {
 
   const handleStimulusLight = async (action) => {
     try {
-      const result = await setBlueLight(action);
-      setMessage(`Stimulus light turned ${result.blue}`);
+      const result = await setStimulusLight(action);
+      setMessage(`Stimulus light turned ${result.stimulus}`);
     } catch (error) {
       setMessage('Failed to control the stimulus light.');
     }
@@ -282,7 +282,7 @@ const IoTestingGrid = () => {
         <p>Nose Pokes Since Baseline: {nosePokesSinceBaseline}</p>
       </div>
 
-      <p>The trial box uses one fixed stimulus light, so this I/O config page only needs one light control.</p>
+      <p>The trial box currently uses the GPIO 6 stimulus light, so this I/O config page only needs one light control.</p>
       <div className="button-group">
         <button className="bluelight-button" onClick={() => handleStimulusLight('on')}>Stimulus Light On</button>
         <button className="bluelight-button" onClick={() => handleStimulusLight('off')}>Stimulus Light Off</button>
