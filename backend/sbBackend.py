@@ -1342,6 +1342,73 @@ class SQLiteTestRepository:
 
         return self._row_to_maintenance_record(row)
 
+    def save_nose_poke_debounce_setting(
+        self,
+        debounce_seconds: float,
+        *,
+        note_text: str = "",
+        conducted_by: ConductedBySnapshot | None = None,
+    ) -> dict[str, object]:
+        """Persist one nose-poke-debounce configuration change for maintenance tracking."""
+
+        created_at = self._timestamp()
+
+        try:
+            with self.connect() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO maintenance_records (
+                        record_type,
+                        duration_seconds,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "nose_poke_debounce",
+                        debounce_seconds,
+                        note_text,
+                        conducted_by.user_id if conducted_by else None,
+                        conducted_by.email if conducted_by else "",
+                        conducted_by.display_name if conducted_by else "",
+                        created_at,
+                    ),
+                )
+                connection.commit()
+
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_id = ?
+                    """,
+                    (cursor.lastrowid,),
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="NOSE_POKE_DEBOUNCE_SAVE_ERROR",
+                message="Unable to save the nose-poke debounce setting.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        return self._row_to_maintenance_record(row)
+
     def save_lever_release_requirement_setting(
         self,
         require_release_before_count: bool,
@@ -1545,6 +1612,44 @@ class SQLiteTestRepository:
             raise ApiError(
                 code="LEVER_DEBOUNCE_READ_ERROR",
                 message="Unable to load the latest lever debounce setting.",
+                status=500,
+                details={"reason": str(error)},
+            ) from error
+
+        if row is None:
+            return None
+        return self._row_to_maintenance_record(row)
+
+    def get_latest_nose_poke_debounce_setting(self) -> dict[str, object] | None:
+        """Return the most recent saved nose-poke debounce configuration, if one exists."""
+
+        try:
+            with self.connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT
+                        record_id,
+                        record_type,
+                        duration_seconds,
+                        measured_volume_ml,
+                        derived_rate_ml_per_second,
+                        note_text,
+                        created_by_user_id,
+                        created_by_email,
+                        created_by_display_name,
+                        created_at
+                    FROM maintenance_records
+                    WHERE record_type = 'nose_poke_debounce'
+                    ORDER BY created_at DESC, record_id DESC
+                    LIMIT 1
+                    """
+                ).fetchone()
+        except ApiError:
+            raise
+        except sqlite3.Error as error:
+            raise ApiError(
+                code="NOSE_POKE_DEBOUNCE_READ_ERROR",
+                message="Unable to load the latest nose-poke debounce setting.",
                 status=500,
                 details={"reason": str(error)},
             ) from error
@@ -2067,9 +2172,15 @@ class SkinnerHardware:
     ERROR_BLINK_INTERVAL_SECONDS = 0.25
     STARTUP_IP_DISPLAY_SECONDS = 10
     DEFAULT_LEVER_DEBOUNCE_SECONDS = 0.15
+    DEFAULT_NOSE_POKE_DEBOUNCE_SECONDS = 0.15
     DEFAULT_REQUIRE_LEVER_RELEASE_BEFORE_COUNT = False
     LEVER_INPUT_GPIO = 23
     NOSE_POKE_INPUT_GPIO = 16
+    # GPIO pins for the three on-board LEDs that previously showed
+    # running/error/program-OK status to the operator. They are now wired
+    # together as the visual stimulus presented to the rat during trials.
+    # Operator status info has moved to the OLED display only.
+    STIMULUS_LIGHT_GPIOS = (5, 6, 26)
 
     def __init__(self) -> None:
         # Input devices used to detect user interactions inside the box.
@@ -2080,22 +2191,43 @@ class SkinnerHardware:
             bounce_time=self.lever_debounce_seconds,
         )
 
-        # The nose-poke distance sensor is wired as a simple digital trigger, so
-        # the backend can treat it like the other GPIO input callbacks.
-        self.nose_poke_button = Button(self.NOSE_POKE_INPUT_GPIO, pull_up=False)
+        # The nose-poke sensor is debounced just like the lever so a rat
+        # holding its head in the poke does not generate a stream of repeat
+        # events while the beam stays broken.
+        self.nose_poke_debounce_seconds = self.DEFAULT_NOSE_POKE_DEBOUNCE_SECONDS
+        self.nose_poke_button = Button(
+            self.NOSE_POKE_INPUT_GPIO,
+            pull_up=False,
+            bounce_time=self.nose_poke_debounce_seconds,
+        )
 
         # Trial hardware that affects the experiment itself.
         self.buzzer = PassiveBuzzer(27)
+        # The blue cue light is no longer used during trials (the three
+        # repurposed board LEDs are the visual stimulus). It remains wired
+        # so the I/O test page can still exercise GPIO 25 directly.
         self.blue_led = LED(25, active_high=False)
+        # Three ganged stimulus lights driven together as the rat's visual
+        # cue. Order matches STIMULUS_LIGHT_GPIOS.
+        self.stimulus_lights = tuple(LED(pin) for pin in self.STIMULUS_LIGHT_GPIOS)
+        self.stimulus_light_on = False
         self.active_buzzer_output = OutputDevice(13)
-        self.water_pump = OutputDevice(17)
+        # The reward pump relay on the box is wired active-low, so keep the
+        # line logically "off" (physically HIGH) the instant gpiozero claims
+        # the pin. Without an explicit initial_value the pin can briefly fall
+        # through its default input/pull-down state when the service starts,
+        # which on an active-low relay reads as "energized" and runs the pump.
+        self.water_pump = OutputDevice(
+            17,
+            active_high=False,
+            initial_value=False,
+        )
         self.reward_pulse_seconds = self.DEFAULT_WATER_REWARD_SECONDS
         self.stimulus_buzzer_mode = "passive"
 
-        # Box-status indicators that show program health outside the experiment.
-        self.running_led = LED(5)
-        self.error_led = LED(6)
-        self.program_ok_led = LED(26)
+        # Box-status info (running / error / program-ok) is no longer shown
+        # via dedicated LEDs (those pins are now stimulus lights). Status is
+        # tracked in memory and rendered to the operator on the OLED only.
         self.status_display = StatusDisplay()
 
         # Cached light state is returned to the frontend in `/api/counts`.
@@ -2165,6 +2297,34 @@ class SkinnerHardware:
                 message="Unable to apply the lever debounce setting.",
                 error=error,
                 device="lever_button",
+            )
+
+    def set_nose_poke_debounce_seconds(self, debounce_seconds: float) -> float:
+        """Apply the currently configured nose-poke debounce to the live input.
+
+        Mirrors ``set_lever_debounce_seconds`` so a rat holding its head in the
+        poke does not generate repeat events while the beam stays broken.
+        """
+
+        try:
+            normalized_seconds = round(max(float(debounce_seconds), 0), 3)
+        except (TypeError, ValueError) as error:
+            raise ApiError(
+                code="NOSE_POKE_DEBOUNCE_INVALID",
+                message="Nose-poke debounce must be a number of seconds.",
+                status=400,
+            ) from error
+
+        try:
+            self.nose_poke_button.bounce_time = normalized_seconds
+            self.nose_poke_debounce_seconds = normalized_seconds
+            return normalized_seconds
+        except Exception as error:
+            self._raise_hardware_error(
+                code="NOSE_POKE_DEBOUNCE_APPLY_ERROR",
+                message="Unable to apply the nose-poke debounce setting.",
+                error=error,
+                device="nose_poke_button",
             )
 
     def set_reward_pulse_seconds(self, reward_pulse_seconds: float) -> float:
@@ -2239,42 +2399,35 @@ class SkinnerHardware:
 
         self.rgb_state = (int(red), int(green), int(blue))
 
-    def set_running_indicator(self, enabled: bool) -> None:
-        """Turn the box-mounted running LED on only while a test is active."""
-
+    def set_stimulus_lights(self, enabled: bool) -> None:
+        """Drive the three repurposed board LEDs together as the rat stimulus."""
         try:
-            self.running_on = enabled
-            if enabled:
-                self.running_led.on()
-            else:
-                self.running_led.off()
+            self.stimulus_light_on = bool(enabled)
+            for light in self.stimulus_lights:
+                if enabled:
+                    light.on()
+                else:
+                    light.off()
         except Exception as error:
             self._raise_hardware_error(
-                code="RUNNING_LED_ERROR",
-                message="Unable to control the running-status LED.",
+                code="STIMULUS_LIGHT_ERROR",
+                message="Unable to control the rat stimulus lights.",
                 error=error,
-                device="running_led",
+                device="stimulus_lights",
             )
+
+    def set_running_indicator(self, enabled: bool) -> None:
+        """Track whether a test is running. Indicator is now shown on the OLED only."""
+
+        self.running_on = bool(enabled)
 
     def set_program_healthy(self, enabled: bool) -> None:
-        """Show whether the overall backend is healthy and ready."""
+        """Track program-health state. Surfaced via the OLED / status API only."""
 
-        try:
-            self.program_ok = enabled
-            if enabled:
-                self.program_ok_led.on()
-            else:
-                self.program_ok_led.off()
-        except Exception as error:
-            self._raise_hardware_error(
-                code="PROGRAM_LED_ERROR",
-                message="Unable to control the program-status LED.",
-                error=error,
-                device="program_ok_led",
-            )
+        self.program_ok = bool(enabled)
 
     def clear_error_state(self) -> None:
-        """Stop any active error blink and restore the healthy program indicator."""
+        """Stop any active error indicator. No physical LED is driven anymore."""
 
         try:
             self._error_blink_stop.set()
@@ -2282,19 +2435,18 @@ class SkinnerHardware:
             self._error_blink_thread = None
             if error_thread and error_thread.is_alive() and error_thread is not threading.current_thread():
                 error_thread.join(timeout=1)
-            self.error_led.off()
             self.error_blinking = False
             self.set_program_healthy(True)
         except Exception as error:
             self._raise_hardware_error(
-                code="ERROR_LED_CLEAR_ERROR",
+                code="ERROR_STATE_CLEAR_ERROR",
                 message="Unable to clear the error indicator.",
                 error=error,
-                device="error_led",
+                device="status_display",
             )
 
     def signal_error(self, message: str | None = None) -> None:
-        """Blink the box-mounted error LED until the system is cleared again."""
+        """Mark an error condition. Surfaced on the OLED; no LED blinks anymore."""
 
         try:
             self.set_program_healthy(False)
@@ -2306,7 +2458,7 @@ class SkinnerHardware:
             self.error_blinking = True
             self._error_blink_thread = threading.Thread(
                 target=self._error_blink_loop,
-                name="skinnerbox-error-led",
+                name="skinnerbox-error-state",
                 daemon=True,
             )
             self._error_blink_thread.start()
@@ -2314,10 +2466,10 @@ class SkinnerHardware:
             raise
         except Exception as error:
             self._raise_hardware_error(
-                code="ERROR_LED_ERROR",
+                code="ERROR_STATE_ERROR",
                 message="Unable to start the error indicator.",
                 error=error,
-                device="error_led",
+                device="status_display",
             )
 
     def play_stimulus(
@@ -2339,16 +2491,16 @@ class SkinnerHardware:
                 return
 
             if stimulus_type == "light + tone":
-                self.set_blue(True)
+                self.set_stimulus_lights(True)
                 self._start_trial_buzzer()
                 self._sleep(duration_seconds, stop_event)
                 self._stop_trial_buzzer()
-                self.set_blue(False)
+                self.set_stimulus_lights(False)
                 return
 
-            self.set_blue(True)
+            self.set_stimulus_lights(True)
             self._sleep(duration_seconds, stop_event)
-            self.set_blue(False)
+            self.set_stimulus_lights(False)
         except ApiError:
             raise
         except Exception as error:
@@ -2442,6 +2594,7 @@ class SkinnerHardware:
     def stop_all(self) -> None:
         """Fail-safe used by stop/finish paths to leave every output off."""
         try:
+            self.set_stimulus_lights(False)
             self.set_blue(False)
             self.set_active_buzzer_output(False)
             self.set_running_indicator(False)
@@ -2460,7 +2613,7 @@ class SkinnerHardware:
     def light_on(self) -> bool:
         """Expose whether any light output is currently active for UI display."""
 
-        return self.blue_on
+        return self.stimulus_light_on or self.blue_on
 
     @property
     def trial_buzzer_on(self) -> bool:
@@ -2599,18 +2752,17 @@ class SkinnerHardware:
         )
 
     def _error_blink_loop(self) -> None:
-        """Blink the box error LED until the current fault is cleared."""
+        """Hold the error indicator until the fault is cleared.
 
-        while not self._error_blink_stop.wait(self.ERROR_BLINK_INTERVAL_SECONDS):
-            try:
-                self.error_led.toggle()
-            except Exception:
-                break
+        The dedicated error LED has been repurposed as part of the rat
+        stimulus, so this loop simply keeps the in-memory flag set while the
+        fault persists. Operator-facing error messaging now lives on the
+        OLED status display (see ``show_error_status``).
+        """
 
-        try:
-            self.error_led.off()
-        except Exception:
-            pass
+        # Wait for the clear signal; we still spin so the fault remains
+        # observable through ``error_blinking`` until it is cleared.
+        self._error_blink_stop.wait()
         self.error_blinking = False
 
     def _refresh_after_startup_banner(self) -> None:
@@ -2715,6 +2867,14 @@ class TestSessionManager:
         if latest_lever_debounce is not None:
             self.hardware.set_lever_debounce_seconds(
                 latest_lever_debounce["durationSeconds"]
+            )
+
+        latest_nose_poke_debounce = (
+            self.repository.get_latest_nose_poke_debounce_setting()
+        )
+        if latest_nose_poke_debounce is not None:
+            self.hardware.set_nose_poke_debounce_seconds(
+                latest_nose_poke_debounce["durationSeconds"]
             )
 
         latest_lever_release_requirement = (
@@ -2977,6 +3137,11 @@ class TestSessionManager:
                 "testFinished": self.test_finished,
                 "testRunning": self.test_running,
                 "testPaused": self.test_paused,
+                "activeTest": (
+                    self.active_test.to_response_payload()
+                    if self.active_test is not None
+                    else None
+                ),
                 "conductedBy": self._conducted_by_payload_locked(),
                 "error": self.last_error,
                 "eventTimeline": list(self.current_event_timeline),
@@ -3246,6 +3411,71 @@ class TestSessionManager:
             )
             raise api_error from error
 
+    def save_nose_poke_debounce(
+        self,
+        payload: dict | None = None,
+        current_user: AuthenticatedUser | None = None,
+    ) -> dict[str, object]:
+        """Store and apply a nose-poke debounce value for live hardware testing."""
+
+        payload = payload or {}
+        try:
+            with self.lock:
+                if self.test_running:
+                    raise ApiError(
+                        code="NOSE_POKE_DEBOUNCE_BLOCKED",
+                        message="Stop the current test before changing nose-poke debounce.",
+                        status=409,
+                        details={"testRunning": True},
+                    )
+
+            debounce_milliseconds = _coerce_float(
+                payload.get("debounceMilliseconds"),
+                "debounceMilliseconds",
+                default=0,
+            )
+            note_text = _coerce_text(payload.get("noteText"), "noteText", default="").strip()
+
+            if debounce_milliseconds < 10:
+                raise ApiError(
+                    code="NOSE_POKE_DEBOUNCE_TOO_LOW",
+                    message="Nose-poke debounce must be at least 10 milliseconds.",
+                    status=400,
+                )
+            if debounce_milliseconds > 2000:
+                raise ApiError(
+                    code="NOSE_POKE_DEBOUNCE_TOO_HIGH",
+                    message="Nose-poke debounce must be 2000 milliseconds or less.",
+                    status=400,
+                )
+
+            debounce_seconds = round(debounce_milliseconds / 1000, 3)
+            applied_seconds = self.hardware.set_nose_poke_debounce_seconds(debounce_seconds)
+            conducted_by = (
+                ConductedBySnapshot.from_authenticated_user(current_user)
+                if current_user is not None
+                else None
+            )
+            nose_poke_debounce = self.repository.save_nose_poke_debounce_setting(
+                applied_seconds,
+                note_text=note_text,
+                conducted_by=conducted_by,
+            )
+            return {
+                "message": "Nose-poke debounce saved successfully.",
+                "nosePokeDebounce": nose_poke_debounce,
+            }
+        except ApiError:
+            raise
+        except Exception as error:
+            api_error = ApiError(
+                code="NOSE_POKE_DEBOUNCE_SAVE_ERROR",
+                message="Unable to save the nose-poke debounce setting.",
+                status=500,
+                details={"reason": str(error)},
+            )
+            raise api_error from error
+
     def set_require_lever_release_before_count(self, required: bool) -> bool:
         """Apply whether a lever must return to rest before another press is counted."""
 
@@ -3427,6 +3657,9 @@ class TestSessionManager:
         latest_calibration = self.repository.get_latest_pump_calibration()
         latest_reward_pulse = self.repository.get_latest_reward_pulse_setting()
         latest_lever_debounce = self.repository.get_latest_lever_debounce_setting()
+        latest_nose_poke_debounce = (
+            self.repository.get_latest_nose_poke_debounce_setting()
+        )
         latest_lever_release_requirement = (
             self.repository.get_latest_lever_release_requirement_setting()
         )
@@ -3454,6 +3687,7 @@ class TestSessionManager:
                 "latestPumpCalibration": latest_calibration,
                 "latestRewardPulse": latest_reward_pulse,
                 "latestLeverDebounce": latest_lever_debounce,
+                "latestNosePokeDebounce": latest_nose_poke_debounce,
                 "latestLeverReleaseRequirement": latest_lever_release_requirement,
                 "latestStimulusBuzzerMode": latest_stimulus_buzzer_mode,
                 "rewardPulseSeconds": reward_pulse_seconds,
@@ -3469,6 +3703,12 @@ class TestSessionManager:
                 ),
                 "activeLeverDebounceMilliseconds": int(
                     round(self.hardware.lever_debounce_seconds * 1000)
+                ),
+                "defaultNosePokeDebounceMilliseconds": int(
+                    round(self.hardware.DEFAULT_NOSE_POKE_DEBOUNCE_SECONDS * 1000)
+                ),
+                "activeNosePokeDebounceMilliseconds": int(
+                    round(self.hardware.nose_poke_debounce_seconds * 1000)
                 ),
                 "defaultRequireLeverReleaseBeforeCount": (
                     self.hardware.DEFAULT_REQUIRE_LEVER_RELEASE_BEFORE_COUNT
@@ -4747,6 +4987,18 @@ def save_lever_debounce():
     return jsonify(result), 200
 
 
+@app.route("/api/maintenance/nose-poke-debounce", methods=["POST"])
+@require_authenticated_user()
+def save_nose_poke_debounce():
+    """Save and apply the nose-poke debounce setting from the maintenance page."""
+
+    result = session_manager.save_nose_poke_debounce(
+        request.get_json(silent=True) or {},
+        current_user=g.current_user,
+    )
+    return jsonify(result), 200
+
+
 @app.route("/api/maintenance/lever-release-requirement", methods=["POST"])
 @require_authenticated_user()
 def save_lever_release_requirement():
@@ -4895,4 +5147,5 @@ if __name__ == "__main__":
         use_reloader=False,
         host="0.0.0.0",
         port=5000,
+        
     )

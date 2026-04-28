@@ -300,6 +300,53 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["status"], "finished")
         self.assertTrue(results[0]["complete"])
 
+    def test_test_status_includes_active_configuration_for_resume(self):
+        payload = self._base_payload(
+            testName="Resume Restore Simulation",
+            subjectID=12,
+            trialDuration=7,
+            goalForTrial=2,
+            goalForTest=9,
+            RewaStimTime=3,
+            StimTimeOn=4,
+            cooldown=5,
+            interactionType="Nose Poke",
+            stimulusType="Tone",
+            lightColor="N/A",
+            endChimeEnabled=True,
+            endChimePattern="523:0.08,659:0.08",
+        )
+
+        configure_response = self.client.post(
+            "/api/test/information",
+            json=payload,
+            headers=self.auth_headers,
+        )
+        self.assertEqual(configure_response.status_code, 200)
+
+        status_response = self.client.get("/api/test/status", headers=self.auth_headers)
+        self.assertEqual(status_response.status_code, 200)
+
+        status = status_response.get_json()
+        self.assertIsNotNone(status["activeTest"])
+        self.assertFalse(status["testRunning"])
+        self.assertFalse(status["testPaused"])
+        self.assertFalse(status["testFinished"])
+        self.assertEqual(status["activeTest"]["testName"], "Resume Restore Simulation")
+        self.assertEqual(status["activeTest"]["subjectID"], 12)
+        self.assertEqual(status["activeTest"]["trialDuration"], 7)
+        self.assertEqual(status["activeTest"]["goalForTrial"], 2)
+        self.assertEqual(status["activeTest"]["goalForTest"], 9)
+        self.assertEqual(status["activeTest"]["RewaStimTime"], 3)
+        self.assertEqual(status["activeTest"]["StimTimeOn"], 4)
+        self.assertEqual(status["activeTest"]["cooldown"], 5)
+        self.assertEqual(status["activeTest"]["rewardType"], "Water")
+        self.assertEqual(status["activeTest"]["interactionType"], "Nose Poke")
+        self.assertEqual(status["activeTest"]["stimulusType"], "Tone")
+        self.assertEqual(status["activeTest"]["lightColor"], "N/A")
+        self.assertTrue(status["activeTest"]["endChimeEnabled"])
+        self.assertEqual(status["activeTest"]["endChimePattern"], "523:0.08,659:0.08")
+
     def test_tone_stimulus_is_reflected_in_saved_results(self):
         payload = self._base_payload(
             testName="Tone Stimulus Simulation",
@@ -354,23 +401,25 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["stimulusDescription"], "Light + Tone")
 
     def test_combined_stimulus_activates_light_and_tone_outputs(self):
-        original_set_blue = sbBackend.hardware.set_blue
+        # The visual stimulus is now driven through set_stimulus_lights (the
+        # three repurposed board LEDs), not the legacy blue cue.
+        original_set_stimulus_lights = sbBackend.hardware.set_stimulus_lights
         original_buzzer_play = sbBackend.hardware.buzzer.play
         observed_outputs = {
             "light": False,
             "tone": False,
         }
 
-        def recording_set_blue(enabled):
+        def recording_set_stimulus_lights(enabled):
             if enabled:
                 observed_outputs["light"] = True
-            return original_set_blue(enabled)
+            return original_set_stimulus_lights(enabled)
 
         def recording_buzzer_play(frequency_hz):
             observed_outputs["tone"] = True
             return original_buzzer_play(frequency_hz)
 
-        sbBackend.hardware.set_blue = recording_set_blue
+        sbBackend.hardware.set_stimulus_lights = recording_set_stimulus_lights
         sbBackend.hardware.buzzer.play = recording_buzzer_play
         try:
             sbBackend.hardware.play_stimulus(
@@ -380,7 +429,7 @@ class SkinnerBoxApiIntegrationTest(unittest.TestCase):
                 threading.Event(),
             )
         finally:
-            sbBackend.hardware.set_blue = original_set_blue
+            sbBackend.hardware.set_stimulus_lights = original_set_stimulus_lights
             sbBackend.hardware.buzzer.play = original_buzzer_play
 
         self.assertTrue(observed_outputs["light"])
