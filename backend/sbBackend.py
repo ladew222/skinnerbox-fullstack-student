@@ -2212,14 +2212,15 @@ class SkinnerHardware:
         self.stimulus_lights = tuple(LED(pin) for pin in self.STIMULUS_LIGHT_GPIOS)
         self.stimulus_light_on = False
         self.active_buzzer_output = OutputDevice(13)
-        # The reward pump relay on the box is wired active-low, so keep the
-        # line logically "off" (physically HIGH) the instant gpiozero claims
-        # the pin. Without an explicit initial_value the pin can briefly fall
-        # through its default input/pull-down state when the service starts,
-        # which on an active-low relay reads as "energized" and runs the pump.
+        # The reward pump is driven through an N-channel MOSFET (Q2 on the
+        # carrier board): GPIO 17 HIGH turns the MOSFET on and runs the
+        # pump, GPIO 17 LOW keeps it off. So the pin is active-HIGH, and
+        # the safe idle state is logical (and physical) LOW. Pair this with
+        # `gpio=17=op,dl` in /boot/firmware/config.txt so the pin is held
+        # low from firmware boot until gpiozero claims it.
         self.water_pump = OutputDevice(
             17,
-            active_high=False,
+            active_high=True,
             initial_value=False,
         )
         self.reward_pulse_seconds = self.DEFAULT_WATER_REWARD_SECONDS
