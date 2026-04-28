@@ -1784,6 +1784,9 @@ class SkinnerHardware:
     DEFAULT_REQUIRE_LEVER_RELEASE_BEFORE_COUNT = False
     LEVER_INPUT_GPIO = 23
     NOSE_POKE_INPUT_GPIO = 16
+    
+    # TODO: ADDED LOGIC HERE
+    DEFAULT_NOSE_POKE_DEBOUNCE_SECONDS = 0.15
 
     def __init__(self) -> None:
         # Input devices used to detect user interactions inside the box.
@@ -1793,14 +1796,24 @@ class SkinnerHardware:
             pull_up=False,
             bounce_time=self.lever_debounce_seconds,
         )
+        
+        self.nose_poke_debounce_seconds = self.DEFAULT_NOSE_POKE_DEBOUNCE_SECONDS
+        self.nose_poke_button = Button(
+            self.NOSE_POKE_INPUT_GPIO,
+            pull_up=False,
+            bounce_time=self.nose_poke_debounce_seconds, 
+        )
 
         # The nose-poke distance sensor is wired as a simple digital trigger, so
         # the backend can treat it like the other GPIO input callbacks.
-        self.nose_poke_button = Button(self.NOSE_POKE_INPUT_GPIO, pull_up=False)
+        # TODO: Commented this line out
+        # self.nose_poke_button = Button(self.NOSE_POKE_INPUT_GPIO, pull_up=False)
 
         # Trial hardware that affects the experiment itself.
         self.buzzer = PassiveBuzzer(27)
         self.blue_led = LED(25, active_high=False)
+        # TODO: Added GPIO WHITE LIGHT
+        self.white_led = LED(36, active_high = False); 
         self.orange_led = LED(24)
         self.water_pump = OutputDevice(17)
         self.reward_pulse_seconds = self.DEFAULT_WATER_REWARD_SECONDS
@@ -3115,6 +3128,9 @@ class TestSessionManager:
 
     def on_nose_poke(self) -> None:
         """Callback entry point for real or simulated nose pokes."""
+        with self.lock:
+            if self.stimulus_active:
+                return
 
         self._record_interaction("Poke")
 
