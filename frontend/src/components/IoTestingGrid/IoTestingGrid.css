@@ -272,6 +272,25 @@
     font-size: 1rem;
   }
 
+  .calibration-controls select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #c5d0dc;
+    border-radius: 8px;
+    box-sizing: border-box;
+    font-size: 1rem;
+    background-color: #ffffff;
+  }
+
+  .io-light-target-controls {
+    margin-top: 14px;
+  }
+
+  .io-light-target-controls label {
+    font-weight: 600;
+    color: #214d73;
+  }
+
   .io-checkbox-label {
     display: flex;
     align-items: center;

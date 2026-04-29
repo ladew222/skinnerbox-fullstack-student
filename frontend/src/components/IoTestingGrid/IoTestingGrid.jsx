@@ -12,6 +12,10 @@ import {
   setStimulusLight,
   testBuzzer,
 } from '../../utilities/api';
+import {
+  SINGLE_LIGHT_LABEL,
+  STIMULUS_LIGHT_OPTIONS,
+} from '../../utilities/resultsCsv';
 import './IoTestingGrid.css';
 
 const IoTestingGrid = () => {
@@ -31,6 +35,7 @@ const IoTestingGrid = () => {
   const [leverBaselineCount, setLeverBaselineCount] = useState(0);
   const [nosePokeBaselineCount, setNosePokeBaselineCount] = useState(0);
   const [stimulusBuzzerMode, setStimulusBuzzerMode] = useState('passive');
+  const [stimulusLightSelection, setStimulusLightSelection] = useState(SINGLE_LIGHT_LABEL);
   const [cameraStatus, setCameraStatus] = useState({
     checked: false,
     available: false,
@@ -183,8 +188,8 @@ const IoTestingGrid = () => {
 
   const handleStimulusLight = async (action) => {
     try {
-      const result = await setStimulusLight(action);
-      setMessage(`Stimulus light turned ${result.stimulus}`);
+      const result = await setStimulusLight(action, stimulusLightSelection);
+      setMessage(`${result.lightColor || stimulusLightSelection} turned ${result.stimulus}`);
     } catch (error) {
       setMessage('Failed to control the stimulus light.');
     }
@@ -364,8 +369,22 @@ const IoTestingGrid = () => {
 
       <p>
         The trial setup defaults to GPIO 6 for the stimulus light, and the Trial page can now switch to GPIO 26 or use both together.
-        These buttons still exercise the current default light path directly.
+        Pick a target here if you want to exercise the alternate light or verify that both board lights can fire together.
       </p>
+      <div className="calibration-controls io-light-target-controls">
+        <label htmlFor="io-stimulus-light-target">Stimulus Light Target</label>
+        <select
+          id="io-stimulus-light-target"
+          value={stimulusLightSelection}
+          onChange={(event) => setStimulusLightSelection(event.target.value)}
+        >
+          {STIMULUS_LIGHT_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="button-group">
         <button className="bluelight-button" onClick={() => handleStimulusLight('on')}>Stimulus Light On</button>
         <button className="bluelight-button" onClick={() => handleStimulusLight('off')}>Stimulus Light Off</button>
