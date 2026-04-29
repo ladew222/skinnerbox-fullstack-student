@@ -61,11 +61,12 @@ export const buildTestSettingsText = ({
   rewardType = 'Water',
   interactionType = 'Lever',
   stimulusType = 'Light',
+  lightColor = SINGLE_LIGHT_LABEL,
   endChimeEnabled = false,
   endChimePattern = DEFAULT_END_CHIME_PATTERN,
 }) => {
   const resolvedStimulusType = normalizeStimulusType(stimulusType);
-  const resolvedLightColor = normalizeLightColorForStimulus(resolvedStimulusType);
+  const resolvedLightColor = normalizeLightColorForStimulus(resolvedStimulusType, lightColor);
 
   return [
     `Preset: ${appliedPresetName || 'None'}`,
@@ -102,6 +103,7 @@ export const parseTestSettingsText = (text) => {
   const stimulusType = normalizeStimulusType(
     getFirstDefined(entries, ['stimulus type']) || 'Light'
   );
+  const lightColor = getFirstDefined(entries, ['stimulus light']);
 
   return {
     presetName: getFirstDefined(entries, ['preset']),
@@ -125,7 +127,7 @@ export const parseTestSettingsText = (text) => {
     rewardType: getFirstDefined(entries, ['reward type']) || 'Water',
     interactionType: getFirstDefined(entries, ['interaction type']) || 'Lever',
     stimulusType,
-    lightColor: normalizeLightColorForStimulus(stimulusType),
+    lightColor: normalizeLightColorForStimulus(stimulusType, lightColor),
     endChimeEnabled: normalizeEnabledValue(getFirstDefined(entries, ['end chime'])),
     endChimePattern: getFirstDefined(entries, ['end chime pattern']) || DEFAULT_END_CHIME_PATTERN,
   };

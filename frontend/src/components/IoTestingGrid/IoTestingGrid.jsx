@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
+  buildCameraFrameUrl,
   getCounts,
+  getCameraStatus,
   getMaintenanceStatus,
   primePump,
   saveLeverDebounce,
@@ -29,6 +31,17 @@ const IoTestingGrid = () => {
   const [leverBaselineCount, setLeverBaselineCount] = useState(0);
   const [nosePokeBaselineCount, setNosePokeBaselineCount] = useState(0);
   const [stimulusBuzzerMode, setStimulusBuzzerMode] = useState('passive');
+  const [cameraStatus, setCameraStatus] = useState({
+    checked: false,
+    available: false,
+    reason: '',
+    resolution: '',
+    refreshIntervalSeconds: 1.5,
+    deviceName: '',
+  });
+  const [showCameraPreview, setShowCameraPreview] = useState(false);
+  const [cameraFrameUrl, setCameraFrameUrl] = useState('');
+  const [cameraPreviewError, setCameraPreviewError] = useState('');
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -55,6 +68,43 @@ const IoTestingGrid = () => {
 
     refreshMaintenanceStatus();
     const interval = setInterval(refreshMaintenanceStatus, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const refreshCameraStatus = async () => {
+      try {
+        const status = await getCameraStatus();
+        setCameraStatus({
+          checked: true,
+          available: Boolean(status.available),
+          reason: status.reason || '',
+          resolution: status.resolution || '',
+          refreshIntervalSeconds: Number(status.refreshIntervalSeconds || 1.5),
+          deviceName: status.deviceName || '',
+        });
+        if (!status.available) {
+          setShowCameraPreview(false);
+          setCameraFrameUrl('');
+          setCameraPreviewError('');
+        }
+      } catch (error) {
+        setCameraStatus({
+          checked: true,
+          available: false,
+          reason: error?.message || 'Unable to load the optional camera preview status.',
+          resolution: '',
+          refreshIntervalSeconds: 1.5,
+          deviceName: '',
+        });
+        setShowCameraPreview(false);
+        setCameraFrameUrl('');
+        setCameraPreviewError('');
+      }
+    };
+
+    refreshCameraStatus();
+    const interval = setInterval(refreshCameraStatus, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -100,6 +150,27 @@ const IoTestingGrid = () => {
     requireLeverRelease,
     rewardPulseMs,
   ]);
+
+  useEffect(() => {
+    const canShowCamera = cameraStatus.available && showCameraPreview;
+    if (!canShowCamera) {
+      setCameraFrameUrl('');
+      setCameraPreviewError('');
+      return undefined;
+    }
+
+    const refreshFrame = () => {
+      setCameraFrameUrl(buildCameraFrameUrl(Date.now()));
+    };
+
+    refreshFrame();
+    const interval = window.setInterval(
+      refreshFrame,
+      Math.max(Number(cameraStatus.refreshIntervalSeconds || 1.5) * 1000, 750),
+    );
+
+    return () => window.clearInterval(interval);
+  }, [cameraStatus.available, cameraStatus.refreshIntervalSeconds, showCameraPreview]);
 
   const leverPressesSinceBaseline = Math.max(
     counts.lever_press_count - leverBaselineCount,
@@ -248,6 +319,15 @@ const IoTestingGrid = () => {
     }
   };
 
+  const handleToggleCameraPreview = () => {
+    if (!cameraStatus.available) {
+      return;
+    }
+
+    setCameraPreviewError('');
+    setShowCameraPreview((currentValue) => !currentValue);
+  };
+
   return (
     <div className="iotesting-settings">
       <h2>I/O Config</h2>
@@ -282,10 +362,66 @@ const IoTestingGrid = () => {
         <p>Nose Pokes Since Baseline: {nosePokesSinceBaseline}</p>
       </div>
 
-      <p>The trial box currently uses the GPIO 6 stimulus light, so this I/O config page only needs one light control.</p>
+      <p>
+        The trial setup defaults to GPIO 6 for the stimulus light, and the Trial page can now switch to GPIO 26 or use both together.
+        These buttons still exercise the current default light path directly.
+      </p>
       <div className="button-group">
         <button className="bluelight-button" onClick={() => handleStimulusLight('on')}>Stimulus Light On</button>
         <button className="bluelight-button" onClick={() => handleStimulusLight('off')}>Stimulus Light Off</button>
+      </div>
+
+      <div className="io-camera-panel">
+        <div className="io-camera-header">
+          <div>
+            <h3>Camera Preview</h3>
+            <p>Use the same optional USB camera preview here to verify the feed before running a trial.</p>
+          </div>
+          {cameraStatus.available && (
+            <button
+              type="button"
+              className="prime-button"
+              onClick={handleToggleCameraPreview}
+            >
+              {showCameraPreview ? 'Hide Camera' : 'Show Camera'}
+            </button>
+          )}
+        </div>
+        {cameraStatus.available ? (
+          <>
+            <p className="io-camera-meta">
+              {cameraStatus.deviceName || 'USB Camera'}
+              {cameraStatus.resolution ? ` • ${cameraStatus.resolution}` : ''}
+            </p>
+            {showCameraPreview ? (
+              <>
+                <img
+                  className="io-camera-image"
+                  src={cameraFrameUrl}
+                  alt="Live I/O testing camera preview"
+                  onLoad={() => setCameraPreviewError('')}
+                  onError={() => {
+                    setCameraPreviewError(
+                      'The camera preview could not be refreshed. Check the USB camera connection and try again.',
+                    );
+                  }}
+                />
+                {cameraPreviewError && <p className="io-camera-error">{cameraPreviewError}</p>}
+              </>
+            ) : (
+              <p className="io-camera-empty">
+                Camera preview is off to reduce network traffic until you want to inspect the feed.
+              </p>
+            )}
+          </>
+        ) : cameraStatus.checked ? (
+          <p className="io-camera-empty">
+            Camera preview is unavailable right now.
+            {cameraStatus.reason ? ` ${cameraStatus.reason}` : ''}
+          </p>
+        ) : (
+          <p className="io-camera-empty">Checking optional camera availability...</p>
+        )}
       </div>
 
       <div className="io-buzzer-panel">

@@ -28,6 +28,9 @@ DATABASE_FILE = Path(
     os.getenv("SKINNERBOX_DB_PATH", str(Path(__file__).with_name("testdatabase.db")))
 )
 DEFAULT_END_CHIME_PATTERN = "523:0.12,659:0.12,784:0.24"
+DEFAULT_STIMULUS_LIGHT_LABEL = "Box Light (GPIO 6)"
+ALTERNATE_STIMULUS_LIGHT_LABEL = "Alternate Light (GPIO 26)"
+BOTH_STIMULUS_LIGHTS_LABEL = "Both Lights (GPIO 6 + GPIO 26)"
 SESSION_COOKIE_NAME = os.getenv("SKINNERBOX_SESSION_COOKIE_NAME", "skinnerbox_session")
 SESSION_COOKIE_SECURE = os.getenv("SKINNERBOX_SESSION_COOKIE_SECURE", "0").strip().lower() in {
     "1",
@@ -107,7 +110,7 @@ class TestConfiguration:
                 stimulus_type,
                 payload.get("lightColor"),
                 "lightColor",
-                default="Box Light",
+                default=DEFAULT_STIMULUS_LIGHT_LABEL,
             ),
             end_chime_enabled=_coerce_bool(
                 payload.get("endChimeEnabled"),
@@ -2145,7 +2148,7 @@ class SQLiteTestRepository:
             "rewardType": row["reward_type"] or "Water",
             "interactionType": row["interaction_type"] or "Lever",
             "stimulusType": row["stimulus_type"] or "Light",
-            "lightColor": row["light_color"] or "Box Light",
+            "lightColor": row["light_color"] or DEFAULT_STIMULUS_LIGHT_LABEL,
             "endChimeEnabled": bool(row["end_chime_enabled"] or 0),
             "endChimePattern": row["end_chime_pattern"] or DEFAULT_END_CHIME_PATTERN,
             "stimulusDescription": _describe_stimulus(
@@ -2176,10 +2179,13 @@ class SkinnerHardware:
     DEFAULT_REQUIRE_LEVER_RELEASE_BEFORE_COUNT = False
     LEVER_INPUT_GPIO = 23
     NOSE_POKE_INPUT_GPIO = 16
-    # GPIO 6 now drives the dedicated visual stimulus light used during
-    # trials. Keep this to one output for now until the alternate board
-    # light wiring is finalized.
-    STIMULUS_LIGHT_GPIOS = (6,)
+    # The primary board light is on GPIO 6. A second validated light on
+    # GPIO 26 can be selected for trials, or both can be driven together.
+    STIMULUS_LIGHT_GPIO_OPTIONS = {
+        DEFAULT_STIMULUS_LIGHT_LABEL: (6,),
+        ALTERNATE_STIMULUS_LIGHT_LABEL: (26,),
+        BOTH_STIMULUS_LIGHTS_LABEL: (6, 26),
+    }
 
     def __init__(self) -> None:
         # Input devices used to detect user interactions inside the box.
@@ -2206,10 +2212,11 @@ class SkinnerHardware:
         # repurposed board LEDs are the visual stimulus). It remains wired
         # so the I/O test page can still exercise GPIO 25 directly.
         self.blue_led = LED(25, active_high=False)
-        # One dedicated stimulus light driven during cue windows. The tuple
-        # keeps the implementation uniform if more validated outputs are
-        # added later.
-        self.stimulus_lights = tuple(LED(pin) for pin in self.STIMULUS_LIGHT_GPIOS)
+        # Trial stimulus lights can now target GPIO 6, GPIO 26, or both.
+        self.stimulus_lights_by_pin = {
+            6: LED(6),
+            26: LED(26),
+        }
         self.stimulus_light_on = False
         self.active_buzzer_output = OutputDevice(13)
         # The reward pump is driven through an N-channel MOSFET (Q2 on the
@@ -2400,12 +2407,27 @@ class SkinnerHardware:
 
         self.rgb_state = (int(red), int(green), int(blue))
 
-    def set_stimulus_lights(self, enabled: bool) -> None:
+    def _resolve_stimulus_light_pins(self, light_color: str | None = None) -> tuple[int, ...]:
+        """Map the stored light label to the validated GPIO outputs."""
+
+        normalized_light_color = _normalize_light_color_for_stimulus(
+            "Light",
+            light_color,
+            "lightColor",
+            default=DEFAULT_STIMULUS_LIGHT_LABEL,
+        )
+        return self.STIMULUS_LIGHT_GPIO_OPTIONS.get(
+            normalized_light_color,
+            self.STIMULUS_LIGHT_GPIO_OPTIONS[DEFAULT_STIMULUS_LIGHT_LABEL],
+        )
+
+    def set_stimulus_lights(self, enabled: bool, light_color: str | None = None) -> None:
         """Drive the configured visual stimulus light output."""
         try:
             self.stimulus_light_on = bool(enabled)
-            for light in self.stimulus_lights:
-                if enabled:
+            active_pins = set(self._resolve_stimulus_light_pins(light_color)) if enabled else set()
+            for pin, light in self.stimulus_lights_by_pin.items():
+                if pin in active_pins:
                     light.on()
                 else:
                     light.off()
@@ -2492,16 +2514,16 @@ class SkinnerHardware:
                 return
 
             if stimulus_type == "light + tone":
-                self.set_stimulus_lights(True)
+                self.set_stimulus_lights(True, light_color)
                 self._start_trial_buzzer()
                 self._sleep(duration_seconds, stop_event)
                 self._stop_trial_buzzer()
-                self.set_stimulus_lights(False)
+                self.set_stimulus_lights(False, light_color)
                 return
 
-            self.set_stimulus_lights(True)
+            self.set_stimulus_lights(True, light_color)
             self._sleep(duration_seconds, stop_event)
-            self.set_stimulus_lights(False)
+            self.set_stimulus_lights(False, light_color)
         except ApiError:
             raise
         except Exception as error:
@@ -4409,7 +4431,16 @@ def _normalize_light_color_for_stimulus(
 
     if stimulus_type == "Tone":
         return "N/A"
-    return _coerce_text(value, field_name, default=default) or "Box Light"
+
+    normalized_value = _coerce_text(value, field_name, default=default) or default
+    if normalized_value in {"Box Light", DEFAULT_STIMULUS_LIGHT_LABEL}:
+        return DEFAULT_STIMULUS_LIGHT_LABEL
+    if normalized_value == ALTERNATE_STIMULUS_LIGHT_LABEL:
+        return ALTERNATE_STIMULUS_LIGHT_LABEL
+    if normalized_value == BOTH_STIMULUS_LIGHTS_LABEL:
+        return BOTH_STIMULUS_LIGHTS_LABEL
+
+    return DEFAULT_STIMULUS_LIGHT_LABEL
 
 
 def _coerce_bool(value, field_name: str, *, default: bool) -> bool:
@@ -4505,9 +4536,9 @@ def _describe_stimulus(stimulus_type: str, light_color: str) -> str:
     if normalized_type == "tone":
         return "Tone"
     if normalized_type == "light + tone":
-        return "Light + Tone"
+        return f"Light + Tone ({_normalize_light_color_for_stimulus('Light', light_color, 'lightColor', default=DEFAULT_STIMULUS_LIGHT_LABEL)})"
 
-    return "Light"
+    return f"Light ({_normalize_light_color_for_stimulus('Light', light_color, 'lightColor', default=DEFAULT_STIMULUS_LIGHT_LABEL)})"
 
 
 # Flask app and shared backend objects used by the current process.
@@ -4929,8 +4960,14 @@ def control_stimulus_light():
 
     payload = request.get_json(silent=True) or {}
     action = _normalize_action(payload, "action")
-    hardware.set_stimulus_lights(action == "on")
-    return jsonify({"status": "success", "stimulus": action}), 200
+    light_color = _normalize_light_color_for_stimulus(
+        "Light",
+        payload.get("lightColor"),
+        "lightColor",
+        default=DEFAULT_STIMULUS_LIGHT_LABEL,
+    )
+    hardware.set_stimulus_lights(action == "on", light_color)
+    return jsonify({"status": "success", "stimulus": action, "lightColor": light_color}), 200
 
 
 @app.route("/api/light/orange", methods=["POST"])

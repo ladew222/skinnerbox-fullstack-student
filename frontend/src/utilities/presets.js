@@ -4,7 +4,7 @@ import {
   savePreset as savePresetApi,
   getStoredAuthUser,
 } from './api';
-import { normalizeStimulusType } from './resultsCsv';
+import { normalizeLightColorForStimulus, normalizeStimulusType } from './resultsCsv';
 
 const LEGACY_PRESET_STORAGE_KEY = 'userPresets';
 const LEGACY_PRESET_STORAGE_PREFIX = 'skinnerbox.userPresets';
@@ -95,9 +95,10 @@ const normalizePreset = (preset) => {
     rewardType: String(preset?.rewardType || 'Water').trim() || 'Water',
     interactionType: String(preset?.interactionType || 'Lever').trim() || 'Lever',
     stimulusType,
-    lightColor: isTonePreset
-      ? 'N/A'
-      : String(preset?.lightColor || 'Box Light').trim() || 'Box Light',
+    lightColor: normalizeLightColorForStimulus(
+      stimulusType,
+      isTonePreset ? 'N/A' : String(preset?.lightColor || '').trim(),
+    ),
     endChimeEnabled: normalizeBoolean(preset?.endChimeEnabled, false),
     endChimePattern: String(preset?.endChimePattern || DEFAULT_END_CHIME_PATTERN).trim()
       || DEFAULT_END_CHIME_PATTERN,

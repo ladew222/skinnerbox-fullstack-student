@@ -1,4 +1,11 @@
-export const SINGLE_LIGHT_LABEL = 'Box Light';
+export const SINGLE_LIGHT_LABEL = 'Box Light (GPIO 6)';
+export const ALTERNATE_LIGHT_LABEL = 'Alternate Light (GPIO 26)';
+export const BOTH_LIGHTS_LABEL = 'Both Lights (GPIO 6 + GPIO 26)';
+export const STIMULUS_LIGHT_OPTIONS = [
+  SINGLE_LIGHT_LABEL,
+  ALTERNATE_LIGHT_LABEL,
+  BOTH_LIGHTS_LABEL,
+];
 
 
 export const normalizeStimulusType = (stimulusType) => {
@@ -15,8 +22,27 @@ export const normalizeStimulusType = (stimulusType) => {
 };
 
 
-export const normalizeLightColorForStimulus = (stimulusType) => {
-  return normalizeStimulusType(stimulusType) === 'Tone' ? 'N/A' : SINGLE_LIGHT_LABEL;
+export const normalizeLightColorForStimulus = (stimulusType, lightColor = SINGLE_LIGHT_LABEL) => {
+  if (normalizeStimulusType(stimulusType) === 'Tone') {
+    return 'N/A';
+  }
+
+  const normalizedLight = String(lightColor || '').trim();
+  if (
+    normalizedLight === ''
+    || normalizedLight === 'Box Light'
+    || normalizedLight === SINGLE_LIGHT_LABEL
+  ) {
+    return SINGLE_LIGHT_LABEL;
+  }
+  if (normalizedLight === ALTERNATE_LIGHT_LABEL) {
+    return ALTERNATE_LIGHT_LABEL;
+  }
+  if (normalizedLight === BOTH_LIGHTS_LABEL) {
+    return BOTH_LIGHTS_LABEL;
+  }
+
+  return SINGLE_LIGHT_LABEL;
 };
 
 
@@ -89,8 +115,18 @@ const escapeCsvValue = (value) => {
 };
 
 
-export const buildStimulusSummary = (stimulusType) => {
-  return normalizeStimulusType(stimulusType);
+export const buildStimulusSummary = (stimulusType, lightColor = SINGLE_LIGHT_LABEL) => {
+  const normalizedType = normalizeStimulusType(stimulusType);
+  const resolvedLightColor = normalizeLightColorForStimulus(normalizedType, lightColor);
+
+  if (normalizedType === 'Tone') {
+    return 'Tone';
+  }
+  if (normalizedType === 'Light + Tone') {
+    return `Light + Tone (${resolvedLightColor})`;
+  }
+
+  return `Light (${resolvedLightColor})`;
 };
 
 

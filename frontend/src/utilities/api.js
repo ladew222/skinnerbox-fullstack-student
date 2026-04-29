@@ -235,9 +235,9 @@ export const setBlueLight = async (action) => {
   }
 };
 
-export const setStimulusLight = async (action) => {
+export const setStimulusLight = async (action, lightColor) => {
   try {
-    const response = await apiClient.post('/api/light/stimulus', { action });
+    const response = await apiClient.post('/api/light/stimulus', { action, lightColor });
     return response.data;
   } catch (error) {
     console.error('Error controlling stimulus light:', error);

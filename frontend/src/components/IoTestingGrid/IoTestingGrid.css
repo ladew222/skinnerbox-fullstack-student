@@ -137,6 +137,59 @@
     color: #6d5a25;
   }
 
+  .io-camera-panel {
+    margin-top: 20px;
+    padding: 18px;
+    border: 1px solid #d6dde5;
+    border-radius: 10px;
+    background: #ffffff;
+  }
+
+  .io-camera-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .io-camera-header h3 {
+    margin: 0 0 8px 0;
+    color: #184d7a;
+  }
+
+  .io-camera-header p {
+    margin: 0;
+    color: #35566f;
+    line-height: 1.6;
+  }
+
+  .io-camera-meta {
+    margin: 12px 0 0 0;
+    font-weight: 600;
+    color: #35566f;
+  }
+
+  .io-camera-image {
+    width: 100%;
+    max-width: 440px;
+    margin-top: 14px;
+    border-radius: 12px;
+    border: 1px solid #d6dde5;
+    background: #09131d;
+    display: block;
+  }
+
+  .io-camera-empty,
+  .io-camera-error {
+    margin-top: 14px;
+    color: #4d6173;
+  }
+
+  .io-camera-error {
+    color: #b42318;
+  }
+
   .io-prime-note {
     font-weight: 600;
   }

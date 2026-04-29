@@ -21,6 +21,7 @@ import {
   normalizeLightColorForStimulus,
   normalizeStimulusType,
   SINGLE_LIGHT_LABEL,
+  STIMULUS_LIGHT_OPTIONS,
 } from "../../utilities/resultsCsv";
 import { buildTestSettingsText, parseTestSettingsText } from "../../utilities/testSettingsFile";
 import { playBrowserCompletionChime, primeBrowserAudio } from "../../utilities/browserAudio";
@@ -74,6 +75,8 @@ const FIELD_HELP_TEXT = {
     "This tells the backend what counts as one valid response: just a lever press, just a poke, or a required sequence of both.",
   stimulusType:
     "Choose whether each trial cycle begins with the box light, the configured trial buzzer output, or both at the same time.",
+  lightColor:
+    "Pick which board light should be used when the stimulus includes a visual cue. The default uses GPIO 6, while the alternate uses GPIO 26 or both can run together.",
   endChimeEnabled:
     "Turn this on if you want the passive buzzer to play a short completion chime after the trial finishes.",
   endChimePattern:
@@ -97,6 +100,7 @@ const TestManager = () => {
   const [rewardType, setRewardType] = useState(FIXED_REWARD_TYPE);
   const [interactionType, setInteractionType] = useState("Lever");
   const [stimulusType, setStimulusType] = useState("Light");
+  const [lightColor, setLightColor] = useState(SINGLE_LIGHT_LABEL);
   const [endChimeEnabled, setEndChimeEnabled] = useState(false);
   const [endChimePattern, setEndChimePattern] = useState(DEFAULT_END_CHIME_PATTERN);
   const [userPresets, setUserPresets] = useState([]);
@@ -210,7 +214,7 @@ const TestManager = () => {
     setRewardCount(Number(counts.reward_count || 0));
   };
 
-  const effectiveLightColor = normalizeLightColorForStimulus(stimulusType);
+  const effectiveLightColor = normalizeLightColorForStimulus(stimulusType, lightColor);
   const stimulusSummary = buildStimulusSummary(stimulusType, effectiveLightColor);
   const chimeSummary = formatEndChimeStatus(endChimeEnabled);
   const remainingTimeSeconds = configuredDurationSeconds > 0
@@ -373,6 +377,7 @@ const TestManager = () => {
       rewardType,
       interactionType,
       stimulusType,
+      lightColor: effectiveLightColor,
       endChimeEnabled,
       endChimePattern: normalizedValues.endChimePattern,
     });
@@ -413,6 +418,9 @@ const TestManager = () => {
         setRewardType(FIXED_REWARD_TYPE);
         setInteractionType(parsedSettings.interactionType || "Lever");
         setStimulusType(normalizeStimulusType(parsedSettings.stimulusType));
+        setLightColor(
+          normalizeLightColorForStimulus(parsedSettings.stimulusType, parsedSettings.lightColor),
+        );
         setEndChimeEnabled(Boolean(parsedSettings.endChimeEnabled));
         setEndChimePattern(validation.normalizedValues.endChimePattern || DEFAULT_END_CHIME_PATTERN);
         syncValidationErrors(validation.errors);
@@ -439,6 +447,7 @@ const TestManager = () => {
     setRewardType(FIXED_REWARD_TYPE);
     setInteractionType("Lever");
     setStimulusType("Light");
+    setLightColor(SINGLE_LIGHT_LABEL);
     setSubjectID("");
     setEndChimeEnabled(false);
     setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
@@ -783,25 +792,26 @@ const handlePreset = (event) => {
         setPresetValue(value);
 
         if (value === "None") {
-            setPresetName("");
-            setPresetDescription("");
-            setTestName("");
-            setTrialDuration("");
-            setSubjectID("");
-            setGoalForTrial("");
-            setGoalForTest("");
-            setRewaStimTime("");
-            setStimTimeOn("");
-            setCooldown(DEFAULT_COOLDOWN_SECONDS);
-            setRewardType(FIXED_REWARD_TYPE);
-        setInteractionType("Lever");
-        setStimulusType("Light");
-        setEndChimeEnabled(false);
-        setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
-        setPresetSaveMessage("");
-        clearValidationErrors();
-        return;
-      }
+          setPresetName("");
+          setPresetDescription("");
+          setTestName("");
+          setTrialDuration("");
+          setSubjectID("");
+          setGoalForTrial("");
+          setGoalForTest("");
+          setRewaStimTime("");
+          setStimTimeOn("");
+          setCooldown(DEFAULT_COOLDOWN_SECONDS);
+          setRewardType(FIXED_REWARD_TYPE);
+          setInteractionType("Lever");
+          setStimulusType("Light");
+          setLightColor(SINGLE_LIGHT_LABEL);
+          setEndChimeEnabled(false);
+          setEndChimePattern(DEFAULT_END_CHIME_PATTERN);
+          setPresetSaveMessage("");
+          clearValidationErrors();
+          return;
+        }
 
         const userPreset = userPresets.find((preset) => preset.id === value);
         if (!userPreset) {
@@ -826,6 +836,9 @@ const handlePreset = (event) => {
         setRewardType(FIXED_REWARD_TYPE);
         setInteractionType(userPreset.interactionType || "Lever");
         setStimulusType(normalizeStimulusType(userPreset.stimulusType));
+        setLightColor(
+          normalizeLightColorForStimulus(userPreset.stimulusType, userPreset.lightColor),
+        );
         setEndChimeEnabled(Boolean(userPreset.endChimeEnabled));
         setEndChimePattern(validation.normalizedValues.endChimePattern || DEFAULT_END_CHIME_PATTERN);
         syncValidationErrors(validation.errors);
@@ -1143,11 +1156,31 @@ const handlePreset = (event) => {
                     <FormHelperText>{FIELD_HELP_TEXT.stimulusType}</FormHelperText>
                 </FormControl>
               </div>
+
+              {stimulusType !== "Tone" && (
+                <div className="input-group">
+                  <FormControl fullWidth>
+                    <InputLabel id="lightColor">Stimulus Light:</InputLabel>
+                    <Select
+                      id="selectLightColor"
+                      value={effectiveLightColor}
+                      onChange={(e) => setLightColor(e.target.value)}
+                    >
+                      {STIMULUS_LIGHT_OPTIONS.map((option) => (
+                        <MenuItem key={option} value={option}>
+                          {option}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    <FormHelperText>{FIELD_HELP_TEXT.lightColor}</FormHelperText>
+                  </FormControl>
+                </div>
+              )}
             </div>
 
             {stimulusType === "Light" ? (
               <div className="stimulus-note">
-                Light stimulus selected. The backend will use the single box light on each cycle, so there is no separate color option to configure.
+                Light stimulus selected. The backend will use {effectiveLightColor} on each cue window.
               </div>
             ) : stimulusType === "Tone" ? (
               <div className="stimulus-note">
@@ -1155,7 +1188,7 @@ const handlePreset = (event) => {
               </div>
             ) : (
               <div className="stimulus-note">
-                Light + Tone selected. The backend will turn on the box light and play the saved trial buzzer output together on each stimulus cycle.
+                Light + Tone selected. The backend will turn on {effectiveLightColor} and play the saved trial buzzer output together on each stimulus cycle.
               </div>
             )}
           </div>

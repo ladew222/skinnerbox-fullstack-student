@@ -18,6 +18,7 @@ import {
   SINGLE_LIGHT_LABEL,
   normalizeLightColorForStimulus,
   normalizeStimulusType,
+  STIMULUS_LIGHT_OPTIONS,
 } from '../../utilities/resultsCsv';
 
 const FIXED_REWARD_TYPE = 'Water';
@@ -90,8 +91,10 @@ const PresetManager = () => {
       [fieldName]: resolvedValue,
       lightColor:
         fieldName === 'stimulusType'
-          ? normalizeLightColorForStimulus(resolvedValue)
-          : currentForm.lightColor,
+          ? normalizeLightColorForStimulus(resolvedValue, currentForm.lightColor)
+          : fieldName === 'lightColor'
+            ? normalizeLightColorForStimulus(currentForm.stimulusType, resolvedValue)
+            : currentForm.lightColor,
     }));
   };
 
@@ -123,7 +126,7 @@ const PresetManager = () => {
         ...form,
         id: shouldReusePresetId ? form.id : undefined,
         rewardType: FIXED_REWARD_TYPE,
-        lightColor: normalizeLightColorForStimulus(form.stimulusType),
+        lightColor: normalizeLightColorForStimulus(form.stimulusType, form.lightColor),
       });
 
       setSavedPresets(result.presets);
@@ -131,7 +134,10 @@ const PresetManager = () => {
         ...result.preset,
         rewardType: FIXED_REWARD_TYPE,
         stimulusType: normalizeStimulusType(result.preset.stimulusType),
-        lightColor: normalizeLightColorForStimulus(result.preset.stimulusType),
+        lightColor: normalizeLightColorForStimulus(
+          result.preset.stimulusType,
+          result.preset.lightColor,
+        ),
       });
       setFeedback({
         severity: 'success',
@@ -152,7 +158,7 @@ const PresetManager = () => {
       ...preset,
       rewardType: FIXED_REWARD_TYPE,
       stimulusType: normalizeStimulusType(preset.stimulusType),
-      lightColor: normalizeLightColorForStimulus(preset.stimulusType),
+      lightColor: normalizeLightColorForStimulus(preset.stimulusType, preset.lightColor),
     });
     setFeedback({
       severity: 'success',
@@ -373,9 +379,31 @@ const PresetManager = () => {
           </FormControl>
         </div>
 
+        {form.stimulusType !== 'Tone' && (
+          <div className="input-group">
+            <FormControl fullWidth>
+              <InputLabel id="lightColorLabel">Stimulus Light:</InputLabel>
+              <Select
+                id="lightColor"
+                value={normalizeLightColorForStimulus(form.stimulusType, form.lightColor)}
+                onChange={(e) => updateFormField('lightColor', e.target.value)}
+              >
+                {STIMULUS_LIGHT_OPTIONS.map((option) => (
+                  <MenuItem key={option} value={option}>
+                    {option}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>
+                Choose whether this preset should drive GPIO 6, GPIO 26, or both board lights.
+              </FormHelperText>
+            </FormControl>
+          </div>
+        )}
+
         {form.stimulusType === 'Light' ? (
           <div className="stimulus-note">
-            Light stimulus selected. The box uses one fixed stimulus light, so there is no color choice to save in this preset.
+            Light stimulus selected. This preset will use {normalizeLightColorForStimulus(form.stimulusType, form.lightColor)} during cue windows.
           </div>
         ) : form.stimulusType === 'Tone' ? (
           <div className="stimulus-note">
@@ -383,7 +411,7 @@ const PresetManager = () => {
           </div>
         ) : (
           <div className="stimulus-note">
-            Light + Tone selected. This preset will use the box light and the saved trial buzzer output together.
+            Light + Tone selected. This preset will use {normalizeLightColorForStimulus(form.stimulusType, form.lightColor)} and the saved trial buzzer output together.
           </div>
         )}
 
