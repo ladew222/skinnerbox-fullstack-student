@@ -3783,10 +3783,30 @@ class TestSessionManager:
             self.last_response_at = time.time()
             active_test = self.active_test
             cue_active = self.hardware.light_on or self.hardware.trial_buzzer_on
+            # Once a valid response has closed out the current stimulus cycle,
+            # the trial loop is waiting on reward_delay_seconds before the next
+            # stimulus. Any presses or pokes that arrive in that window must
+            # not earn another reward — otherwise a rapid nose poker would
+            # collect repeated rewards from a single stimulus cue. The lever
+            # path normally avoids this because the rat tends to keep the
+            # lever held (and the optional release-before-count gate further
+            # blocks repeats), but the poke sensor has no such natural gate.
+            already_responded_this_cycle = (
+                self.test_running
+                and active_test is not None
+                and self.response_event.is_set()
+            )
 
             if cue_active:
                 response_validity = "invalid"
                 response_reason = "stimulus_active"
+                if interaction == "Lever":
+                    self.invalid_lever_press_count += 1
+                else:
+                    self.invalid_nose_poke_count += 1
+            elif already_responded_this_cycle:
+                response_validity = "invalid"
+                response_reason = "post_response_window"
                 if interaction == "Lever":
                     self.invalid_lever_press_count += 1
                 else:
@@ -3818,14 +3838,18 @@ class TestSessionManager:
             status = self._status_locked()
 
         if test_id is not None:
+            if response_validity == "valid":
+                detail_text = "Counted while no light or trial buzzer was active."
+            elif response_reason == "post_response_window":
+                detail_text = (
+                    "Ignored because a reward was already earned in this stimulus cycle."
+                )
+            else:
+                detail_text = "Ignored because the light or trial buzzer was active."
             self._log_test_event(
                 "lever_press" if interaction == "Lever" else "nose_poke",
                 "Lever press" if interaction == "Lever" else "Nose poke",
-                detail_text=(
-                    "Counted while no light or trial buzzer was active."
-                    if response_validity == "valid"
-                    else "Ignored because the light or trial buzzer was active."
-                ),
+                detail_text=detail_text,
                 response_validity=response_validity,
                 response_reason=response_reason,
                 elapsed_seconds=counts.get("elapsed_seconds", 0),
