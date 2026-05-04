@@ -2943,6 +2943,10 @@ class TestSessionManager:
                 self.lever_press_count = initial_lever_presses
                 self.nose_poke_count = initial_nose_pokes
                 self.reward_count = 0
+                self.valid_lever_press_count = 0
+                self.invalid_lever_press_count = 0
+                self.valid_nose_poke_count = 0
+                self.invalid_nose_poke_count = 0
                 self.valid_interaction_count = 0
                 self.sequence_index = 0
                 self.test_finished = False
